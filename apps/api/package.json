@@ -6,7 +6,10 @@
   "main": "dist/main.js",
   "type": "commonjs",
   "scripts": {
+    "clean": "rm -rf dist .nest *.tsbuildinfo",
+    "prebuild": "pnpm clean",
     "build": "nest build",
+    "predev": "pnpm clean",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
