@@ -9,7 +9,9 @@
 
 ## 0. Estado actual
 
-- **Fase:** Foundation / Sprint 0. Decisiones bloqueantes (§12) cerradas el 2026-05-04. Empezando scaffolding del monorepo e infra local.
+- **Fase:** Sprint 1 — Foundation técnica.
+  - ✅ Tarea 1: NestJS API skeleton con Fastify, Pino, Zod env validation, health endpoints.
+  - ⏳ Tarea 2: Prisma + multi-tenancy con RLS + audit log via triggers (en curso).
 - **Branch de desarrollo:** `claude/plan-hotel-saas-rWaWw`
 - **Última actualización:** 2026-05-04
 
@@ -267,6 +269,31 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 - **Decisión:** Sprint 0-1 (scaffolding, infra, multi-tenancy, auth, modelo de datos base) avanza sin esperar al feedback de hoteles. Antes de cerrar el alcance de Fase 2 (MVP FO) hay que haber hablado con 2-3 hoteles.
 - **Razón:** Foundation es agnóstica al feature set. Validar antes de Fase 2 evita 2 meses de desarrollo equivocado.
 - **Riesgo asumido:** si la validación obliga a cambiar de segmento/geografía, parte del trabajo de §6 podría requerir ajustes (probable: localización fiscal, idiomas adicionales).
+
+### ADR-008 — 2026-05-04 — Doble defensa: RLS + filtro en aplicación
+- **Decisión:** Aislamiento multi-tenant aplica en dos capas: (a) Postgres RLS con `FORCE` en tablas operativas (`users`, `properties`), y (b) filtro `tenant_id` explícito en consultas de la app cuando aporta claridad/performance.
+- **Razón:** RLS es la última línea de defensa contra bugs en la app. El filtro en código es performance (índices en `tenant_id`) y legibilidad. Si un sólo nivel falla, el otro contiene.
+- **Alternativas descartadas:** sólo RLS (un bug en una policy compromete todo), sólo filtro app (un bug en un service expone datos cruzados).
+
+### ADR-009 — 2026-05-04 — UUID v4 ahora, v7 para tablas hot-path en MVP FO
+- **Decisión:** En esta migración inicial usamos `gen_random_uuid()` (v4) para `tenants`, `users`, `properties`, `audit_log`. Cuando entren las tablas de hot-path en MVP FO (`reservations`, `folio_entries`, `room_status_log`) introduciremos UUID v7 generado en app con `uuid` v10 para mejor localidad de índices.
+- **Razón:** v4 es estándar y suficiente para tablas de configuración. v7 da ganancia real solo en tablas con write rate alto.
+- **Alternativas descartadas:** v7 desde el inicio (sin beneficio en tablas de cardinalidad baja), bigserial (no funciona multi-tenant ni distribuido).
+
+### ADR-010 — 2026-05-04 — Soft delete en entidades de dominio
+- **Decisión:** Toda entidad de dominio lleva `deleted_at TIMESTAMPTZ NULL`. Las consultas filtran por `deleted_at IS NULL` por defecto. Hard delete sólo en datos transitorios (sesiones, jobs completados, locks).
+- **Razón:** Compliance hotelera y auditoría legal exigen poder reconstruir histórico. Cancelaciones, modificaciones de tarifa, cambios de huésped — todo debe ser revisable.
+- **Alternativas descartadas:** hard delete + audit log (audit guarda snapshot pero la integridad referencial se rompe), tablas históricas separadas (duplicación, complejidad).
+
+### ADR-011 — 2026-05-04 — Audit log via triggers Postgres (append-only inmutable)
+- **Decisión:** Tabla `audit_log` poblada por triggers `AFTER INSERT/UPDATE/DELETE` en cada tabla operativa. Función trigger `SECURITY DEFINER` (corre como owner). RLS sobre `audit_log` permite SELECT por tenant pero bloquea INSERT/UPDATE/DELETE directos desde el rol de aplicación.
+- **Razón:** Capturar cambios desde el origen (DB) garantiza que ningún code path se los salte (incluye psql, admin tools, jobs externos). Crítico para Night Audit y compliance GDPR. Inmutable a nivel role permissions.
+- **Alternativas descartadas:** auditoría a nivel aplicación (frágil — un service que olvida llamar al logger pierde el evento), event sourcing puro (sobrecomplica MVP).
+
+### ADR-012 — 2026-05-04 — Roles Postgres separados: owner (`pms`) vs app (`pms_app`)
+- **Decisión:** El rol `pms` (superuser, BYPASSRLS) ejecuta migraciones y owns las tablas. El rol `pms_app` (login estándar, sin BYPASSRLS) es el que usa la API en runtime — RLS aplica sobre él. `DATABASE_URL` apunta a `pms_app`; `DIRECT_URL` (Prisma) apunta a `pms` para migraciones.
+- **Razón:** Sin esta separación, RLS no se puede testear (superuser bypassea siempre). Además, limitar privilegios del rol runtime es defensa en profundidad — un compromise del API no permite alterar `audit_log` ni saltarse RLS.
+- **Alternativas descartadas:** un único rol (RLS no aplica si es superuser), múltiples roles por feature (overkill en MVP).
 
 ---
 

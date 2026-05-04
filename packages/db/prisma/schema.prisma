@@ -1,0 +1,125 @@
+// PMS — Database schema
+// Multi-tenant. RLS enforces isolation at Postgres level (see migrations/*/migration.sql).
+// Cada tabla operativa lleva tenant_id; las politicas usan current_setting('app.tenant_id').
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Tenants — un tenant = un hotel (single-property en MVP).
+// La tabla tenants NO tiene RLS (es admin-level). Exposicion controlada por API.
+// ----------------------------------------------------------------------------
+
+model Tenant {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String       @unique
+  name      String
+  status    TenantStatus @default(TRIAL)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  deletedAt DateTime?    @map("deleted_at")
+
+  users      User[]
+  properties Property[]
+
+  @@map("tenants")
+}
+
+enum TenantStatus {
+  ACTIVE
+  TRIAL
+  SUSPENDED
+
+  @@map("tenant_status")
+}
+
+// ----------------------------------------------------------------------------
+// Users — pertenecen a un tenant. externalId = sub del JWT de Keycloak.
+// ----------------------------------------------------------------------------
+
+model User {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String     @map("tenant_id") @db.Uuid
+  email      String     @db.Citext
+  externalId String?    @map("external_id")
+  fullName   String?    @map("full_name")
+  status     UserStatus @default(INVITED)
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+  deletedAt  DateTime?  @map("deleted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@unique([tenantId, externalId])
+  @@index([tenantId])
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+
+  @@map("user_status")
+}
+
+// ----------------------------------------------------------------------------
+// Properties — single-property en MVP, multi-property en V2.
+// ----------------------------------------------------------------------------
+
+model Property {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  code      String
+  name      String
+  timezone  String    @default("Europe/Madrid")
+  currency  String    @default("EUR")
+  locale    String    @default("es-ES")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("properties")
+}
+
+// ----------------------------------------------------------------------------
+// AuditLog — append-only via triggers (ver migracion).
+// SELECT filtrado por tenant via RLS. INSERT/UPDATE/DELETE bloqueados para la app.
+// ----------------------------------------------------------------------------
+
+model AuditLog {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String         @map("tenant_id") @db.Uuid
+  tableName     String         @map("table_name")
+  recordId      String         @map("record_id") @db.Uuid
+  operation     AuditOperation
+  actorId       String?        @map("actor_id") @db.Uuid
+  correlationId String?        @map("correlation_id")
+  oldData       Json?          @map("old_data")
+  newData       Json?          @map("new_data")
+  changedAt     DateTime       @default(now()) @map("changed_at")
+
+  @@index([tenantId, tableName, recordId])
+  @@index([tenantId, changedAt])
+  @@map("audit_log")
+}
+
+enum AuditOperation {
+  INSERT
+  UPDATE
+  DELETE
+
+  @@map("audit_operation")
+}

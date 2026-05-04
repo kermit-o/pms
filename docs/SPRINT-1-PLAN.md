@@ -12,20 +12,24 @@
 
 ## Tareas del sprint
 
-### 1. API skeleton (NestJS)
-- [ ] Inicializar `apps/api` con NestJS strict mode.
-- [ ] Integrar en monorepo (workspace deps, tsconfig extends).
-- [ ] Health check endpoint (`/healthz`, `/readyz`).
-- [ ] Logger estructurado (Pino) con `correlation_id`.
-- [ ] Config module con validación Zod de env vars.
+### 1. API skeleton (NestJS) ✅
+- [x] Inicializar `apps/api` con NestJS strict mode.
+- [x] Integrar en monorepo (workspace deps, tsconfig extends).
+- [x] Health check endpoint (`/healthz`, `/readyz`).
+- [x] Logger estructurado (Pino) con `correlation_id`.
+- [x] Config module con validación Zod de env vars.
 
-### 2. Capa de datos (Prisma)
-- [ ] Inicializar `packages/db` con Prisma.
-- [ ] Schema base: `Tenant`, `User`, `Property`, `AuditLog`.
-- [ ] Migración inicial.
-- [ ] Cliente Prisma extendido que setea `app.tenant_id` por sesión.
-- [ ] Políticas RLS aplicadas vía migración SQL.
-- [ ] Seed de un tenant de prueba.
+### 2. Capa de datos (Prisma) ✅
+- [x] Inicializar `packages/db` con Prisma.
+- [x] Schema base: `Tenant`, `User`, `Property`, `AuditLog`.
+- [x] Migración inicial con DDL + RLS + triggers + GRANTs.
+- [x] Helper `withTenant()` que setea `app.tenant_id` por transacción.
+- [x] Políticas RLS aplicadas vía migración SQL (FORCE en users/properties; SELECT-only en audit_log).
+- [x] Trigger de audit `SECURITY DEFINER` en users/properties.
+- [x] Seed de un tenant demo + admin user + property BCN01.
+- [x] Roles separados: `pms` (owner/migraciones) vs `pms_app` (runtime).
+- [x] DbModule + PrismaService integrados en apps/api; `/readyz` chequea DB.
+- [x] Test integración RLS: aislamiento entre tenants + append-only audit.
 
 ### 3. Multi-tenancy + Auth
 - [ ] Bootstrap script del realm Keycloak `pms`.

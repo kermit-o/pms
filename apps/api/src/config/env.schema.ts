@@ -7,6 +7,7 @@ export const envSchema = z.object({
   APP_HOST: z.string().default('0.0.0.0'),
 
   DATABASE_URL: z.string().url(),
+  DIRECT_URL: z.string().url().optional(),
   REDIS_URL: z.string().url(),
   NATS_URL: z.string().url(),
 
