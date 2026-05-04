@@ -12,17 +12,17 @@
     }
   },
   "scripts": {
-    "generate": "prisma generate",
-    "migrate:dev": "prisma migrate dev",
-    "migrate:deploy": "prisma migrate deploy",
-    "migrate:reset": "prisma migrate reset --force",
-    "migrate:status": "prisma migrate status",
-    "studio": "prisma studio",
-    "seed": "tsx prisma/seed.ts",
+    "generate": "dotenv -e ../../.env -- prisma generate",
+    "migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
+    "migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
+    "migrate:reset": "dotenv -e ../../.env -- prisma migrate reset --force",
+    "migrate:status": "dotenv -e ../../.env -- prisma migrate status",
+    "studio": "dotenv -e ../../.env -- prisma studio",
+    "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
     "lint": "eslint \"src/**/*.ts\" \"prisma/**/*.ts\" \"test/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "dotenv -e ../../.env -- vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -33,6 +33,7 @@
   "devDependencies": {
     "@types/node": "^20.16.10",
     "@types/uuid": "^10.0.0",
+    "dotenv-cli": "^7.4.2",
     "prisma": "^5.22.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",
