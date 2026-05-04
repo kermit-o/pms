@@ -9,7 +9,7 @@
 
 ## 0. Estado actual
 
-- **Fase:** Planificación / Pre-MVP. No hay código todavía.
+- **Fase:** Foundation / Sprint 0. Decisiones bloqueantes (§12) cerradas el 2026-05-04. Empezando scaffolding del monorepo e infra local.
 - **Branch de desarrollo:** `claude/plan-hotel-saas-rWaWw`
 - **Última actualización:** 2026-05-04
 
@@ -38,18 +38,16 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 
 ---
 
-## 3. Mercado objetivo (a confirmar con usuario)
+## 3. Mercado objetivo (cerrado 2026-05-04)
 
-| Decisión | Pendiente | Notas |
+| Decisión | Estado | Valor |
 |---|---|---|
-| Tamaño hotel | ⏳ | Recomendado: boutique 30-150 habitaciones |
-| Geografía inicial | ⏳ | Recomendado: España (GDPR + SES.HOSPEDAJES + factura electrónica) |
-| Single vs multi-property | ⏳ | Recomendado: single-property en MVP, multi-property en V2 |
-| Idiomas MVP | ⏳ | Recomendado: ES + EN |
-| Multi-divisa | ⏳ | Recomendado: sí desde el inicio (low effort) |
-| API-first / terceros | ⏳ | Recomendado: SÍ — diferenciador clave |
-
-> ⚠️ Estas decisiones se cierran antes de empezar a codear.
+| Tamaño hotel | ✅ | Boutique e independiente, **30-150 habitaciones** |
+| Geografía inicial | ✅ | **España** (GDPR + SES.HOSPEDAJES + factura electrónica) |
+| Single vs multi-property | ✅ | **Single-property** en MVP, multi-property en V2 (mes 8-9) |
+| Idiomas MVP | ✅ | **ES + EN** desde día 1 |
+| Multi-divisa | ✅ | **EUR + USD + GBP** desde día 1 |
+| API-first / terceros | ✅ | **Sí** — diferenciador clave, expuesto vía REST + MCP |
 
 ---
 
@@ -98,23 +96,25 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 
 ---
 
-## 6. Stack técnico
+## 6. Stack técnico (cerrado 2026-05-04)
 
-| Capa | Elección | Alternativa |
-|---|---|---|
-| Backend | **Node.js + TypeScript + NestJS** | Python + FastAPI |
-| DB | **PostgreSQL** con RLS | — |
-| Cache / colas | **Redis + BullMQ** | — |
-| Frontend FO/NA | **Next.js + React** (desktop) | — |
-| Frontend HSK | **Next.js PWA mobile-first** | — |
-| Auth | **Keycloak self-hosted** o Clerk | Auth0 |
-| Eventos | **NATS** o Kafka (event-driven desde día 1) | — |
-| IA / LLM | **Claude (Anthropic)** como modelo principal | Llama/Mistral local opcional |
-| Protocolo de tools | **MCP (Model Context Protocol)** | — |
-| Observabilidad | OpenTelemetry + Grafana | — |
-| Infra | Docker + Kubernetes (o Fly.io en early stage) | — |
-
-> Decisión final del stack: confirmar antes de iniciar el primer commit de código.
+| Capa | Elección |
+|---|---|
+| Backend | **Node.js 20 LTS + TypeScript + NestJS** |
+| DB | **PostgreSQL 16** con Row-Level Security |
+| ORM / migraciones | **Prisma** |
+| Cache / colas | **Redis + BullMQ** |
+| Eventos | **NATS** (JetStream) — event-driven desde día 1 |
+| Frontend FO/NA | **Next.js 15 + React 19** (desktop) |
+| Frontend HSK | **Next.js PWA** (mobile-first) |
+| Auth | **Keycloak self-hosted** (sin lock-in, GDPR-friendly) |
+| IA / LLM | **Claude vía Anthropic SDK** como modelo principal |
+| Protocolo de tools | **MCP (Model Context Protocol)** |
+| Observabilidad | OpenTelemetry + Grafana + Loki |
+| Infra (early) | **Fly.io** o Railway |
+| Infra (escala) | Docker + Kubernetes |
+| Monorepo | **pnpm workspaces** + Turbo |
+| Testing | Vitest (unit) + Playwright (e2e) |
 
 ---
 
@@ -212,15 +212,20 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 
 ---
 
-## 12. Decisiones pendientes (bloqueantes para iniciar código)
+## 12. Decisiones pendientes
 
-- [ ] Tamaño y tipo de hotel objetivo (ver §3).
-- [ ] Geografía inicial (ver §3).
-- [ ] Single vs multi-property en MVP (ver §3).
-- [ ] Idiomas y multi-divisa (ver §3).
-- [ ] Confirmar stack final (ver §6).
-- [ ] Presupuesto / equipo / timeline real.
-- [ ] Validación con 2-3 hoteles reales antes de codear.
+### Cerradas (2026-05-04)
+
+- [x] Tamaño y tipo de hotel objetivo → boutique 30-150 habs (ver §3).
+- [x] Geografía inicial → España (ver §3).
+- [x] Single vs multi-property en MVP → single-property (ver §3).
+- [x] Idiomas y multi-divisa → ES+EN, EUR+USD+GBP (ver §3).
+- [x] Stack final → confirmado (ver §6).
+
+### Abiertas / asunciones pendientes de validar
+
+- [ ] **Equipo / timeline real.** Asunción: 1 dev humano + Claude Code, sin deadline duro, ritmo side-project apuntando al roadmap de 6 meses (§10). Revisar si entran inversores o piloto con fecha.
+- [ ] **Validación con 2-3 hoteles reales.** Asunción: Foundation (Sprint 0-1) avanza en paralelo al outreach, pero **antes de cerrar el alcance de Fase 2 (MVP FO)** debemos haber hablado con 2-3 hoteles. Documentado como riesgo en ADR-007.
 
 ---
 
@@ -239,9 +244,29 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 - **Alternativas descartadas:** "añadir IA después" (la deuda arquitectural sería enorme).
 
 ### ADR-003 — 2026-05-04 — Event-driven desde el inicio
-- **Decisión:** NATS/Kafka desde el primer commit. Cada cambio de estado emite evento.
+- **Decisión:** NATS JetStream desde el primer commit. Cada cambio de estado emite evento.
 - **Razón:** La IA necesita streams, no requests. Auditoría continua imposible sin eventos.
-- **Alternativas descartadas:** event sourcing en V2 (cambiar después es muy caro).
+- **Alternativas descartadas:** Kafka (overkill para 1-1000 hoteles), event sourcing en V2 (cambiar después es muy caro).
+
+### ADR-004 — 2026-05-04 — Mercado inicial: hoteles boutique 30-150 habs en España
+- **Decisión:** Hotel independiente / boutique 30-150 habs, geografía España.
+- **Razón:** Segmento mal atendido por Opera (caro/complejo) y por Cloudbeds (genérico). GDPR + SES.HOSPEDAJES + factura electrónica son barreras que protegen contra entrantes US.
+- **Alternativas descartadas:** cadenas (ciclos de venta de 18 meses), hoteles <30 habs (no pagan), LATAM (fragmentación regulatoria).
+
+### ADR-005 — 2026-05-04 — Single-property en MVP
+- **Decisión:** El MVP soporta un hotel por tenant. Multi-property en V2 (mes 8-9).
+- **Razón:** Multi-property bien hecho añade ~6 semanas. Casi ningún boutique lo necesita en piloto.
+- **Alternativas descartadas:** multi-property desde día 1 (retrasa MVP sin valor para el cliente objetivo).
+
+### ADR-006 — 2026-05-04 — Stack: NestJS + Postgres + Prisma + Next.js + NATS + Keycloak
+- **Decisión:** Ver §6 para el detalle completo.
+- **Razón:** Stack TypeScript end-to-end (un solo lenguaje), ecosistema maduro, hiring fácil. Prisma para velocidad de desarrollo. Keycloak self-hosted para no atarnos a Auth0/Clerk (GDPR + soberanía de datos). NATS porque Kafka es overkill a esta escala. pnpm + Turbo porque son el estándar actual de monorepos JS.
+- **Alternativas descartadas:** Python+FastAPI (dos lenguajes en stack), Auth0/Clerk (lock-in + datos fuera de EU), Kafka (complejidad operativa innecesaria).
+
+### ADR-007 — 2026-05-04 — Foundation arranca en paralelo a la validación con hoteles
+- **Decisión:** Sprint 0-1 (scaffolding, infra, multi-tenancy, auth, modelo de datos base) avanza sin esperar al feedback de hoteles. Antes de cerrar el alcance de Fase 2 (MVP FO) hay que haber hablado con 2-3 hoteles.
+- **Razón:** Foundation es agnóstica al feature set. Validar antes de Fase 2 evita 2 meses de desarrollo equivocado.
+- **Riesgo asumido:** si la validación obliga a cambiar de segmento/geografía, parte del trabajo de §6 podría requerir ajustes (probable: localización fiscal, idiomas adicionales).
 
 ---
 
