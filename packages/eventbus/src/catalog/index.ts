@@ -5,6 +5,7 @@ import {
   reservationCheckedInV1,
   reservationCheckedOutV1,
   reservationCreatedV1,
+  reservationGroupCreatedV1,
   reservationNoShowV1,
   reservationRoomAssignedV1,
   reservationUpdatedV1,
@@ -32,6 +33,10 @@ export const catalog = {
     schema: reservationRoomAssignedV1,
     schemaVersion: 1,
   },
+  'reservation.group_created': {
+    schema: reservationGroupCreatedV1,
+    schemaVersion: 1,
+  },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -46,6 +51,7 @@ export {
   reservationCheckedInV1,
   reservationCheckedOutV1,
   reservationCreatedV1,
+  reservationGroupCreatedV1,
   reservationNoShowV1,
   reservationRoomAssignedV1,
   reservationUpdatedV1,
@@ -55,6 +61,7 @@ export type {
   ReservationCheckedInV1Payload,
   ReservationCheckedOutV1Payload,
   ReservationCreatedV1Payload,
+  ReservationGroupCreatedV1Payload,
   ReservationNoShowV1Payload,
   ReservationRoomAssignedV1Payload,
   ReservationUpdatedV1Payload,

@@ -27,12 +27,23 @@ function buildService(overrides: {
   property?: { id: string; code: string; currency: string } | null;
   roomType?: { id: string } | null;
   ratePlan?: { id: string } | null;
-  reservationOnFind?: {
-    id: string;
-    status: ReservationStatus;
-    propertyId: string;
-    code: string;
-  } | null;
+  reservationOnFind?:
+    | (Partial<{
+        id: string;
+        status: ReservationStatus;
+        propertyId: string;
+        code: string;
+        roomId: string | null;
+        roomTypeId: string;
+        arrivalDate: Date;
+        departureDate: Date;
+        ratePlanId: string | null;
+        adults: number;
+        children: number;
+        notes: string | null;
+      }> & { id: string; status: ReservationStatus })
+    | null;
+  room?: { id: string; isOutOfOrder: boolean } | null;
 }) {
   const propertyFindFirst = vi.fn().mockResolvedValue(overrides.property ?? null);
   const roomTypeFindFirst = vi.fn().mockResolvedValue(overrides.roomType ?? null);
@@ -45,6 +56,10 @@ function buildService(overrides: {
     currency: 'EUR',
     checkedInAt: null,
   });
+  const reservationGroupCreate = vi.fn().mockResolvedValue({
+    id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    code: 'GRP-BCN-ABCD',
+  });
   const reservationFindFirst = vi
     .fn()
     .mockResolvedValue(overrides.reservationOnFind ?? null);
@@ -55,6 +70,7 @@ function buildService(overrides: {
     cancelledAt: new Date('2026-06-10T10:00:00Z'),
   });
   const guestCreate = vi.fn().mockResolvedValue({ id: GUEST_ID });
+  const roomFindFirst = vi.fn().mockResolvedValue(overrides.room ?? null);
 
   const tx = {
     property: { findFirst: propertyFindFirst },
@@ -66,6 +82,8 @@ function buildService(overrides: {
       update: reservationUpdate,
     },
     guest: { create: guestCreate },
+    room: { findFirst: roomFindFirst },
+    reservationGroup: { create: reservationGroupCreate },
   };
 
   const prisma = {
@@ -207,5 +225,243 @@ describe('ReservationsService.cancel', () => {
     await expect(
       service.cancel(user, 'corr-cancel', RESERVATION_ID, { reason: 'oops' }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('ReservationsService.patch', () => {
+  it('updates fields and emits reservation.updated', async () => {
+    const { service, events } = buildService({
+      reservationOnFind: {
+        id: RESERVATION_ID,
+        status: ReservationStatus.PENDING,
+        propertyId: PROPERTY_ID,
+        code: 'BCN-ABCDEF',
+        roomId: null,
+        roomTypeId: ROOM_TYPE_ID,
+        arrivalDate: new Date('2026-06-10'),
+        departureDate: new Date('2026-06-12'),
+        ratePlanId: null,
+        adults: 2,
+        children: 0,
+        notes: null,
+      },
+    });
+
+    const out = await service.patch(user, 'corr-patch', RESERVATION_ID, {
+      notes: 'late check-in expected',
+    });
+    expect(out).toEqual({ id: RESERVATION_ID });
+    expect(events.publish).toHaveBeenCalledOnce();
+    expect(events.publish.mock.calls[0]![0]).toBe('reservation.updated');
+    expect(
+      (events.publish.mock.calls[0]![2] as { changes: Record<string, unknown> })
+        .changes,
+    ).toEqual({ notes: 'late check-in expected' });
+  });
+
+  it('rejects patch on CHECKED_OUT reservation', async () => {
+    const { service } = buildService({
+      reservationOnFind: {
+        id: RESERVATION_ID,
+        status: ReservationStatus.CHECKED_OUT,
+        propertyId: PROPERTY_ID,
+        code: 'BCN-ABCDEF',
+        roomId: null,
+        roomTypeId: ROOM_TYPE_ID,
+        arrivalDate: new Date('2026-06-10'),
+        departureDate: new Date('2026-06-12'),
+        ratePlanId: null,
+        adults: 2,
+        children: 0,
+        notes: null,
+      },
+    });
+    await expect(
+      service.patch(user, 'corr', RESERVATION_ID, { notes: 'x' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe('ReservationsService.checkIn', () => {
+  const ROOM_ID = '88888888-8888-8888-8888-888888888888';
+
+  it('moves PENDING -> CHECKED_IN, sets roomId, emits reservation.checked_in', async () => {
+    const { service, events } = buildService({
+      reservationOnFind: {
+        id: RESERVATION_ID,
+        status: ReservationStatus.PENDING,
+        propertyId: PROPERTY_ID,
+        code: 'BCN-ABCDEF',
+        roomId: null,
+        roomTypeId: ROOM_TYPE_ID,
+      },
+      room: { id: ROOM_ID, isOutOfOrder: false },
+    });
+
+    const out = await service.checkIn(user, 'corr-ci', RESERVATION_ID, {
+      roomId: ROOM_ID,
+    });
+    expect(out).toEqual({ id: RESERVATION_ID, roomId: ROOM_ID });
+    expect(events.publish).toHaveBeenCalledOnce();
+    expect(events.publish.mock.calls[0]![0]).toBe('reservation.checked_in');
+  });
+
+  it('throws ConflictException on already-CHECKED_IN reservation', async () => {
+    const { service } = buildService({
+      reservationOnFind: {
+        id: RESERVATION_ID,
+        status: ReservationStatus.CHECKED_IN,
+        propertyId: PROPERTY_ID,
+        code: 'BCN-ABCDEF',
+        roomId: ROOM_ID,
+        roomTypeId: ROOM_TYPE_ID,
+      },
+      room: { id: ROOM_ID, isOutOfOrder: false },
+    });
+    await expect(
+      service.checkIn(user, 'corr', RESERVATION_ID, { roomId: ROOM_ID }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('throws ConflictException when target room is out of order', async () => {
+    const { service } = buildService({
+      reservationOnFind: {
+        id: RESERVATION_ID,
+        status: ReservationStatus.PENDING,
+        propertyId: PROPERTY_ID,
+        code: 'BCN-ABCDEF',
+        roomId: null,
+        roomTypeId: ROOM_TYPE_ID,
+      },
+      room: { id: ROOM_ID, isOutOfOrder: true },
+    });
+    await expect(
+      service.checkIn(user, 'corr', RESERVATION_ID, { roomId: ROOM_ID }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe('ReservationsService.createGroup', () => {
+  it('creates a group with N child reservations and emits reservation.group_created', async () => {
+    const { service, events, tx } = buildService({
+      property: { id: PROPERTY_ID, code: 'BCN', currency: 'EUR' },
+      roomType: { id: ROOM_TYPE_ID },
+    });
+    tx.reservation.create
+      .mockResolvedValueOnce({
+        id: 'r1',
+        propertyId: PROPERTY_ID,
+        code: 'BCN-AAA',
+        totalAmount: new Prisma.Decimal(0),
+        currency: 'EUR',
+        checkedInAt: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'r2',
+        propertyId: PROPERTY_ID,
+        code: 'BCN-BBB',
+        totalAmount: new Prisma.Decimal(0),
+        currency: 'EUR',
+        checkedInAt: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'r3',
+        propertyId: PROPERTY_ID,
+        code: 'BCN-CCC',
+        totalAmount: new Prisma.Decimal(0),
+        currency: 'EUR',
+        checkedInAt: null,
+      });
+
+    const out = await service.createGroup(user, 'corr-grp', {
+      propertyId: PROPERTY_ID,
+      name: 'Boda García',
+      organizerEmail: 'organizer@example.com',
+      reservations: [
+        {
+          guestData: { firstName: 'A', lastName: 'X' },
+          arrival: '2026-06-10',
+          departure: '2026-06-12',
+          roomTypeId: ROOM_TYPE_ID,
+          occupancy: { adults: 2, children: 0 },
+          currency: 'EUR',
+          walkIn: false,
+        },
+        {
+          guestData: { firstName: 'B', lastName: 'Y' },
+          arrival: '2026-06-10',
+          departure: '2026-06-12',
+          roomTypeId: ROOM_TYPE_ID,
+          occupancy: { adults: 2, children: 0 },
+          currency: 'EUR',
+          walkIn: false,
+        },
+        {
+          guestData: { firstName: 'C', lastName: 'Z' },
+          arrival: '2026-06-10',
+          departure: '2026-06-12',
+          roomTypeId: ROOM_TYPE_ID,
+          occupancy: { adults: 1, children: 0 },
+          currency: 'EUR',
+          walkIn: false,
+        },
+      ],
+    });
+
+    expect(out.groupId).toBe('cccccccc-cccc-cccc-cccc-cccccccccccc');
+    expect(out.reservationIds).toEqual(['r1', 'r2', 'r3']);
+    expect(tx.reservationGroup.create).toHaveBeenCalledOnce();
+    expect(tx.reservation.create).toHaveBeenCalledTimes(3);
+    expect(events.publish).toHaveBeenCalledOnce();
+    expect(events.publish.mock.calls[0]![0]).toBe('reservation.group_created');
+  });
+});
+
+describe('ReservationsService.assignRoom', () => {
+  const ROOM_ID = '99999999-9999-9999-9999-999999999999';
+
+  it('assigns room and emits reservation.room_assigned with previousRoomId', async () => {
+    const { service, events } = buildService({
+      reservationOnFind: {
+        id: RESERVATION_ID,
+        status: ReservationStatus.CONFIRMED,
+        propertyId: PROPERTY_ID,
+        code: 'BCN-ABCDEF',
+        roomId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        roomTypeId: ROOM_TYPE_ID,
+      },
+      room: { id: ROOM_ID, isOutOfOrder: false },
+    });
+
+    const out = await service.assignRoom(user, 'corr-ar', RESERVATION_ID, {
+      roomId: ROOM_ID,
+    });
+    expect(out).toEqual({ id: RESERVATION_ID, roomId: ROOM_ID });
+    expect(events.publish.mock.calls[0]![0]).toBe('reservation.room_assigned');
+    expect(
+      (
+        events.publish.mock.calls[0]![2] as {
+          previousRoomId: string | null;
+          roomId: string;
+        }
+      ).previousRoomId,
+    ).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+  });
+
+  it('rejects assignRoom on CANCELLED reservation', async () => {
+    const { service } = buildService({
+      reservationOnFind: {
+        id: RESERVATION_ID,
+        status: ReservationStatus.CANCELLED,
+        propertyId: PROPERTY_ID,
+        code: 'BCN-ABCDEF',
+        roomId: null,
+        roomTypeId: ROOM_TYPE_ID,
+      },
+      room: { id: ROOM_ID, isOutOfOrder: false },
+    });
+    await expect(
+      service.assignRoom(user, 'corr', RESERVATION_ID, { roomId: ROOM_ID }),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

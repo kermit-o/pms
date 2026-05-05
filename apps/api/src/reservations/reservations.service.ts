@@ -21,6 +21,7 @@ import {
   CheckInDto,
   CheckOutDto,
   CreateReservationDto,
+  CreateReservationGroupDto,
   PatchReservationDto,
 } from './dto';
 import {
@@ -182,6 +183,144 @@ export class ReservationsService {
   }
 
   // -------------------------------------------------------------------------
+  // Groups (Sprint 2 W2)
+  // -------------------------------------------------------------------------
+
+  async createGroup(
+    user: AuthUser,
+    correlationId: string,
+    input: CreateReservationGroupDto,
+  ): Promise<{ groupId: string; code: string; reservationIds: string[] }> {
+    const ctx = tenantCtx(user, correlationId);
+
+    const result = await this.prisma.withTenant(ctx, async (tx) => {
+      const property = await tx.property.findFirst({
+        where: { id: input.propertyId, deletedAt: null },
+        select: { id: true, code: true, currency: true },
+      });
+      if (!property) {
+        throw new NotFoundException(`Property ${input.propertyId} not found`);
+      }
+
+      const groupCode = input.code ?? generateGroupCode(property.code);
+
+      const group = await tx.reservationGroup.create({
+        data: {
+          tenantId: user.tenantId,
+          propertyId: property.id,
+          code: groupCode,
+          name: input.name,
+          organizerName: input.organizerName ?? null,
+          organizerEmail: input.organizerEmail ?? null,
+          organizerPhone: input.organizerPhone ?? null,
+          notes: input.notes ?? null,
+        },
+        select: { id: true, code: true },
+      });
+
+      const reservationIds: string[] = [];
+
+      for (const child of input.reservations) {
+        const roomType = await tx.roomType.findFirst({
+          where: {
+            id: child.roomTypeId,
+            propertyId: property.id,
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
+        if (!roomType) {
+          throw new BadRequestException(
+            `RoomType ${child.roomTypeId} not found for property ${property.id}`,
+          );
+        }
+
+        if (child.ratePlanId) {
+          const ratePlan = await tx.ratePlan.findFirst({
+            where: {
+              id: child.ratePlanId,
+              propertyId: property.id,
+              deletedAt: null,
+            },
+            select: { id: true },
+          });
+          if (!ratePlan) {
+            throw new BadRequestException(
+              `RatePlan ${child.ratePlanId} not found for property ${property.id}`,
+            );
+          }
+        }
+
+        const guestId =
+          child.guestId ??
+          (await ensureAdHocGuest(tx, user.tenantId, {
+            ...child,
+            propertyId: property.id,
+          } as CreateReservationDto));
+
+        const code = generateReservationCode(property.code);
+
+        const reservation = await tx.reservation.create({
+          data: {
+            tenantId: user.tenantId,
+            propertyId: property.id,
+            code,
+            status: PrismaReservationStatus.PENDING,
+            arrivalDate: new Date(child.arrival),
+            departureDate: new Date(child.departure),
+            adults: child.occupancy.adults,
+            children: child.occupancy.children,
+            roomTypeId: child.roomTypeId,
+            ratePlanId: child.ratePlanId ?? null,
+            totalAmount: new Prisma.Decimal(child.totalAmount ?? 0),
+            currency: child.currency ?? property.currency,
+            source: ReservationSource.DIRECT,
+            specialRequests: child.specialRequests ?? null,
+            notes: child.notes ?? null,
+            groupId: group.id,
+            guests: {
+              create: {
+                tenantId: user.tenantId,
+                guestId,
+                isPrimary: true,
+              },
+            },
+            folio: {
+              create: {
+                tenantId: user.tenantId,
+                currency: child.currency ?? property.currency,
+              },
+            },
+          },
+          select: { id: true },
+        });
+
+        reservationIds.push(reservation.id);
+      }
+
+      return {
+        group,
+        propertyId: property.id,
+        reservationIds,
+      };
+    });
+
+    await this.events.publish('reservation.group_created', ctx, {
+      groupId: result.group.id,
+      propertyId: result.propertyId,
+      code: result.group.code,
+      name: input.name,
+      reservationIds: result.reservationIds,
+    });
+
+    return {
+      groupId: result.group.id,
+      code: result.group.code,
+      reservationIds: result.reservationIds,
+    };
+  }
+
+  // -------------------------------------------------------------------------
   // Read
   // -------------------------------------------------------------------------
 
@@ -308,21 +447,226 @@ export class ReservationsService {
   }
 
   async patch(
-    _user: AuthUser,
-    _correlationId: string,
-    _id: string,
-    _input: PatchReservationDto,
-  ): Promise<unknown> {
-    throw new ForbiddenException('reservations.patch — Sprint 2 W2');
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+    input: PatchReservationDto,
+  ): Promise<{ id: string }> {
+    const ctx = tenantCtx(user, correlationId);
+
+    if (
+      input.arrival === undefined &&
+      input.departure === undefined &&
+      input.roomTypeId === undefined &&
+      input.ratePlanId === undefined &&
+      input.occupancy === undefined &&
+      input.notes === undefined
+    ) {
+      throw new BadRequestException('no fields to update');
+    }
+
+    const result = await this.prisma.withTenant(ctx, async (tx) => {
+      const existing = await tx.reservation.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+          id: true,
+          status: true,
+          propertyId: true,
+          code: true,
+          arrivalDate: true,
+          departureDate: true,
+          roomTypeId: true,
+          ratePlanId: true,
+          adults: true,
+          children: true,
+          notes: true,
+        },
+      });
+      if (!existing) {
+        throw new NotFoundException(`Reservation ${id} not found`);
+      }
+      if (
+        existing.status === PrismaReservationStatus.CANCELLED ||
+        existing.status === PrismaReservationStatus.CHECKED_OUT ||
+        existing.status === PrismaReservationStatus.NO_SHOW
+      ) {
+        throw new ConflictException(
+          `Reservation in terminal status ${existing.status} cannot be patched`,
+        );
+      }
+
+      const newArrival = input.arrival
+        ? new Date(input.arrival)
+        : existing.arrivalDate;
+      const newDeparture = input.departure
+        ? new Date(input.departure)
+        : existing.departureDate;
+      if (newDeparture <= newArrival) {
+        throw new BadRequestException('departure must be after arrival');
+      }
+
+      if (
+        input.roomTypeId !== undefined &&
+        input.roomTypeId !== existing.roomTypeId
+      ) {
+        const rt = await tx.roomType.findFirst({
+          where: {
+            id: input.roomTypeId,
+            propertyId: existing.propertyId,
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
+        if (!rt) {
+          throw new BadRequestException(
+            `RoomType ${input.roomTypeId} not found in property`,
+          );
+        }
+      }
+
+      if (
+        input.ratePlanId !== undefined &&
+        input.ratePlanId !== existing.ratePlanId
+      ) {
+        const rp = await tx.ratePlan.findFirst({
+          where: {
+            id: input.ratePlanId,
+            propertyId: existing.propertyId,
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
+        if (!rp) {
+          throw new BadRequestException(
+            `RatePlan ${input.ratePlanId} not found in property`,
+          );
+        }
+      }
+
+      const updated = await tx.reservation.update({
+        where: { id: existing.id },
+        data: {
+          ...(input.arrival ? { arrivalDate: newArrival } : {}),
+          ...(input.departure ? { departureDate: newDeparture } : {}),
+          ...(input.roomTypeId !== undefined
+            ? { roomTypeId: input.roomTypeId }
+            : {}),
+          ...(input.ratePlanId !== undefined
+            ? { ratePlanId: input.ratePlanId }
+            : {}),
+          ...(input.occupancy
+            ? {
+                adults: input.occupancy.adults,
+                children: input.occupancy.children,
+              }
+            : {}),
+          ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        },
+        select: { id: true, propertyId: true, code: true },
+      });
+
+      const changes: Record<string, unknown> = {};
+      if (input.arrival) changes.arrivalDate = input.arrival;
+      if (input.departure) changes.departureDate = input.departure;
+      if (input.roomTypeId !== undefined) changes.roomTypeId = input.roomTypeId;
+      if (input.ratePlanId !== undefined) changes.ratePlanId = input.ratePlanId;
+      if (input.occupancy) changes.occupancy = input.occupancy;
+      if (input.notes !== undefined) changes.notes = input.notes;
+
+      return { updated, changes };
+    });
+
+    await this.events.publish('reservation.updated', ctx, {
+      reservationId: result.updated.id,
+      propertyId: result.updated.propertyId,
+      code: result.updated.code,
+      changes: result.changes,
+    });
+
+    return { id: result.updated.id };
   }
 
   async checkIn(
-    _user: AuthUser,
-    _correlationId: string,
-    _id: string,
-    _input: CheckInDto,
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+    input: CheckInDto,
   ): Promise<{ id: string; roomId: string }> {
-    throw new ForbiddenException('reservations.checkIn — Sprint 2 W2');
+    const ctx = tenantCtx(user, correlationId);
+
+    const result = await this.prisma.withTenant(ctx, async (tx) => {
+      const existing = await tx.reservation.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+          id: true,
+          status: true,
+          propertyId: true,
+          code: true,
+          roomId: true,
+          roomTypeId: true,
+        },
+      });
+      if (!existing) {
+        throw new NotFoundException(`Reservation ${id} not found`);
+      }
+
+      try {
+        assertTransition(existing.status, PrismaReservationStatus.CHECKED_IN);
+      } catch (err) {
+        if (err instanceof IllegalReservationTransitionError) {
+          throw new ConflictException(err.message);
+        }
+        throw err;
+      }
+
+      const targetRoomId = input.roomId ?? existing.roomId;
+      if (!targetRoomId) {
+        throw new BadRequestException(
+          'roomId required: reservation has no assigned room',
+        );
+      }
+
+      const room = await tx.room.findFirst({
+        where: {
+          id: targetRoomId,
+          propertyId: existing.propertyId,
+          roomTypeId: existing.roomTypeId,
+          deletedAt: null,
+        },
+        select: { id: true, isOutOfOrder: true },
+      });
+      if (!room) {
+        throw new BadRequestException(
+          `Room ${targetRoomId} not available for this reservation`,
+        );
+      }
+      if (room.isOutOfOrder) {
+        throw new ConflictException(`Room ${targetRoomId} is out of order`);
+      }
+
+      const checkedInAt = new Date();
+      const updated = await tx.reservation.update({
+        where: { id: existing.id },
+        data: {
+          status: PrismaReservationStatus.CHECKED_IN,
+          checkedInAt,
+          roomId: room.id,
+        },
+        select: { id: true, propertyId: true, code: true },
+      });
+
+      return { updated, roomId: room.id, checkedInAt };
+    });
+
+    await this.events.publish('reservation.checked_in', ctx, {
+      reservationId: result.updated.id,
+      propertyId: result.updated.propertyId,
+      code: result.updated.code,
+      roomId: result.roomId,
+      checkedInAt: result.checkedInAt.toISOString(),
+    });
+
+    return { id: result.updated.id, roomId: result.roomId };
   }
 
   async checkOut(
@@ -335,12 +679,79 @@ export class ReservationsService {
   }
 
   async assignRoom(
-    _user: AuthUser,
-    _correlationId: string,
-    _id: string,
-    _input: AssignRoomDto,
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+    input: AssignRoomDto,
   ): Promise<{ id: string; roomId: string }> {
-    throw new ForbiddenException('reservations.assignRoom — Sprint 2 W2');
+    const ctx = tenantCtx(user, correlationId);
+
+    const result = await this.prisma.withTenant(ctx, async (tx) => {
+      const existing = await tx.reservation.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+          id: true,
+          status: true,
+          propertyId: true,
+          code: true,
+          roomId: true,
+          roomTypeId: true,
+        },
+      });
+      if (!existing) {
+        throw new NotFoundException(`Reservation ${id} not found`);
+      }
+      if (
+        existing.status === PrismaReservationStatus.CANCELLED ||
+        existing.status === PrismaReservationStatus.CHECKED_OUT ||
+        existing.status === PrismaReservationStatus.NO_SHOW
+      ) {
+        throw new ConflictException(
+          `Reservation in status ${existing.status} cannot have a room assigned`,
+        );
+      }
+
+      const room = await tx.room.findFirst({
+        where: {
+          id: input.roomId,
+          propertyId: existing.propertyId,
+          roomTypeId: existing.roomTypeId,
+          deletedAt: null,
+        },
+        select: { id: true, isOutOfOrder: true },
+      });
+      if (!room) {
+        throw new BadRequestException(
+          `Room ${input.roomId} not found or wrong room type`,
+        );
+      }
+      if (room.isOutOfOrder) {
+        throw new ConflictException(`Room ${input.roomId} is out of order`);
+      }
+
+      const updated = await tx.reservation.update({
+        where: { id: existing.id },
+        data: { roomId: room.id },
+        select: { id: true, propertyId: true, code: true },
+      });
+
+      return {
+        updated,
+        roomId: room.id,
+        previousRoomId: existing.roomId,
+      };
+    });
+
+    await this.events.publish('reservation.room_assigned', ctx, {
+      reservationId: result.updated.id,
+      propertyId: result.updated.propertyId,
+      code: result.updated.code,
+      roomId: result.roomId,
+      previousRoomId: result.previousRoomId,
+      assignedAt: new Date().toISOString(),
+    });
+
+    return { id: result.updated.id, roomId: result.roomId };
   }
 }
 
@@ -365,6 +776,16 @@ function generateReservationCode(propertyCode: string): string {
     suffix += alphabet[bytes[i % bytes.length]! % alphabet.length];
   }
   return `${propertyCode}-${suffix}`;
+}
+
+function generateGroupCode(propertyCode: string): string {
+  const bytes = randomBytes(3);
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let suffix = '';
+  for (let i = 0; i < 4; i++) {
+    suffix += alphabet[bytes[i % bytes.length]! % alphabet.length];
+  }
+  return `GRP-${propertyCode}-${suffix}`;
 }
 
 async function ensureAdHocGuest(

@@ -29,16 +29,17 @@ model Tenant {
   updatedAt DateTime     @updatedAt @map("updated_at")
   deletedAt DateTime?    @map("deleted_at")
 
-  users             User[]
-  properties        Property[]
-  roomTypes         RoomType[]
-  rooms             Room[]
-  guests            Guest[]
-  reservations      Reservation[]
-  reservationGuests ReservationGuest[]
-  ratePlans         RatePlan[]
-  folios            Folio[]
-  folioEntries      FolioEntry[]
+  users              User[]
+  properties         Property[]
+  roomTypes          RoomType[]
+  rooms              Room[]
+  guests             Guest[]
+  reservations       Reservation[]
+  reservationGroups  ReservationGroup[]
+  reservationGuests  ReservationGuest[]
+  ratePlans          RatePlan[]
+  folios             Folio[]
+  folioEntries       FolioEntry[]
 
   @@map("tenants")
 }
@@ -98,11 +99,12 @@ model Property {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  roomTypes    RoomType[]
-  rooms        Room[]
-  reservations Reservation[]
-  ratePlans    RatePlan[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roomTypes         RoomType[]
+  rooms             Room[]
+  reservations      Reservation[]
+  reservationGroups ReservationGroup[]
+  ratePlans         RatePlan[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -306,6 +308,33 @@ model RatePlan {
 // roomId es opcional: la asignacion ocurre en check-in.
 // ----------------------------------------------------------------------------
 
+// Bloque de reservas para grupos (boda, congreso, equipo deportivo).
+// Las reservas hijas comparten organizador, fechas y politicas; cada una
+// mantiene su propio folio y huesped principal.
+model ReservationGroup {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  propertyId   String    @map("property_id") @db.Uuid
+  code         String // "GRP-WEDDING01"
+  name         String
+  organizerName  String? @map("organizer_name")
+  organizerEmail String? @map("organizer_email")
+  organizerPhone String? @map("organizer_phone")
+  notes        String?
+  attributes   Json?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, propertyId])
+  @@map("reservation_groups")
+}
+
 model Reservation {
   id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId           String            @map("tenant_id") @db.Uuid
@@ -313,6 +342,8 @@ model Reservation {
   // Codigo legible humano ("BCN-A1B2C3")
   code               String
   status             ReservationStatus @default(PENDING)
+  // Grupo opcional (Sprint 2 W2)
+  groupId            String?           @map("group_id") @db.Uuid
   // Estancia
   arrivalDate        DateTime          @map("arrival_date") @db.Date
   departureDate      DateTime          @map("departure_date") @db.Date
@@ -345,6 +376,7 @@ model Reservation {
   roomType RoomType           @relation(fields: [roomTypeId], references: [id])
   room     Room?              @relation(fields: [roomId], references: [id])
   ratePlan RatePlan?          @relation(fields: [ratePlanId], references: [id])
+  group    ReservationGroup?  @relation(fields: [groupId], references: [id])
   guests   ReservationGuest[]
   folio    Folio?
 
@@ -353,6 +385,7 @@ model Reservation {
   @@index([tenantId, propertyId, departureDate])
   @@index([tenantId, propertyId, status])
   @@index([tenantId, roomId])
+  @@index([tenantId, groupId])
   @@map("reservations")
 }
 

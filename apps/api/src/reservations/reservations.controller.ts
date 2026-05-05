@@ -19,6 +19,7 @@ import {
   CheckInDto,
   CheckOutDto,
   CreateReservationDto,
+  CreateReservationGroupDto,
   PatchReservationDto,
 } from './dto';
 import { ReservationsService } from './reservations.service';
@@ -45,6 +46,17 @@ export class ReservationsController {
   ) {
     const input = CreateReservationDto.parse(body);
     return this.reservations.create(user, correlationIdOf(req), input);
+  }
+
+  @Post('groups')
+  @Roles(...FRONT_DESK_ROLES)
+  async createGroup(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Body() body: unknown,
+  ) {
+    const input = CreateReservationGroupDto.parse(body);
+    return this.reservations.createGroup(user, correlationIdOf(req), input);
   }
 
   @Post('walk-in')

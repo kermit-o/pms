@@ -58,3 +58,14 @@ export const reservationRoomAssignedV1 = baseReservation.extend({
 export type ReservationRoomAssignedV1Payload = z.infer<
   typeof reservationRoomAssignedV1
 >;
+
+export const reservationGroupCreatedV1 = z.object({
+  groupId: z.string().uuid(),
+  propertyId: z.string().uuid(),
+  code: z.string().min(1),
+  name: z.string().min(1),
+  reservationIds: z.array(z.string().uuid()).min(1),
+});
+export type ReservationGroupCreatedV1Payload = z.infer<
+  typeof reservationGroupCreatedV1
+>;
