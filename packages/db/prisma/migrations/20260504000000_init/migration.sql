@@ -14,15 +14,33 @@
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
--- 0. Extensions + schema USAGE for app role
+-- 0. Extensions + role + schema USAGE for app role
 --    Idempotente. Imprescindible despues de 'prisma migrate reset' (que dropea
---    el schema public junto con sus extensiones).
+--    el schema public junto con sus extensiones) y para entornos managed
+--    (Railway, Fly Postgres, RDS) donde el init script de docker-compose
+--    no corre y por tanto el rol pms_app no existe.
 -- ----------------------------------------------------------------------------
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "citext";
 CREATE EXTENSION IF NOT EXISTS "btree_gist";
+
+-- Crea el rol pms_app si no existe.
+--   - docker-compose dev: ya creado por infra/postgres/init/02-roles.sql con LOGIN.
+--     Este DO block es no-op y los GRANTs siguientes funcionan como esperaban.
+--   - Postgres managed (Railway/Fly/RDS): la app conecta como el superuser del
+--     proveedor; pms_app se crea aqui sin LOGIN solo para que los GRANTs no
+--     fallen. RLS queda efectivamente bypaseada (porque superuser bypassea RLS),
+--     lo cual es aceptable en staging — en produccion real se separa con
+--     un rol dedicado SIN BYPASSRLS.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pms_app') THEN
+    CREATE ROLE pms_app NOLOGIN;
+  END IF;
+END
+$$;
 
 GRANT USAGE ON SCHEMA public TO pms_app;
 
