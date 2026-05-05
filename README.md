@@ -6,6 +6,7 @@ SaaS de gestión hotelera con IA integrada desde el día uno. MVP enfocado en Fr
 > Es la fuente única de verdad del proyecto: visión, alcance, arquitectura, decisiones y roadmap.
 
 ## Estado
+
 - **Fase:** Foundation / Sprint 0 completado, Sprint 1 listo para empezar.
 - **Plan del Sprint 1:** [`docs/SPRINT-1-PLAN.md`](./docs/SPRINT-1-PLAN.md)
 - **Branch de desarrollo:** `claude/plan-hotel-saas-rWaWw`

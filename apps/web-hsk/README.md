@@ -14,4 +14,5 @@ Next.js 15 PWA — Housekeeping mobile-first.
 - i18n: ES + EN.
 
 ## Restricción no negociable
+
 Si no funciona fluido en un móvil de gama media con conexión 3G, no se mergea.

@@ -13,10 +13,7 @@ import { resolve } from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 import { PrismaClient, TenantStatus, UserStatus } from '@prisma/client';
 
-const envCandidates = [
-  resolve(process.cwd(), '.env'),
-  resolve(process.cwd(), '../../.env'),
-];
+const envCandidates = [resolve(process.cwd(), '.env'), resolve(process.cwd(), '../../.env')];
 for (const path of envCandidates) {
   if (existsSync(path)) {
     loadDotenv({ path });
@@ -77,8 +74,10 @@ async function main() {
     },
   });
 
-  console.log('Seed completed:');
-  console.log({ tenantId: tenant.id, propertyId: property.id, adminUserId: adminUser.id });
+  // Output a stderr — la regla no-console permite warn/error pero no log.
+  // Es un script CLI, no es un servicio.
+  console.error('Seed completed:');
+  console.error({ tenantId: tenant.id, propertyId: property.id, adminUserId: adminUser.id });
 }
 
 main()

@@ -25,10 +25,7 @@ export interface McpContext {
  *     handler: async (input, ctx) => { ... }
  *   });
  */
-export interface ToolDefinition<
-  TInput extends z.ZodTypeAny = z.ZodTypeAny,
-  TOutput = unknown,
-> {
+export interface ToolDefinition<TInput extends z.ZodTypeAny = z.ZodTypeAny, TOutput = unknown> {
   name: string;
   description: string;
   inputSchema: TInput;

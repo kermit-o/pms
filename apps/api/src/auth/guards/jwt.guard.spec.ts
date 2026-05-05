@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { JwtAuthGuard } from './jwt.guard';
 import type { JwtValidatorService } from '../jwt-validator.service';
 
-function makeContext(headers: Record<string, string>, isPublic = false): {
+function makeContext(
+  headers: Record<string, string>,
+  isPublic = false,
+): {
   ctx: ExecutionContext;
   req: { headers: Record<string, string>; user?: unknown };
 } {

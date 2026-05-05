@@ -65,12 +65,12 @@ Cada tabla operativa lleva `tenant_id`. Las policies RLS comparan
 `current_setting('app.tenant_id')`. El API setea ese valor por transaccion
 con `set_config(..., true)` (LOCAL).
 
-| Tabla       | RLS    | FORCE | Notas                                                           |
-|-------------|--------|-------|-----------------------------------------------------------------|
-| `tenants`   | NO     | —     | Tabla admin-level, no tiene tenant_id. Exposicion controlada por API. |
-| `users`     | YES    | YES   | Aislamiento total por tenant.                                   |
-| `properties`| YES    | YES   | Aislamiento total por tenant.                                   |
-| `audit_log` | YES    | NO    | SELECT por tenant; INSERT solo via trigger SECURITY DEFINER.    |
+| Tabla        | RLS | FORCE | Notas                                                                 |
+| ------------ | --- | ----- | --------------------------------------------------------------------- |
+| `tenants`    | NO  | —     | Tabla admin-level, no tiene tenant_id. Exposicion controlada por API. |
+| `users`      | YES | YES   | Aislamiento total por tenant.                                         |
+| `properties` | YES | YES   | Aislamiento total por tenant.                                         |
+| `audit_log`  | YES | NO    | SELECT por tenant; INSERT solo via trigger SECURITY DEFINER.          |
 
 ## Audit log
 
@@ -79,6 +79,7 @@ en `audit_log` el snapshot pre/post cambio mas `actor_id` y
 `correlation_id` leidos del session settings.
 
 Inmutable a nivel DB:
+
 - Sin policies para INSERT/UPDATE/DELETE → app role no puede mutar.
 - La funcion trigger es `SECURITY DEFINER` (corre como owner) → bypassea RLS para insertar.
 
@@ -96,6 +97,7 @@ await prisma.withTenant(
 ```
 
 ## Pendiente
+
 - ADR explicito de cuando usar `withTenant` vs llamar directo (sistema).
 - Test de integracion verificando aislamiento entre tenants y append-only de audit.
 - Migracion futura para introducir UUID v7 en tablas de hot-path (reservas, folio).

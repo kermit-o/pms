@@ -1,9 +1,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolRegistry } from './registry';
 import type { McpContext } from './types';
 
@@ -30,11 +27,7 @@ export function createMcpServer(registry: ToolRegistry, ctx: McpContext): Server
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     try {
-      const result = await registry.invoke(
-        req.params.name,
-        req.params.arguments ?? {},
-        ctx,
-      );
+      const result = await registry.invoke(req.params.name, req.params.arguments ?? {}, ctx);
       return {
         content: [
           {

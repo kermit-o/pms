@@ -1,10 +1,4 @@
-export {
-  Prisma,
-  PrismaClient,
-  TenantStatus,
-  UserStatus,
-  AuditOperation,
-} from '@prisma/client';
+export { Prisma, PrismaClient, TenantStatus, UserStatus, AuditOperation } from '@prisma/client';
 
 export type { Tenant, User, Property, AuditLog } from '@prisma/client';
 

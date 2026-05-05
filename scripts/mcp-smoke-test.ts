@@ -44,10 +44,7 @@ async function main() {
     } as Record<string, string>,
   });
 
-  const client = new Client(
-    { name: 'pms-mcp-smoke-test', version: '0.0.1' },
-    { capabilities: {} },
-  );
+  const client = new Client({ name: 'pms-mcp-smoke-test', version: '0.0.1' }, { capabilities: {} });
 
   await client.connect(transport);
   console.log('✓ connected');
@@ -62,7 +59,12 @@ async function main() {
   console.log('✓ tools/call get_tenant_info →');
   for (const c of result.content as Array<{ type: string; text?: string }>) {
     if (c.type === 'text' && c.text) {
-      console.log(c.text.split('\n').map((l) => `    ${l}`).join('\n'));
+      console.log(
+        c.text
+          .split('\n')
+          .map((l) => `    ${l}`)
+          .join('\n'),
+      );
     }
   }
   if (result.isError) {

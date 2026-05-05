@@ -16,10 +16,7 @@ import { config as loadDotenv } from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import { withTenant } from '../src/tenant-context';
 
-const envCandidates = [
-  resolve(process.cwd(), '.env'),
-  resolve(process.cwd(), '../../.env'),
-];
+const envCandidates = [resolve(process.cwd(), '.env'), resolve(process.cwd(), '../../.env')];
 for (const path of envCandidates) {
   if (existsSync(path)) {
     loadDotenv({ path });
@@ -72,16 +69,12 @@ describe('RLS isolation', () => {
   });
 
   it('app role with tenant A only sees A rows', async () => {
-    const props = await withTenant(app, { tenantId: tenantA.id }, (tx) =>
-      tx.property.findMany(),
-    );
+    const props = await withTenant(app, { tenantId: tenantA.id }, (tx) => tx.property.findMany());
     expect(props.map((p) => p.id)).toEqual([propertyA.id]);
   });
 
   it('app role with tenant B only sees B rows', async () => {
-    const props = await withTenant(app, { tenantId: tenantB.id }, (tx) =>
-      tx.property.findMany(),
-    );
+    const props = await withTenant(app, { tenantId: tenantB.id }, (tx) => tx.property.findMany());
     expect(props.map((p) => p.id)).toEqual([propertyB.id]);
   });
 
@@ -132,20 +125,19 @@ describe('Audit log', () => {
 
   it('app role cannot directly INSERT into audit_log', async () => {
     await expect(
-      withTenant(app, { tenantId: tenantA.id }, (tx) =>
-        tx.$executeRaw`INSERT INTO audit_log (tenant_id, table_name, record_id, operation)
+      withTenant(
+        app,
+        { tenantId: tenantA.id },
+        (tx) =>
+          tx.$executeRaw`INSERT INTO audit_log (tenant_id, table_name, record_id, operation)
                        VALUES (${tenantA.id}::uuid, 'properties', gen_random_uuid(), 'INSERT')`,
       ),
     ).rejects.toThrow();
   });
 
   it('audit_log SELECT is also tenant-isolated', async () => {
-    const aLogs = await withTenant(app, { tenantId: tenantA.id }, (tx) =>
-      tx.auditLog.findMany(),
-    );
-    const bLogs = await withTenant(app, { tenantId: tenantB.id }, (tx) =>
-      tx.auditLog.findMany(),
-    );
+    const aLogs = await withTenant(app, { tenantId: tenantA.id }, (tx) => tx.auditLog.findMany());
+    const bLogs = await withTenant(app, { tenantId: tenantB.id }, (tx) => tx.auditLog.findMany());
 
     expect(aLogs.every((l) => l.tenantId === tenantA.id)).toBe(true);
     expect(bLogs.every((l) => l.tenantId === tenantB.id)).toBe(true);

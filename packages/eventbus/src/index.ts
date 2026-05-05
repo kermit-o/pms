@@ -12,5 +12,5 @@ export type {
   PropertyCreatedV1Payload,
   PropertyUpdatedV1Payload,
 } from './catalog';
-export { createNatsConnection, ensureStream, streamConfig } from './stream';
+export { buildStreamConfig, createNatsConnection, ensureStream } from './stream';
 export { EventPublisher, type PublishContext, type PublishResult } from './publisher';

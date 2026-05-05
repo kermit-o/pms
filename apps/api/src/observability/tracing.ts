@@ -25,10 +25,7 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
 import { Resource } from '@opentelemetry/resources';
-import {
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
-} from '@opentelemetry/semantic-conventions';
+import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 
 const enabled = process.env.OTEL_ENABLED !== 'false';
 
@@ -68,14 +65,12 @@ if (enabled) {
 
   const shutdown = (): void => {
     void sdk.shutdown().catch((err) => {
-      // eslint-disable-next-line no-console
       console.error('OTel shutdown failed:', err);
     });
   };
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 
-  // eslint-disable-next-line no-console
   console.error(
     `[otel] enabled (traces=${otlpEndpoint ?? 'no-export'}, metrics=:${metricsPort}/metrics)`,
   );

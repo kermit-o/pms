@@ -4,7 +4,10 @@ import { HealthController } from './health.controller';
 import type { PrismaService } from '../db';
 import type { EventbusService } from '../eventbus';
 
-function makeController(opts: { ping: () => Promise<void>; natsPing?: () => void }): HealthController {
+function makeController(opts: {
+  ping: () => Promise<void>;
+  natsPing?: () => void;
+}): HealthController {
   return new HealthController(
     { ping: opts.ping } as unknown as PrismaService,
     { ping: opts.natsPing ?? (() => undefined) } as unknown as EventbusService,
@@ -31,9 +34,9 @@ describe('HealthController', () => {
 
   it('readiness throws 503 when DB ping fails', async () => {
     const ping = vi.fn().mockRejectedValue(new Error('connection refused'));
-    await expect(
-      makeController({ ping }).readiness(),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(makeController({ ping }).readiness()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('readiness throws 503 when NATS ping fails', async () => {
@@ -41,8 +44,8 @@ describe('HealthController', () => {
     const natsPing = vi.fn(() => {
       throw new Error('nats closed');
     });
-    await expect(
-      makeController({ ping, natsPing }).readiness(),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(makeController({ ping, natsPing }).readiness()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 });

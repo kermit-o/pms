@@ -30,8 +30,6 @@ describe('validateEnv', () => {
   });
 
   it('throws on invalid URL', () => {
-    expect(() => validateEnv({ ...validBase, DATABASE_URL: 'not-a-url' })).toThrow(
-      /DATABASE_URL/,
-    );
+    expect(() => validateEnv({ ...validBase, DATABASE_URL: 'not-a-url' })).toThrow(/DATABASE_URL/);
   });
 });

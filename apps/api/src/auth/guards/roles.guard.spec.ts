@@ -4,17 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { RolesGuard } from './roles.guard';
 import type { AuthUser, Role } from '../types';
 
-function ctxWith(user: AuthUser | undefined, requiredRoles?: Role[]): ExecutionContext {
-  const reflector = new Reflector();
-  vi.spyOn(reflector, 'getAllAndOverride').mockReturnValue(requiredRoles);
-  void reflector;
-  return {
-    switchToHttp: () => ({ getRequest: () => ({ user }) }),
-    getHandler: () => ({}),
-    getClass: () => ({}),
-  } as unknown as ExecutionContext;
-}
-
 describe('RolesGuard', () => {
   const user: AuthUser = {
     sub: 'u1',

@@ -6,9 +6,9 @@ import { validateEnv } from './env.schema';
 
 function resolveEnvFiles(): string[] {
   const candidates = [
-    resolve(process.cwd(), '.env'),                  // apps/api/.env (override local opcional)
-    resolve(process.cwd(), '../../.env.local'),      // raiz del monorepo (override personal)
-    resolve(process.cwd(), '../../.env'),            // raiz del monorepo (default)
+    resolve(process.cwd(), '.env'), // apps/api/.env (override local opcional)
+    resolve(process.cwd(), '../../.env.local'), // raiz del monorepo (override personal)
+    resolve(process.cwd(), '../../.env'), // raiz del monorepo (default)
   ];
   return candidates.filter((p) => existsSync(p));
 }

@@ -4,14 +4,14 @@ Servicios de desarrollo local levantados con Docker Compose.
 
 ## Servicios
 
-| Servicio | Puerto | Uso |
-|---|---|---|
-| Postgres (PMS) | 5432 | Base de datos principal |
-| Redis | 6379 | Cache + colas BullMQ |
-| NATS JetStream | 4222 (cliente) / 8222 (monitor) | Event bus |
-| Keycloak | 8080 | Auth (admin: localhost:8080/admin) |
-| Keycloak DB | — | Postgres dedicado a Keycloak (no expuesto) |
-| Mailhog | 1025 (SMTP) / 8025 (UI) | SMTP local para testing de emails |
+| Servicio       | Puerto                          | Uso                                        |
+| -------------- | ------------------------------- | ------------------------------------------ |
+| Postgres (PMS) | 5432                            | Base de datos principal                    |
+| Redis          | 6379                            | Cache + colas BullMQ                       |
+| NATS JetStream | 4222 (cliente) / 8222 (monitor) | Event bus                                  |
+| Keycloak       | 8080                            | Auth (admin: localhost:8080/admin)         |
+| Keycloak DB    | —                               | Postgres dedicado a Keycloak (no expuesto) |
+| Mailhog        | 1025 (SMTP) / 8025 (UI)         | SMTP local para testing de emails          |
 
 ## Comandos
 

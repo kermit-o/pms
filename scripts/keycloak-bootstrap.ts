@@ -281,9 +281,7 @@ async function ensureDemoUser(): Promise<string> {
     attributes: {
       tenant_id: [DEMO_TENANT_ID],
     },
-    credentials: [
-      { type: 'password', value: DEMO_USER_PASSWORD, temporary: false },
-    ],
+    credentials: [{ type: 'password', value: DEMO_USER_PASSWORD, temporary: false }],
   };
 
   if (!existing) {

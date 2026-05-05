@@ -9,6 +9,17 @@ export interface ListedTool {
 }
 
 /**
+ * Helper: convierte un Zod schema a JSON Schema (draft 7).
+ * Aislado en una funcion con cast explicito para evitar TS2589
+ * (los Zod schemas anidados se vuelven excesivamente profundos para
+ * la inferencia de tipos en el callsite).
+ */
+function toJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return zodToJsonSchema(schema as any, { target: 'jsonSchema7' }) as Record<string, unknown>;
+}
+
+/**
  * Registry de tools. Es un componente puro — no depende del transport (stdio
  * o HTTP). El server adapter consume este registry.
  *
@@ -30,10 +41,7 @@ export class ToolRegistry {
     return Array.from(this.tools.values()).map((t) => ({
       name: t.name,
       description: t.description,
-      inputSchema: zodToJsonSchema(t.inputSchema, { target: 'jsonSchema7' }) as Record<
-        string,
-        unknown
-      >,
+      inputSchema: toJsonSchema(t.inputSchema),
     }));
   }
 

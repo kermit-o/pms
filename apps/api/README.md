@@ -38,6 +38,7 @@ Validadas con Zod en `src/config/env.schema.ts`. Si falta alguna o es inválida,
 ## Logging
 
 `nestjs-pino` con:
+
 - `correlation_id` por request (header `x-correlation-id`, generado si no llega).
 - Pretty print en dev, JSON en prod.
 - Redact automático de `authorization`, `cookie`, `x-api-key`, `set-cookie`.

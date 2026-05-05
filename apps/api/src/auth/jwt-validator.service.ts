@@ -17,9 +17,7 @@ export class JwtValidatorService implements OnModuleInit {
     const baseUrl = this.config.get('KEYCLOAK_URL', { infer: true });
     const realm = this.config.get('KEYCLOAK_REALM', { infer: true });
     this.issuer = `${baseUrl}/realms/${realm}`;
-    this.jwks = createRemoteJWKSet(
-      new URL(`${this.issuer}/protocol/openid-connect/certs`),
-    );
+    this.jwks = createRemoteJWKSet(new URL(`${this.issuer}/protocol/openid-connect/certs`));
   }
 
   async verify(token: string): Promise<AuthUser> {
