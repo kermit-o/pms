@@ -20,7 +20,8 @@
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",
     "infra:reset": "docker compose down -v && docker compose up -d",
-    "bootstrap:keycloak": "tsx scripts/keycloak-bootstrap.ts"
+    "bootstrap:keycloak": "tsx scripts/keycloak-bootstrap.ts",
+    "mcp:server": "tsx scripts/mcp-server.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.12.0",

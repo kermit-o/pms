@@ -51,10 +51,13 @@
 - [x] Test integración round-trip publish + consume contra NATS real.
 - [ ] Consumer base + dead-letter handling — diferido a Sprint 2 cuando empecemos a consumir eventos en services.
 
-### 5. MCP server skeleton
-- [ ] `packages/mcp-tools` con server MCP básico.
-- [ ] Tool de ejemplo: `get_tenant_info`.
-- [ ] Cliente Claude conectado vía MCP en script de prueba.
+### 5. MCP server skeleton ✅
+- [x] `packages/mcp-tools` con `ToolRegistry` tipado (input Zod → JSON Schema, validación previa al handler, runtime checks de duplicado / unknown tool).
+- [x] `createMcpServer(registry, ctx)` adapter transport-agnostic encima del MCP SDK (handlers `ListTools` y `CallTool`).
+- [x] Tool inicial `get_tenant_info` que usa `prisma.withTenant()` para que RLS aplique y el audit log registre la invocación.
+- [x] Entry point stdio `scripts/mcp-server.ts` ejecutable con `pnpm mcp:server` — listo para `claude_desktop_config.json`.
+- [x] Tests unitarios del registry (register, list, invoke, validación, unknown).
+- [ ] HTTP/SSE transport montado en NestJS — diferido a Sprint 2 (necesita extracción de tenant del JWT por request).
 
 ### 6. Observabilidad
 - [ ] OpenTelemetry instrumentado en API.

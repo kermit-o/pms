@@ -14,6 +14,7 @@
   - ✅ Tarea 2: Prisma + multi-tenancy con RLS + audit log via triggers + tenant-scoped client.
   - ✅ Tarea 3: Keycloak bootstrap, JWT validation con jose, JwtAuthGuard + RolesGuard + decoradores, demo endpoints `/me` y `/properties`.
   - ✅ Tarea 4: NATS JetStream eventbus tipado, envelope versionado, catálogo Zod, `EventbusService` integrado en API, `/readyz` chequea NATS.
+  - ✅ Tarea 5: MCP server skeleton — `ToolRegistry` con validación Zod, tool inicial `get_tenant_info`, server adapter transport-agnostic, entry point stdio para Claude Desktop.
 - **Branch de desarrollo:** `claude/plan-hotel-saas-rWaWw`
 - **Última actualización:** 2026-05-05
 
