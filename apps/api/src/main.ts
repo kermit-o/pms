@@ -31,7 +31,9 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const config = app.get(ConfigService<Env, true>);
-  const port = config.get('APP_PORT', { infer: true });
+  // Prioridad: PORT (inyectado dinamicamente por Railway/Fly/Heroku/Cloud Run)
+  // > APP_PORT del .env / Zod default (3000 en dev local).
+  const port = Number(process.env.PORT) || config.get('APP_PORT', { infer: true });
   const host = config.get('APP_HOST', { infer: true });
 
   await app.listen(port, host);
