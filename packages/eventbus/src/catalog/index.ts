@@ -1,4 +1,10 @@
 import type { z } from 'zod';
+import {
+  folioChargeAddedV1,
+  folioClosedV1,
+  folioPaymentReceivedV1,
+  folioReopenedV1,
+} from './folio';
 import { propertyCreatedV1, propertyUpdatedV1 } from './property';
 import {
   reservationCancelledV1,
@@ -37,6 +43,13 @@ export const catalog = {
     schema: reservationGroupCreatedV1,
     schemaVersion: 1,
   },
+  'folio.charge_added': { schema: folioChargeAddedV1, schemaVersion: 1 },
+  'folio.payment_received': {
+    schema: folioPaymentReceivedV1,
+    schemaVersion: 1,
+  },
+  'folio.closed': { schema: folioClosedV1, schemaVersion: 1 },
+  'folio.reopened': { schema: folioReopenedV1, schemaVersion: 1 },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -66,3 +79,16 @@ export type {
   ReservationRoomAssignedV1Payload,
   ReservationUpdatedV1Payload,
 } from './reservation';
+
+export {
+  folioChargeAddedV1,
+  folioClosedV1,
+  folioPaymentReceivedV1,
+  folioReopenedV1,
+} from './folio';
+export type {
+  FolioChargeAddedV1Payload,
+  FolioClosedV1Payload,
+  FolioPaymentReceivedV1Payload,
+  FolioReopenedV1Payload,
+} from './folio';

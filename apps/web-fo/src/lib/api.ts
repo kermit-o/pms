@@ -143,3 +143,82 @@ export async function cancelReservation(
     body: JSON.stringify({ reason }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Folio
+// ---------------------------------------------------------------------------
+
+export interface FolioEntry {
+  id: string;
+  type: 'CHARGE' | 'PAYMENT' | 'DISCOUNT' | 'TAX' | 'ADJUSTMENT';
+  description: string;
+  amount: string;
+  currency: string;
+  postedAt: string;
+  postedBy: string | null;
+  attributes: unknown;
+}
+
+export interface FolioDetail {
+  id: string;
+  status: 'OPEN' | 'CLOSED' | 'SETTLED';
+  balance: string;
+  currency: string;
+  closedAt: string | null;
+  reservationId: string;
+  createdAt: string;
+  updatedAt: string;
+  entries: FolioEntry[];
+}
+
+export async function getFolio(
+  accessToken: string | undefined,
+  folioId: string,
+): Promise<FolioDetail> {
+  return apiFetch(`/folios/${folioId}`, { accessToken });
+}
+
+export async function addFolioCharge(
+  accessToken: string | undefined,
+  folioId: string,
+  input: {
+    description: string;
+    amount: number;
+    type?: 'CHARGE' | 'TAX';
+    idempotencyKey?: string;
+  },
+): Promise<{ entryId: string; balance: string }> {
+  return apiFetch(`/folios/${folioId}/charges`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function addFolioPayment(
+  accessToken: string | undefined,
+  folioId: string,
+  input: {
+    description: string;
+    amount: number;
+    paymentMethod: 'CASH' | 'CARD' | 'BANK_TRANSFER' | 'OTHER';
+    reference?: string;
+    idempotencyKey?: string;
+  },
+): Promise<{ entryId: string; balance: string }> {
+  return apiFetch(`/folios/${folioId}/payments`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function closeFolio(
+  accessToken: string | undefined,
+  folioId: string,
+): Promise<{ id: string }> {
+  return apiFetch(`/folios/${folioId}/close`, {
+    method: 'POST',
+    accessToken,
+  });
+}
