@@ -222,3 +222,100 @@ export async function closeFolio(
     accessToken,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Guests / Cardex
+// ---------------------------------------------------------------------------
+
+export interface GuestListItem {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  documentType: string | null;
+  documentNumber: string | null;
+  nationality: string | null;
+  createdAt: string;
+}
+
+export type GuestDetail = GuestListItem & {
+  dateOfBirth: string | null;
+  documentIssuingCountry: string | null;
+  documentExpiryDate: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  postalCode: string | null;
+  region: string | null;
+  country: string | null;
+  gdprConsent: boolean;
+  marketingConsent: boolean;
+  notes: string | null;
+  updatedAt: string;
+};
+
+export async function listGuests(
+  accessToken: string | undefined,
+  query: { q?: string; limit?: number } = {},
+): Promise<{ items: GuestListItem[]; nextCursor: string | null }> {
+  const params = new URLSearchParams();
+  if (query.q) params.set('q', query.q);
+  if (query.limit) params.set('limit', String(query.limit));
+  const q = params.toString();
+  return apiFetch(`/guests${q ? `?${q}` : ''}`, { accessToken });
+}
+
+export async function getGuest(
+  accessToken: string | undefined,
+  id: string,
+): Promise<GuestDetail> {
+  return apiFetch(`/guests/${id}`, { accessToken });
+}
+
+export async function patchGuest(
+  accessToken: string | undefined,
+  id: string,
+  input: Partial<{
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    nationality: string;
+    documentType: 'DNI' | 'NIE' | 'PASSPORT' | 'EU_ID' | 'OTHER';
+    documentNumber: string;
+    addressLine1: string;
+    city: string;
+    postalCode: string;
+    country: string;
+    gdprConsent: boolean;
+    marketingConsent: boolean;
+    notes: string;
+  }>,
+): Promise<{ id: string }> {
+  return apiFetch(`/guests/${id}`, {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getGuestAccessExport(
+  accessToken: string | undefined,
+  id: string,
+): Promise<unknown> {
+  return apiFetch(`/guests/${id}/access-export`, { accessToken });
+}
+
+export async function eraseGuest(
+  accessToken: string | undefined,
+  id: string,
+  reason: string,
+  hard = false,
+): Promise<{ id: string; hard: boolean }> {
+  return apiFetch(`/guests/${id}/erase`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ reason, hard }),
+  });
+}

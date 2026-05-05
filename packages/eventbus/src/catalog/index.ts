@@ -5,6 +5,12 @@ import {
   folioPaymentReceivedV1,
   folioReopenedV1,
 } from './folio';
+import {
+  guestCreatedV1,
+  guestErasedV1,
+  guestMergedV1,
+  guestUpdatedV1,
+} from './guest';
 import { propertyCreatedV1, propertyUpdatedV1 } from './property';
 import {
   reservationCancelledV1,
@@ -50,6 +56,10 @@ export const catalog = {
   },
   'folio.closed': { schema: folioClosedV1, schemaVersion: 1 },
   'folio.reopened': { schema: folioReopenedV1, schemaVersion: 1 },
+  'guest.created': { schema: guestCreatedV1, schemaVersion: 1 },
+  'guest.updated': { schema: guestUpdatedV1, schemaVersion: 1 },
+  'guest.erased': { schema: guestErasedV1, schemaVersion: 1 },
+  'guest.merged': { schema: guestMergedV1, schemaVersion: 1 },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -92,3 +102,16 @@ export type {
   FolioPaymentReceivedV1Payload,
   FolioReopenedV1Payload,
 } from './folio';
+
+export {
+  guestCreatedV1,
+  guestErasedV1,
+  guestMergedV1,
+  guestUpdatedV1,
+} from './guest';
+export type {
+  GuestCreatedV1Payload,
+  GuestErasedV1Payload,
+  GuestMergedV1Payload,
+  GuestUpdatedV1Payload,
+} from './guest';

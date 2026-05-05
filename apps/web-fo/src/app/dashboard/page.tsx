@@ -45,7 +45,7 @@ export default async function DashboardPage() {
         />
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Link
           href="/calendar"
           className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100 transition hover:bg-aubergine-50"
@@ -66,6 +66,17 @@ export default async function DashboardPage() {
           </p>
           <p className="mt-1 text-base font-medium text-aubergine-700">
             Listar, crear, cancelar
+          </p>
+        </Link>
+        <Link
+          href="/guests"
+          className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100 transition hover:bg-aubergine-50"
+        >
+          <p className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
+            Cardex
+          </p>
+          <p className="mt-1 text-base font-medium text-aubergine-700">
+            Huéspedes + GDPR
           </p>
         </Link>
         <Link

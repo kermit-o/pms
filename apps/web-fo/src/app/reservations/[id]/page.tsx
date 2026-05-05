@@ -26,7 +26,7 @@ interface ReservationDetail {
   notes: string | null;
   guests: Array<{
     isPrimary: boolean;
-    guest: { firstName: string; lastName: string; email: string | null };
+    guest: { id: string; firstName: string; lastName: string; email: string | null };
   }>;
   folio: { id: string; status: string; balance: string; currency: string } | null;
 }
@@ -174,6 +174,14 @@ export default async function ReservationDetailPage({
               value={`${primary.firstName} ${primary.lastName}`}
             />
             <Item label="Email" value={primary.email ?? '—'} />
+            <div className="col-span-2">
+              <Link
+                href={`/guests/${primary.id}`}
+                className="text-xs font-medium text-aubergine-500 hover:underline"
+              >
+                Abrir cardex →
+              </Link>
+            </div>
           </Section>
         )}
       </div>
