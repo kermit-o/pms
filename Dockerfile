@@ -52,7 +52,7 @@ RUN pnpm --filter @pms/api --prod deploy /tmp/api-deploy
 FROM node:20-alpine AS runtime
 
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
-RUN apk add --no-cache tini
+RUN apk add --no-cache tini openssl libc6-compat
 
 WORKDIR /app
 
@@ -77,6 +77,10 @@ EXPOSE 3000 9464
 # tini como PID 1 -> manejo correcto de SIGTERM (importante para drain de NATS).
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Migraciones idempotentes + start. Si migrate falla la app no arranca
-# (Railway/Fly relanzan automaticamente y la migracion vuelve a intentarse).
-CMD ["sh", "-c", "pnpm --filter @pms/db migrate:deploy && node apps/api/dist/main.js"]
+# Migraciones idempotentes + start.
+# Llamamos a Prisma directamente (no via 'pnpm migrate:deploy') porque ese
+# script local usa dotenv-cli que requiere un .env en disco. En el contenedor
+# las env vars vienen inyectadas por la plataforma (Railway/Fly) en
+# process.env y Prisma las lee directo.
+# Si migrate falla la app no arranca y la plataforma reintenta.
+CMD ["sh", "-c", "pnpm --filter @pms/db exec prisma migrate deploy && node apps/api/dist/main.js"]
