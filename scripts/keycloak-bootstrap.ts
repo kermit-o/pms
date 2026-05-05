@@ -116,8 +116,15 @@ interface ClientRepresentation {
   standardFlowEnabled?: boolean;
   directAccessGrantsEnabled?: boolean;
   serviceAccountsEnabled?: boolean;
-  protocolMappers?: unknown[];
   attributes?: Record<string, string>;
+}
+
+interface ProtocolMapperRepresentation {
+  id?: string;
+  name: string;
+  protocol: string;
+  protocolMapper: string;
+  config: Record<string, string>;
 }
 
 async function findClient(): Promise<ClientRepresentation | null> {
@@ -131,20 +138,6 @@ async function findClient(): Promise<ClientRepresentation | null> {
 
 async function ensureClient(): Promise<string> {
   const existing = await findClient();
-  const tenantIdMapper = {
-    name: 'tenant_id',
-    protocol: 'openid-connect',
-    protocolMapper: 'oidc-usermodel-attribute-mapper',
-    config: {
-      'user.attribute': 'tenant_id',
-      'claim.name': 'tenant_id',
-      'jsonType.label': 'String',
-      'access.token.claim': 'true',
-      'id.token.claim': 'true',
-      'userinfo.token.claim': 'true',
-    },
-  };
-
   const desired: ClientRepresentation = {
     clientId: CLIENT_ID,
     secret: CLIENT_SECRET,
@@ -153,7 +146,6 @@ async function ensureClient(): Promise<string> {
     standardFlowEnabled: false,
     directAccessGrantsEnabled: true,
     serviceAccountsEnabled: true,
-    protocolMappers: [tenantIdMapper],
     attributes: {
       'access.token.lifespan': '900',
     },
@@ -173,6 +165,53 @@ async function ensureClient(): Promise<string> {
   });
   console.log(`✓ client '${CLIENT_ID}' updated`);
   return existing.id!;
+}
+
+/**
+ * Asegura un protocol mapper "User Attribute" que expone el atributo
+ * 'tenant_id' del usuario como claim del access token. Idempotente.
+ *
+ * Keycloak silenciosamente ignora los mappers cuando los pasas como parte
+ * del ClientRepresentation, hay que usar el endpoint dedicado.
+ */
+async function ensureTenantIdMapper(clientUuid: string): Promise<void> {
+  const existing = (await (
+    await api('GET', `/admin/realms/${REALM}/clients/${clientUuid}/protocol-mappers/models`)
+  ).json()) as ProtocolMapperRepresentation[];
+
+  const mapperName = 'tenant_id';
+  const desired: ProtocolMapperRepresentation = {
+    name: mapperName,
+    protocol: 'openid-connect',
+    protocolMapper: 'oidc-usermodel-attribute-mapper',
+    config: {
+      'user.attribute': 'tenant_id',
+      'claim.name': 'tenant_id',
+      'jsonType.label': 'String',
+      'access.token.claim': 'true',
+      'id.token.claim': 'true',
+      'userinfo.token.claim': 'true',
+      multivalued: 'false',
+      aggregate_attrs: 'false',
+    },
+  };
+
+  const found = existing.find((m) => m.name === mapperName);
+  if (!found) {
+    await api(
+      'POST',
+      `/admin/realms/${REALM}/clients/${clientUuid}/protocol-mappers/models`,
+      desired,
+    );
+    console.log(`✓ protocol mapper '${mapperName}' created on client`);
+    return;
+  }
+  await api(
+    'PUT',
+    `/admin/realms/${REALM}/clients/${clientUuid}/protocol-mappers/models/${found.id}`,
+    { ...found, ...desired },
+  );
+  console.log(`✓ protocol mapper '${mapperName}' updated on client`);
 }
 
 async function ensureRealmRoles(): Promise<void> {
@@ -259,7 +298,8 @@ async function main() {
   console.log(`Keycloak bootstrap → ${KEYCLOAK_URL}`);
   await waitForKeycloak();
   await ensureRealm();
-  await ensureClient();
+  const clientUuid = await ensureClient();
+  await ensureTenantIdMapper(clientUuid);
   await ensureRealmRoles();
   const userId = await ensureDemoUser();
   await assignRolesToUser(userId);

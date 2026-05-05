@@ -14,6 +14,19 @@
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
+-- 0. Extensions + schema USAGE for app role
+--    Idempotente. Imprescindible despues de 'prisma migrate reset' (que dropea
+--    el schema public junto con sus extensiones).
+-- ----------------------------------------------------------------------------
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "citext";
+CREATE EXTENSION IF NOT EXISTS "btree_gist";
+
+GRANT USAGE ON SCHEMA public TO pms_app;
+
+-- ----------------------------------------------------------------------------
 -- 1. Enums
 -- ----------------------------------------------------------------------------
 
