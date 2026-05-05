@@ -7,6 +7,7 @@ import { EventbusModule } from './eventbus';
 import { HealthModule } from './health/health.module';
 import { MeModule } from './me/me.module';
 import { PropertiesModule } from './properties/properties.module';
+import { ReservationsModule } from './reservations';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { PropertiesModule } from './properties/properties.module';
     HealthModule,
     MeModule,
     PropertiesModule,
+    ReservationsModule,
   ],
 })
 export class AppModule {}
