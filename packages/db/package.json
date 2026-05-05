@@ -12,17 +12,17 @@
     }
   },
   "scripts": {
-    "generate": "dotenv -e ../../.env -- prisma generate",
-    "migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
-    "migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
-    "migrate:reset": "dotenv -e ../../.env -- prisma migrate reset --force",
-    "migrate:status": "dotenv -e ../../.env -- prisma migrate status",
-    "studio": "dotenv -e ../../.env -- prisma studio",
-    "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "generate": "dotenv -e ../../.env --override -- prisma generate",
+    "migrate:dev": "dotenv -e ../../.env --override -- prisma migrate dev",
+    "migrate:deploy": "dotenv -e ../../.env --override -- prisma migrate deploy",
+    "migrate:reset": "dotenv -e ../../.env --override -- prisma migrate reset --force",
+    "migrate:status": "dotenv -e ../../.env --override -- prisma migrate status",
+    "studio": "dotenv -e ../../.env --override -- prisma studio",
+    "seed": "dotenv -e ../../.env --override -- tsx prisma/seed.ts",
     "lint": "eslint \"src/**/*.ts\" \"prisma/**/*.ts\" \"test/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "dotenv -e ../../.env -- vitest run --config vitest.integration.config.ts"
+    "test:integration": "dotenv -e ../../.env --override -- vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
