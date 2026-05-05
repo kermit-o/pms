@@ -107,6 +107,32 @@ async function ensureRealm(): Promise<void> {
   console.log(`✓ realm '${REALM}' ensured`);
 }
 
+/**
+ * Keycloak 24+ tiene User Profile activo por defecto con politica estricta:
+ * cualquier atributo no declarado en el schema se elimina silenciosamente al
+ * crear/actualizar usuarios. Eso hace que el atributo 'tenant_id' que ponemos
+ * en el demo user nunca llegue a guardarse, y por tanto el mapper no lo
+ * encuentra y el JWT no lleva el claim.
+ *
+ * Setear unmanagedAttributePolicy: ENABLED permite que admins (y nuestro
+ * bootstrap) gestionen atributos arbitrarios sin tener que declararlos.
+ */
+async function ensureUnmanagedAttributes(): Promise<void> {
+  const res = await api('GET', `/admin/realms/${REALM}/users/profile`);
+  const profile = (await res.json()) as Record<string, unknown>;
+
+  if (profile.unmanagedAttributePolicy === 'ENABLED') {
+    console.log(`✓ realm '${REALM}': unmanagedAttributePolicy already ENABLED`);
+    return;
+  }
+
+  await api('PUT', `/admin/realms/${REALM}/users/profile`, {
+    ...profile,
+    unmanagedAttributePolicy: 'ENABLED',
+  });
+  console.log(`✓ realm '${REALM}': unmanagedAttributePolicy = ENABLED`);
+}
+
 interface ClientRepresentation {
   id?: string;
   clientId: string;
@@ -298,11 +324,24 @@ async function main() {
   console.log(`Keycloak bootstrap → ${KEYCLOAK_URL}`);
   await waitForKeycloak();
   await ensureRealm();
+  await ensureUnmanagedAttributes();
   const clientUuid = await ensureClient();
   await ensureTenantIdMapper(clientUuid);
   await ensureRealmRoles();
   const userId = await ensureDemoUser();
   await assignRolesToUser(userId);
+
+  // Verificacion final: el atributo tenant_id quedo persistido?
+  const verifyRes = await api('GET', `/admin/realms/${REALM}/users/${userId}`);
+  const stored = (await verifyRes.json()) as { attributes?: Record<string, string[]> };
+  const tenantAttr = stored.attributes?.tenant_id;
+  if (!tenantAttr || tenantAttr[0] !== DEMO_TENANT_ID) {
+    console.warn(
+      `⚠ user '${DEMO_USER_EMAIL}' tenant_id attribute is ${JSON.stringify(tenantAttr)} (expected [${DEMO_TENANT_ID}])`,
+    );
+  } else {
+    console.log(`✓ user '${DEMO_USER_EMAIL}' tenant_id attribute persisted: ${tenantAttr[0]}`);
+  }
 
   console.log('');
   console.log('───────────────────────────────────────────');
