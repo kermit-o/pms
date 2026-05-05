@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { auth, signOut } from '@/auth';
 import { fetchDashboardKpis } from '@/lib/api';
 
@@ -42,6 +43,42 @@ export default async function DashboardPage() {
           label="Ocupación"
           value={`${Math.round(kpis.occupancyPct * 100)}%`}
         />
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <Link
+          href="/calendar"
+          className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100 transition hover:bg-aubergine-50"
+        >
+          <p className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
+            Calendar
+          </p>
+          <p className="mt-1 text-base font-medium text-aubergine-700">
+            Disponibilidad por habitación
+          </p>
+        </Link>
+        <Link
+          href="/reservations"
+          className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100 transition hover:bg-aubergine-50"
+        >
+          <p className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
+            Reservas
+          </p>
+          <p className="mt-1 text-base font-medium text-aubergine-700">
+            Listar, crear, cancelar
+          </p>
+        </Link>
+        <Link
+          href="/reservations/new?walkIn=1"
+          className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100 transition hover:bg-aubergine-50"
+        >
+          <p className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
+            Walk-in
+          </p>
+          <p className="mt-1 text-base font-medium text-aubergine-700">
+            Check-in inmediato
+          </p>
+        </Link>
       </section>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-aubergine-100">
