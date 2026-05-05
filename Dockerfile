@@ -40,12 +40,6 @@ COPY packages ./packages
 RUN pnpm --filter @pms/db generate
 RUN pnpm --filter @pms/api build
 
-# Prune dev dependencies (mantiene solo prod). Reduce ~50% el tamano.
-# Excepcion: @pms/db necesita la prisma CLI en runtime para `migrate deploy`.
-# Como prisma esta en devDependencies de packages/db, lo mantenemos via
-# --filter ... --prod=false sobre packages/db.
-RUN pnpm --filter @pms/api --prod deploy /tmp/api-deploy
-
 # ----------------------------------------------------------------------------
 # Stage 2: runtime
 # ----------------------------------------------------------------------------
@@ -60,13 +54,15 @@ ENV NODE_ENV=production \
     APP_HOST=0.0.0.0 \
     APP_PORT=3000
 
-# Copia los workspaces necesarios desde el build (con sus deps prod).
-# Mantenemos la estructura de monorepo para que las imports `@pms/*` resuelvan.
-COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-COPY --from=build /app/apps/api/package.json ./apps/api/
-COPY --from=build /app/apps/api/dist ./apps/api/dist
-COPY --from=build /app/packages ./packages
-COPY --from=build /app/node_modules ./node_modules
+# Copia el workspace COMPLETO desde build. pnpm con workspaces usa una red
+# de symlinks (apps/api/node_modules -> ../../node_modules/.pnpm/...) para
+# resolver las imports a nivel de cada paquete. Si copiamos solo apps/api/dist
+# + node_modules raiz, Node no encuentra @opentelemetry/* o @pms/db al
+# resolver desde el contexto de apps/api/dist/.
+#
+# Trade-off: imagen runtime ~700MB en lugar de ~300MB. Aceptable en staging.
+# Para produccion futura: `pnpm deploy` con bundle pruneado.
+COPY --from=build /app /app
 
 # Usuario no-root
 RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
