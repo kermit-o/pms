@@ -319,3 +319,141 @@ export async function eraseGuest(
     body: JSON.stringify({ reason, hard }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Rooms
+// ---------------------------------------------------------------------------
+
+export type RoomStatus =
+  | 'CLEAN'
+  | 'DIRTY'
+  | 'INSPECTED'
+  | 'OUT_OF_ORDER'
+  | 'OUT_OF_SERVICE';
+
+export interface RoomListItem {
+  id: string;
+  number: string;
+  floor: string | null;
+  status: string;
+  isOutOfOrder: boolean;
+  outOfOrderReason: string | null;
+  roomTypeId: string;
+  propertyId: string;
+}
+
+export interface AvailabilityCell {
+  state: string;
+  reservation: {
+    id: string;
+    code: string;
+    status: string;
+    arrivalDate: string;
+    departureDate: string;
+  } | null;
+}
+
+export interface AvailabilityMatrix {
+  from: string;
+  to: string;
+  days: string[];
+  rooms: RoomListItem[];
+  cells: Record<string, Record<string, AvailabilityCell>>;
+}
+
+export async function listRooms(
+  accessToken: string | undefined,
+  query: { propertyId?: string; status?: RoomStatus; floor?: string } = {},
+): Promise<RoomListItem[]> {
+  const params = new URLSearchParams();
+  if (query.propertyId) params.set('propertyId', query.propertyId);
+  if (query.status) params.set('status', query.status);
+  if (query.floor) params.set('floor', query.floor);
+  const q = params.toString();
+  return apiFetch(`/rooms${q ? `?${q}` : ''}`, { accessToken });
+}
+
+export async function getRoomAvailability(
+  accessToken: string | undefined,
+  query: { propertyId: string; from: string; to: string; roomTypeId?: string },
+): Promise<AvailabilityMatrix> {
+  const params = new URLSearchParams({
+    propertyId: query.propertyId,
+    from: query.from,
+    to: query.to,
+  });
+  if (query.roomTypeId) params.set('roomTypeId', query.roomTypeId);
+  return apiFetch(`/rooms/availability?${params.toString()}`, { accessToken });
+}
+
+export async function changeRoomStatus(
+  accessToken: string | undefined,
+  roomId: string,
+  status: RoomStatus,
+  outOfOrderReason?: string,
+): Promise<{ id: string; status: string }> {
+  return apiFetch(`/rooms/${roomId}/status`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ status, outOfOrderReason }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Business day
+// ---------------------------------------------------------------------------
+
+export interface BusinessDayState {
+  propertyId: string;
+  businessDate: string;
+  status: 'OPEN' | 'CLOSED';
+  closedAt: string | null;
+  closedByUserId: string | null;
+  reopenedAt: string | null;
+  reopenedReason: string | null;
+}
+
+export async function getBusinessDayState(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<BusinessDayState> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/business-day/state?${params.toString()}`, { accessToken });
+}
+
+export async function listBusinessDays(
+  accessToken: string | undefined,
+  propertyId: string,
+  range?: { from?: string; to?: string },
+): Promise<BusinessDayState[]> {
+  const params = new URLSearchParams({ propertyId });
+  if (range?.from) params.set('from', range.from);
+  if (range?.to) params.set('to', range.to);
+  return apiFetch(`/business-day?${params.toString()}`, { accessToken });
+}
+
+export async function closeBusinessDay(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<{ propertyId: string; businessDate: string }> {
+  return apiFetch('/business-day/close', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ propertyId, businessDate }),
+  });
+}
+
+export async function reopenBusinessDay(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+  reason: string,
+): Promise<{ propertyId: string; businessDate: string }> {
+  return apiFetch('/business-day/reopen', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ propertyId, businessDate, reason }),
+  });
+}

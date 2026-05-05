@@ -40,6 +40,7 @@ model Tenant {
   ratePlans          RatePlan[]
   folios             Folio[]
   folioEntries       FolioEntry[]
+  businessDays       BusinessDayState[]
 
   @@map("tenants")
 }
@@ -105,6 +106,7 @@ model Property {
   reservations      Reservation[]
   reservationGroups ReservationGroup[]
   ratePlans         RatePlan[]
+  businessDays      BusinessDayState[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -491,4 +493,35 @@ enum FolioEntryType {
   ADJUSTMENT
 
   @@map("folio_entry_type")
+}
+
+// ----------------------------------------------------------------------------
+// Business-day state — locking de operaciones FO sobre dias cerrados.
+// ----------------------------------------------------------------------------
+
+model BusinessDayState {
+  tenantId        String            @map("tenant_id") @db.Uuid
+  propertyId      String            @map("property_id") @db.Uuid
+  businessDate    DateTime          @map("business_date") @db.Date
+  status          BusinessDayStatus @default(OPEN)
+  closedAt        DateTime?         @map("closed_at")
+  closedByUserId  String?           @map("closed_by_user_id") @db.Uuid
+  reopenedAt      DateTime?         @map("reopened_at")
+  reopenedReason  String?           @map("reopened_reason")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@id([propertyId, businessDate])
+  @@index([tenantId, propertyId])
+  @@map("business_day_states")
+}
+
+enum BusinessDayStatus {
+  OPEN
+  CLOSED
+
+  @@map("business_day_status")
 }

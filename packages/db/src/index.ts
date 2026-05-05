@@ -8,6 +8,7 @@ export {
   ReservationSource,
   RoomStatus,
   FolioStatus,
+  BusinessDayStatus,
 } from '@prisma/client';
 
 export type {
@@ -23,6 +24,7 @@ export type {
   RatePlan,
   Folio,
   FolioEntry,
+  BusinessDayState,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

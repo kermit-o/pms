@@ -1,5 +1,9 @@
 import type { z } from 'zod';
 import {
+  businessDayClosedV1,
+  businessDayReopenedV1,
+} from './business-day';
+import {
   folioChargeAddedV1,
   folioClosedV1,
   folioPaymentReceivedV1,
@@ -12,6 +16,7 @@ import {
   guestUpdatedV1,
 } from './guest';
 import { propertyCreatedV1, propertyUpdatedV1 } from './property';
+import { roomStatusChangedV1 } from './room';
 import {
   reservationCancelledV1,
   reservationCheckedInV1,
@@ -60,6 +65,9 @@ export const catalog = {
   'guest.updated': { schema: guestUpdatedV1, schemaVersion: 1 },
   'guest.erased': { schema: guestErasedV1, schemaVersion: 1 },
   'guest.merged': { schema: guestMergedV1, schemaVersion: 1 },
+  'room.status_changed': { schema: roomStatusChangedV1, schemaVersion: 1 },
+  'business_day.closed': { schema: businessDayClosedV1, schemaVersion: 1 },
+  'business_day.reopened': { schema: businessDayReopenedV1, schemaVersion: 1 },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -115,3 +123,15 @@ export type {
   GuestMergedV1Payload,
   GuestUpdatedV1Payload,
 } from './guest';
+
+export { roomStatusChangedV1 } from './room';
+export type { RoomStatusChangedV1Payload } from './room';
+
+export {
+  businessDayClosedV1,
+  businessDayReopenedV1,
+} from './business-day';
+export type {
+  BusinessDayClosedV1Payload,
+  BusinessDayReopenedV1Payload,
+} from './business-day';
