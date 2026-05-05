@@ -1,0 +1,30 @@
+{
+  "name": "@pms/eventbus",
+  "version": "0.0.0",
+  "private": true,
+  "description": "PMS event bus — NATS JetStream client tipado + catalogo de eventos versionado",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:integration": "dotenv -e ../../.env --override -- vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "nats": "^2.29.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.10",
+    "dotenv-cli": "^7.4.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.2"
+  }
+}
