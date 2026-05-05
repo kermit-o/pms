@@ -26,8 +26,16 @@ model Tenant {
   updatedAt DateTime     @updatedAt @map("updated_at")
   deletedAt DateTime?    @map("deleted_at")
 
-  users      User[]
-  properties Property[]
+  users             User[]
+  properties        Property[]
+  roomTypes         RoomType[]
+  rooms             Room[]
+  guests            Guest[]
+  reservations      Reservation[]
+  reservationGuests ReservationGuest[]
+  ratePlans         RatePlan[]
+  folios            Folio[]
+  folioEntries      FolioEntry[]
 
   @@map("tenants")
 }
@@ -87,7 +95,11 @@ model Property {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roomTypes    RoomType[]
+  rooms        Room[]
+  reservations Reservation[]
+  ratePlans    RatePlan[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -122,4 +134,323 @@ enum AuditOperation {
   DELETE
 
   @@map("audit_operation")
+}
+
+// ============================================================================
+// Sprint 2 pre-work — modelo de datos canonico de Front Office.
+//
+// El alcance funcional (workflows, edges cases) se ajusta tras hablar con
+// 2-3 hoteles boutique (per ADR-007). Las entidades y campos base aqui
+// son universales en la industria PMS y se confirman en la mayoria de
+// hoteles, pero los enums (status, source) y los campos en `attributes`
+// (jsonb) se pueden extender sin migracion.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// Inventario fisico: tipos de habitacion + habitaciones individuales.
+// ----------------------------------------------------------------------------
+
+model RoomType {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  propertyId      String    @map("property_id") @db.Uuid
+  code            String // "STD", "DLX", "SUI"
+  name            String
+  description     String?
+  baseOccupancy   Int       @default(2) @map("base_occupancy")
+  maxOccupancy    Int       @default(2) @map("max_occupancy")
+  defaultRate     Decimal   @default(0) @map("default_rate") @db.Decimal(12, 2)
+  defaultCurrency String    @default("EUR") @map("default_currency") @db.Char(3)
+  // Atributos hotel-especificos (m2, bed config, amenities) hasta que se
+  // confirme con feedback si necesitan estructura propia.
+  attributes      Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  rooms        Room[]
+  reservations Reservation[]
+
+  @@unique([tenantId, propertyId, code])
+  @@index([tenantId, propertyId])
+  @@map("room_types")
+}
+
+model Room {
+  id               String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String     @map("tenant_id") @db.Uuid
+  propertyId       String     @map("property_id") @db.Uuid
+  roomTypeId       String     @map("room_type_id") @db.Uuid
+  number           String // "101", "201A"
+  floor            String?
+  status           RoomStatus @default(CLEAN)
+  isOutOfOrder     Boolean    @default(false) @map("is_out_of_order")
+  outOfOrderReason String?    @map("out_of_order_reason")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  deletedAt        DateTime?  @map("deleted_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType     RoomType      @relation(fields: [roomTypeId], references: [id])
+  reservations Reservation[]
+
+  @@unique([tenantId, propertyId, number])
+  @@index([tenantId, propertyId])
+  @@index([tenantId, roomTypeId])
+  @@map("rooms")
+}
+
+enum RoomStatus {
+  CLEAN
+  DIRTY
+  INSPECTED
+  OUT_OF_ORDER
+  OUT_OF_SERVICE
+
+  @@map("room_status")
+}
+
+// ----------------------------------------------------------------------------
+// Cardex de huespedes (compliance ES + GDPR).
+// Documentos: DNI/NIE/PASSPORT obligatorios para SES.HOSPEDAJES.
+// ----------------------------------------------------------------------------
+
+model Guest {
+  id                     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String        @map("tenant_id") @db.Uuid
+  // Identificacion
+  firstName              String        @map("first_name")
+  lastName               String        @map("last_name")
+  email                  String?       @db.Citext
+  phone                  String?
+  dateOfBirth            DateTime?     @map("date_of_birth") @db.Date
+  // Documento (cardex / SES.HOSPEDAJES)
+  documentType           DocumentType? @map("document_type")
+  documentNumber         String?       @map("document_number")
+  documentIssuingCountry String?       @map("document_issuing_country") @db.Char(2)
+  documentExpiryDate     DateTime?     @map("document_expiry_date") @db.Date
+  nationality            String?       @db.Char(2)
+  // Direccion
+  addressLine1           String?       @map("address_line1")
+  addressLine2           String?       @map("address_line2")
+  city                   String?
+  postalCode             String?       @map("postal_code")
+  region                 String?
+  country                String?       @db.Char(2)
+  // GDPR
+  gdprConsent            Boolean       @default(false) @map("gdpr_consent")
+  marketingConsent       Boolean       @default(false) @map("marketing_consent")
+  // Extensible (loyalty, preferencias)
+  notes                  String?
+  attributes             Json?
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
+  deletedAt              DateTime?     @map("deleted_at")
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reservations ReservationGuest[]
+
+  @@index([tenantId])
+  @@index([tenantId, email])
+  @@index([tenantId, documentType, documentNumber])
+  @@index([tenantId, lastName, firstName])
+  @@map("guests")
+}
+
+enum DocumentType {
+  DNI
+  NIE
+  PASSPORT
+  EU_ID
+  OTHER
+
+  @@map("document_type")
+}
+
+// ----------------------------------------------------------------------------
+// Plan de tarifas. Estructura minima — restricciones (min stay, advance
+// purchase, cancellation policy) en attributes hasta validar con hoteles.
+// ----------------------------------------------------------------------------
+
+model RatePlan {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  propertyId  String    @map("property_id") @db.Uuid
+  code        String // "BAR", "NRF", "ADV"
+  name        String
+  description String?
+  isPublic    Boolean   @default(true) @map("is_public")
+  currency    String    @default("EUR") @db.Char(3)
+  attributes  Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@unique([tenantId, propertyId, code])
+  @@index([tenantId, propertyId])
+  @@map("rate_plans")
+}
+
+// ----------------------------------------------------------------------------
+// Reservas — la entidad central de Front Office.
+// roomId es opcional: la asignacion ocurre en check-in.
+// ----------------------------------------------------------------------------
+
+model Reservation {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String            @map("tenant_id") @db.Uuid
+  propertyId         String            @map("property_id") @db.Uuid
+  // Codigo legible humano ("BCN-A1B2C3")
+  code               String
+  status             ReservationStatus @default(PENDING)
+  // Estancia
+  arrivalDate        DateTime          @map("arrival_date") @db.Date
+  departureDate      DateTime          @map("departure_date") @db.Date
+  adults             Int               @default(2)
+  children           Int               @default(0)
+  // Inventario
+  roomTypeId         String            @map("room_type_id") @db.Uuid
+  roomId             String?           @map("room_id") @db.Uuid
+  // Precio
+  ratePlanId         String?           @map("rate_plan_id") @db.Uuid
+  totalAmount        Decimal           @default(0) @map("total_amount") @db.Decimal(12, 2)
+  currency           String            @default("EUR") @db.Char(3)
+  // Origen
+  source             ReservationSource @default(DIRECT)
+  externalRef        String?           @map("external_ref")
+  // Especiales
+  specialRequests    String?           @map("special_requests")
+  notes              String?
+  // Lifecycle timestamps
+  checkedInAt        DateTime?         @map("checked_in_at")
+  checkedOutAt       DateTime?         @map("checked_out_at")
+  cancelledAt        DateTime?         @map("cancelled_at")
+  cancellationReason String?           @map("cancellation_reason")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  deletedAt          DateTime?         @map("deleted_at")
+
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType RoomType           @relation(fields: [roomTypeId], references: [id])
+  room     Room?              @relation(fields: [roomId], references: [id])
+  ratePlan RatePlan?          @relation(fields: [ratePlanId], references: [id])
+  guests   ReservationGuest[]
+  folio    Folio?
+
+  @@unique([tenantId, code])
+  @@index([tenantId, propertyId, arrivalDate])
+  @@index([tenantId, propertyId, departureDate])
+  @@index([tenantId, propertyId, status])
+  @@index([tenantId, roomId])
+  @@map("reservations")
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+
+  @@map("reservation_status")
+}
+
+enum ReservationSource {
+  DIRECT
+  WALK_IN
+  PHONE
+  EMAIL
+  BOOKING_COM
+  EXPEDIA
+  OTHER_OTA
+  CORPORATE
+  AGENT
+
+  @@map("reservation_source")
+}
+
+// Una reserva puede tener varios huespedes (familia, grupo).
+model ReservationGuest {
+  reservationId String  @map("reservation_id") @db.Uuid
+  guestId       String  @map("guest_id") @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  isPrimary     Boolean @default(false) @map("is_primary")
+
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  guest       Guest       @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([reservationId, guestId])
+  @@index([tenantId, guestId])
+  @@map("reservation_guests")
+}
+
+// ----------------------------------------------------------------------------
+// Folio — cuenta financiera por reserva. Append-only via FolioEntry.
+// ----------------------------------------------------------------------------
+
+model Folio {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String      @map("tenant_id") @db.Uuid
+  reservationId String      @unique @map("reservation_id") @db.Uuid
+  status        FolioStatus @default(OPEN)
+  balance       Decimal     @default(0) @db.Decimal(12, 2)
+  currency      String      @default("EUR") @db.Char(3)
+  closedAt      DateTime?   @map("closed_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reservation Reservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  entries     FolioEntry[]
+
+  @@index([tenantId, reservationId])
+  @@map("folios")
+}
+
+enum FolioStatus {
+  OPEN
+  CLOSED
+  SETTLED
+
+  @@map("folio_status")
+}
+
+model FolioEntry {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  folioId     String         @map("folio_id") @db.Uuid
+  type        FolioEntryType
+  description String
+  amount      Decimal        @db.Decimal(12, 2)
+  currency    String         @default("EUR") @db.Char(3)
+  postedAt    DateTime       @default(now()) @map("posted_at")
+  postedBy    String?        @map("posted_by") @db.Uuid
+  attributes  Json?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  folio  Folio  @relation(fields: [folioId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, folioId])
+  @@index([tenantId, postedAt])
+  @@map("folio_entries")
+}
+
+enum FolioEntryType {
+  CHARGE
+  PAYMENT
+  DISCOUNT
+  TAX
+  ADJUSTMENT
+
+  @@map("folio_entry_type")
 }
