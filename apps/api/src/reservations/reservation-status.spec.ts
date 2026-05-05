@@ -7,8 +7,8 @@ import {
 } from './reservation-status';
 
 describe('reservation state machine', () => {
-  it('allows BOOKED -> CONFIRMED', () => {
-    expect(canTransition(ReservationStatus.BOOKED, ReservationStatus.CONFIRMED)).toBe(true);
+  it('allows PENDING -> CONFIRMED', () => {
+    expect(canTransition(ReservationStatus.PENDING, ReservationStatus.CONFIRMED)).toBe(true);
   });
 
   it('allows CONFIRMED -> CHECKED_IN', () => {
@@ -28,8 +28,8 @@ describe('reservation state machine', () => {
     expect(canTransition(ReservationStatus.CANCELLED, ReservationStatus.CHECKED_IN)).toBe(false);
   });
 
-  it('rejects BOOKED -> CHECKED_OUT (must go through CHECKED_IN)', () => {
-    expect(canTransition(ReservationStatus.BOOKED, ReservationStatus.CHECKED_OUT)).toBe(false);
+  it('rejects PENDING -> CHECKED_OUT (must go through CHECKED_IN)', () => {
+    expect(canTransition(ReservationStatus.PENDING, ReservationStatus.CHECKED_OUT)).toBe(false);
   });
 
   it('assertTransition throws on illegal transition', () => {

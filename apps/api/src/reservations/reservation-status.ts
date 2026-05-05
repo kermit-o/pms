@@ -1,22 +1,16 @@
-/**
- * Reservation lifecycle states.
- * Mirrors the Prisma enum but kept here so the service layer can validate
- * transitions without a runtime dependency on `@prisma/client` enums.
- */
-export const ReservationStatus = {
-  BOOKED: 'BOOKED',
-  CONFIRMED: 'CONFIRMED',
-  CHECKED_IN: 'CHECKED_IN',
-  CHECKED_OUT: 'CHECKED_OUT',
-  CANCELLED: 'CANCELLED',
-  NO_SHOW: 'NO_SHOW',
-} as const;
+import { ReservationStatus as PrismaReservationStatus } from '@pms/db';
 
+/**
+ * Reservation lifecycle states. Re-exports the Prisma enum so the service
+ * layer can validate transitions without coupling to runtime Prisma symbols
+ * everywhere.
+ */
+export const ReservationStatus = PrismaReservationStatus;
 export type ReservationStatus =
   (typeof ReservationStatus)[keyof typeof ReservationStatus];
 
 const TRANSITIONS: Record<ReservationStatus, ReservationStatus[]> = {
-  BOOKED: ['CONFIRMED', 'CANCELLED', 'NO_SHOW', 'CHECKED_IN'],
+  PENDING: ['CONFIRMED', 'CANCELLED', 'NO_SHOW', 'CHECKED_IN'],
   CONFIRMED: ['CHECKED_IN', 'CANCELLED', 'NO_SHOW'],
   CHECKED_IN: ['CHECKED_OUT'],
   CHECKED_OUT: [],

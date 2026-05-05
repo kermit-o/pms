@@ -6,6 +6,7 @@ const isoDate = z
 
 export const CreateReservationDto = z
   .object({
+    propertyId: z.string().uuid(),
     guestId: z.string().uuid().optional(),
     guestData: z
       .object({
@@ -13,16 +14,20 @@ export const CreateReservationDto = z
         lastName: z.string().min(1),
         email: z.string().email().optional(),
         phone: z.string().optional(),
+        nationality: z.string().length(2).optional(),
       })
       .optional(),
     arrival: isoDate,
     departure: isoDate,
     roomTypeId: z.string().uuid(),
-    ratePlanId: z.string().uuid(),
+    ratePlanId: z.string().uuid().optional(),
     occupancy: z.object({
       adults: z.number().int().min(1).max(10),
       children: z.number().int().min(0).max(10).default(0),
     }),
+    totalAmount: z.number().nonnegative().optional(),
+    currency: z.string().length(3).default('EUR'),
+    specialRequests: z.string().max(2000).optional(),
     notes: z.string().max(2000).optional(),
     walkIn: z.boolean().default(false),
   })
