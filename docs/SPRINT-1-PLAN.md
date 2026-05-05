@@ -59,10 +59,14 @@
 - [x] Tests unitarios del registry (register, list, invoke, validación, unknown).
 - [ ] HTTP/SSE transport montado en NestJS — diferido a Sprint 2 (necesita extracción de tenant del JWT por request).
 
-### 6. Observabilidad
-- [ ] OpenTelemetry instrumentado en API.
-- [ ] Logs estructurados a stdout.
-- [ ] Métricas Prometheus en `/metrics`.
+### 6. Observabilidad ✅
+- [x] OpenTelemetry NodeSDK inicializado como primer import del API.
+- [x] Auto-instrumentations: HTTP, Fastify, Prisma, NATS, Pino, http2, dns, undici (excluyendo `fs` y `net` que son ruidosos).
+- [x] OTLP HTTP trace exporter configurable vía `OTEL_EXPORTER_OTLP_ENDPOINT` (Jaeger/Tempo/OTel Collector); sin endpoint → trazas en memoria, `trace_id` propaga.
+- [x] Prometheus `/metrics` en `:9464` siempre activo.
+- [x] `trace_id` y `span_id` se inyectan automáticamente en los logs Pino vía `@opentelemetry/instrumentation-pino` (sin tocar logger.module.ts).
+- [x] Logs estructurados a stdout (ya estaban desde Tarea 1, ahora con correlación de trace).
+- [x] `OTEL_ENABLED=false` para desactivar en tests/CI.
 
 ### 7. CI/CD real
 - [ ] GitHub Actions ejecutando los pasos definidos en `.github/workflows/ci.yml`.

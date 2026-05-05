@@ -1,3 +1,7 @@
+// Debe ser el PRIMER import — las auto-instrumentations de OTel parchean
+// http/fastify/prisma/nats/pino en el momento en que se cargan.
+import './observability/tracing';
+
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';

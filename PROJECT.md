@@ -15,6 +15,8 @@
   - ✅ Tarea 3: Keycloak bootstrap, JWT validation con jose, JwtAuthGuard + RolesGuard + decoradores, demo endpoints `/me` y `/properties`.
   - ✅ Tarea 4: NATS JetStream eventbus tipado, envelope versionado, catálogo Zod, `EventbusService` integrado en API, `/readyz` chequea NATS.
   - ✅ Tarea 5: MCP server skeleton — `ToolRegistry` con validación Zod, tool inicial `get_tenant_info`, server adapter transport-agnostic, entry point stdio para Claude Desktop.
+  - ✅ Tarea 6: OpenTelemetry — auto-instrumentations (HTTP, Fastify, Prisma, NATS, Pino), OTLP traces opcional, Prometheus `/metrics` siempre activo, `trace_id`/`span_id` automáticos en logs Pino.
+- **Sprint 1 cerrado.** Próximo: Sprint 2 — MVP Front Office (reservas, check-in/out, folio, cardex).
 - **Branch de desarrollo:** `claude/plan-hotel-saas-rWaWw`
 - **Última actualización:** 2026-05-05
 
@@ -312,6 +314,17 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 - **Decisión:** Los handlers reciben `@CurrentUser()` y pasan `tenantId`, `actorId`, `correlationId` explícitamente a `prisma.withTenant()`. No usamos AsyncLocalStorage para auto-propagación.
 - **Razón:** Más simple, más explícito, más fácil de testear. ALS añade complejidad y debugging difícil; lo introducimos sólo si el explícito empieza a doler (probable en Sprint 2 cuando haya muchos services).
 - **Alternativas descartadas:** ALS desde día 1 (overkill), `nestjs-cls` (otra dep para algo que no necesitamos aún).
+
+### ADR-017 — 2026-05-05 — Observabilidad: OpenTelemetry SDK + Prometheus + correlación con Pino
+- **Decisión:**
+  - `@opentelemetry/sdk-node` arrancado como **primer import** de `main.ts` para que las auto-instrumentations (HTTP, Fastify, Prisma, NATS, Pino) parchen los módulos antes de que NestJS los cargue.
+  - **Trazas:** OTLP HTTP exporter si `OTEL_EXPORTER_OTLP_ENDPOINT` está set (apunta a un Jaeger / Grafana Tempo / OTel Collector); si no, instrumentación activa pero sin export — los `trace_id`/`span_id` siguen propagándose y aparecen en los logs (correlación gratis).
+  - **Métricas:** Prometheus exporter en `:9464/metrics` siempre activo. Scrape estándar.
+  - **Logs:** la auto-instrumentation de Pino inyecta `trace_id`/`span_id` automáticamente cuando hay span activo — sin tocar `logger.module.ts`.
+  - **Disable:** `OTEL_ENABLED=false` (útil en CI/tests donde no queremos bind del puerto 9464).
+- **Razón:** OTel es el estándar de facto para observabilidad multi-vendor. Auto-instrumentations cubren todo lo que usamos sin código manual. Pino + Prometheus son los formatos que cualquier ecosistema (Grafana, Datadog, Honeycomb) acepta sin adaptación. Nada de vendor lock-in.
+- **Alternativas descartadas:** Datadog APM (lock-in + caro), instrumentación manual (mantenimiento), `pino-opentelemetry-transport` (la auto-instrumentation ya hace lo mismo y sin overhead extra).
+- **Pendiente (Sprint 2+):** añadir Jaeger/Tempo a `docker-compose.yml` cuando empecemos a depurar latencia; alertas Prometheus; sampling configurable; spans manuales en operaciones de dominio críticas (Night Audit, asignación HSK).
 
 ### ADR-016 — 2026-05-05 — Eventbus: NATS JetStream + envelope estándar + catálogo Zod versionado
 - **Decisión:**

@@ -16,6 +16,14 @@ export const envSchema = z.object({
   KEYCLOAK_CLIENT_ID: z.string().min(1),
 
   ANTHROPIC_API_KEY: z.string().optional(),
+
+  // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
+  OTEL_ENABLED: z
+    .union([z.literal('true'), z.literal('false')])
+    .default('true')
+    .transform((v) => v === 'true'),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_METRICS_PORT: z.coerce.number().int().positive().default(9464),
 });
 
 export type Env = z.infer<typeof envSchema>;
