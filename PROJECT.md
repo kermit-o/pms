@@ -11,9 +11,10 @@
 
 - **Fase:** Sprint 1 — Foundation técnica.
   - ✅ Tarea 1: NestJS API skeleton con Fastify, Pino, Zod env validation, health endpoints.
-  - ⏳ Tarea 2: Prisma + multi-tenancy con RLS + audit log via triggers (en curso).
+  - ✅ Tarea 2: Prisma + multi-tenancy con RLS + audit log via triggers + tenant-scoped client.
+  - ✅ Tarea 3: Keycloak bootstrap, JWT validation con jose, JwtAuthGuard global + RolesGuard + decoradores `@Public`/`@Roles`/`@CurrentUser`, demo endpoints `/me` y `/properties`.
 - **Branch de desarrollo:** `claude/plan-hotel-saas-rWaWw`
-- **Última actualización:** 2026-05-04
+- **Última actualización:** 2026-05-05
 
 ---
 
@@ -294,6 +295,21 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 - **Decisión:** El rol `pms` (superuser, BYPASSRLS) ejecuta migraciones y owns las tablas. El rol `pms_app` (login estándar, sin BYPASSRLS) es el que usa la API en runtime — RLS aplica sobre él. `DATABASE_URL` apunta a `pms_app`; `DIRECT_URL` (Prisma) apunta a `pms` para migraciones.
 - **Razón:** Sin esta separación, RLS no se puede testear (superuser bypassea siempre). Además, limitar privilegios del rol runtime es defensa en profundidad — un compromise del API no permite alterar `audit_log` ni saltarse RLS.
 - **Alternativas descartadas:** un único rol (RLS no aplica si es superuser), múltiples roles por feature (overkill en MVP).
+
+### ADR-013 — 2026-05-05 — Validación JWT con `jose` (sin Passport)
+- **Decisión:** La API valida JWTs de Keycloak usando `jose` con `createRemoteJWKSet` (cachea las claves públicas y rota automáticamente). Sin `@nestjs/passport` ni `passport-jwt`. JwtAuthGuard global + `@Public()` para opt-out (healthz, readyz). RolesGuard global + `@Roles()` para autorización fina.
+- **Razón:** `jose` es 0-deps, mantenido activamente, y es el estándar moderno (lo usa NextAuth, Cloudflare Workers, etc.). Passport añade abstracción innecesaria para nuestro caso (un solo provider, JWT siempre). El patrón global guard + `@Public()` es default-secure (todo protegido salvo opt-out explícito).
+- **Alternativas descartadas:** `@nestjs/passport` (overhead innecesario), `keycloak-connect` (legacy, no soporta Fastify limpio).
+
+### ADR-014 — 2026-05-05 — `tenant_id` como claim del JWT (User Attribute mapper en Keycloak)
+- **Decisión:** Cada usuario en Keycloak lleva un atributo `tenant_id` (UUID). Un Protocol Mapper de tipo "User Attribute" en el client `pms-api` lo expone como claim `tenant_id` en el access token. La API extrae `tenant_id` del JWT validado y lo pasa a `prisma.withTenant()`. Ningún endpoint acepta `tenant_id` en query/body — siempre viene del token firmado.
+- **Razón:** El usuario no puede manipular su `tenant_id` (la firma JWT lo protege). Es la única fuente de verdad. RLS + JWT firmado = aislamiento robusto.
+- **Alternativas descartadas:** subdominio por tenant (operacionalmente caro), header `X-Tenant-Id` (manipulable, requiere lookup adicional), realm por tenant (ingestionable a escala).
+
+### ADR-015 — 2026-05-05 — Sin AsyncLocalStorage en MVP — pasamos contexto explícitamente
+- **Decisión:** Los handlers reciben `@CurrentUser()` y pasan `tenantId`, `actorId`, `correlationId` explícitamente a `prisma.withTenant()`. No usamos AsyncLocalStorage para auto-propagación.
+- **Razón:** Más simple, más explícito, más fácil de testear. ALS añade complejidad y debugging difícil; lo introducimos sólo si el explícito empieza a doler (probable en Sprint 2 cuando haya muchos services).
+- **Alternativas descartadas:** ALS desde día 1 (overkill), `nestjs-cls` (otra dep para algo que no necesitamos aún).
 
 ---
 

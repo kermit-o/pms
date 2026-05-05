@@ -1,8 +1,9 @@
 /**
  * Seed de desarrollo. Crea un tenant demo + un usuario admin + una property.
  *
- * Se conecta via DIRECT_URL (rol owner pms) para no chocar con RLS y para que
- * los inserts en seed sean directos sin tener que setear app.tenant_id.
+ * Usa UUIDs deterministas para que el bootstrap de Keycloak (que setea el
+ * atributo tenant_id en el usuario admin@demo.local) coincida con la DB
+ * sin tener que sincronizar dinamicamente.
  *
  * Uso:
  *   pnpm --filter @pms/db seed
@@ -12,7 +13,6 @@ import { resolve } from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 import { PrismaClient, TenantStatus, UserStatus } from '@prisma/client';
 
-// Carga .env de la raiz del monorepo cuando se ejecuta desde packages/db.
 const envCandidates = [
   resolve(process.cwd(), '.env'),
   resolve(process.cwd(), '../../.env'),
@@ -29,15 +29,22 @@ if (!adminUrl) {
   throw new Error('DIRECT_URL (or DATABASE_URL) must be set for seeding');
 }
 
+// UUIDs deterministas — sincronizados con scripts/keycloak-bootstrap.ts
+export const DEMO_TENANT_ID = '11111111-1111-1111-1111-111111111111';
+export const DEMO_PROPERTY_ID = '11111111-1111-1111-1111-111111111002';
+export const DEMO_ADMIN_USER_ID = '11111111-1111-1111-1111-111111111003';
+export const DEMO_ADMIN_EMAIL = 'admin@demo.local';
+
 const prisma = new PrismaClient({
   datasources: { db: { url: adminUrl } },
 });
 
 async function main() {
   const tenant = await prisma.tenant.upsert({
-    where: { slug: 'demo' },
+    where: { id: DEMO_TENANT_ID },
     update: {},
     create: {
+      id: DEMO_TENANT_ID,
       slug: 'demo',
       name: 'Hotel Demo',
       status: TenantStatus.TRIAL,
@@ -45,9 +52,10 @@ async function main() {
   });
 
   const property = await prisma.property.upsert({
-    where: { tenantId_code: { tenantId: tenant.id, code: 'BCN01' } },
+    where: { id: DEMO_PROPERTY_ID },
     update: {},
     create: {
+      id: DEMO_PROPERTY_ID,
       tenantId: tenant.id,
       code: 'BCN01',
       name: 'Hotel Demo Barcelona',
@@ -58,11 +66,12 @@ async function main() {
   });
 
   const adminUser = await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: tenant.id, email: 'admin@demo.local' } },
+    where: { id: DEMO_ADMIN_USER_ID },
     update: {},
     create: {
+      id: DEMO_ADMIN_USER_ID,
       tenantId: tenant.id,
-      email: 'admin@demo.local',
+      email: DEMO_ADMIN_EMAIL,
       fullName: 'Demo Admin',
       status: UserStatus.ACTIVE,
     },

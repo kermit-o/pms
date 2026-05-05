@@ -31,11 +31,16 @@
 - [x] DbModule + PrismaService integrados en apps/api; `/readyz` chequea DB.
 - [x] Test integración RLS: aislamiento entre tenants + append-only audit.
 
-### 3. Multi-tenancy + Auth
-- [ ] Bootstrap script del realm Keycloak `pms`.
-- [ ] Middleware NestJS que valida JWT y extrae `tenant_id` + roles.
-- [ ] Guard RBAC (decorador `@Roles()`).
-- [ ] Test de aislamiento: usuario del tenant A no ve datos del tenant B (incluso bypaseando la app).
+### 3. Auth con Keycloak ✅
+- [x] Bootstrap script idempotente (`scripts/keycloak-bootstrap.ts`) — crea realm `pms`, client `pms-api`, realm roles, User Attribute mapper `tenant_id`, usuario demo `admin@demo.local`.
+- [x] `JwtValidatorService` con `jose` + `createRemoteJWKSet` (caché y rotación automática).
+- [x] `JwtAuthGuard` global con `@Public()` para opt-out (healthz/readyz).
+- [x] `RolesGuard` global con `@Roles('front_desk', ...)`.
+- [x] `@CurrentUser()` decorator inyecta `AuthUser` en handlers.
+- [x] Endpoint demo `/me` (cualquier rol autenticado).
+- [x] Endpoint demo `/properties` (sólo `tenant_admin`/`front_desk`/`night_auditor`) que demuestra el flujo JWT → tenantId → withTenant → RLS.
+- [x] Tests unitarios de JwtAuthGuard y RolesGuard (mock JwtValidator).
+- [x] Tests e2e: rutas públicas funcionan sin token; rutas protegidas devuelven 401/403 correctamente.
 
 ### 4. Event bus
 - [ ] `packages/eventbus` con cliente NATS JetStream tipado.
