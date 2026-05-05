@@ -38,6 +38,12 @@ COPY apps/api ./apps/api
 COPY packages ./packages
 
 RUN pnpm --filter @pms/db generate
+# Construye los workspace packages a dist/ antes que el api. Sin esto,
+# 'main' apunta a dist/index.js que no existiria y Node fallaria al
+# resolver `@pms/db` / `@pms/eventbus` / `@pms/mcp-tools` en runtime.
+RUN pnpm --filter @pms/db build
+RUN pnpm --filter @pms/eventbus build
+RUN pnpm --filter @pms/mcp-tools build
 RUN pnpm --filter @pms/api build
 
 # ----------------------------------------------------------------------------
