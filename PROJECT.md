@@ -12,7 +12,8 @@
 - **Fase:** Sprint 1 — Foundation técnica.
   - ✅ Tarea 1: NestJS API skeleton con Fastify, Pino, Zod env validation, health endpoints.
   - ✅ Tarea 2: Prisma + multi-tenancy con RLS + audit log via triggers + tenant-scoped client.
-  - ✅ Tarea 3: Keycloak bootstrap, JWT validation con jose, JwtAuthGuard global + RolesGuard + decoradores `@Public`/`@Roles`/`@CurrentUser`, demo endpoints `/me` y `/properties`.
+  - ✅ Tarea 3: Keycloak bootstrap, JWT validation con jose, JwtAuthGuard + RolesGuard + decoradores, demo endpoints `/me` y `/properties`.
+  - ✅ Tarea 4: NATS JetStream eventbus tipado, envelope versionado, catálogo Zod, `EventbusService` integrado en API, `/readyz` chequea NATS.
 - **Branch de desarrollo:** `claude/plan-hotel-saas-rWaWw`
 - **Última actualización:** 2026-05-05
 
@@ -310,6 +311,18 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 - **Decisión:** Los handlers reciben `@CurrentUser()` y pasan `tenantId`, `actorId`, `correlationId` explícitamente a `prisma.withTenant()`. No usamos AsyncLocalStorage para auto-propagación.
 - **Razón:** Más simple, más explícito, más fácil de testear. ALS añade complejidad y debugging difícil; lo introducimos sólo si el explícito empieza a doler (probable en Sprint 2 cuando haya muchos services).
 - **Alternativas descartadas:** ALS desde día 1 (overkill), `nestjs-cls` (otra dep para algo que no necesitamos aún).
+
+### ADR-016 — 2026-05-05 — Eventbus: NATS JetStream + envelope estándar + catálogo Zod versionado
+- **Decisión:**
+  - Un único stream `pms-events` con subject pattern `pms.events.>` (1 stream catch-all en MVP; particionar por dominio si la carga lo requiere).
+  - Retention=Limits con `max_age` 30 días, storage=File.
+  - Envelope estándar: `{ id, type, schemaVersion, tenantId, actorId, correlationId, occurredAt, payload }`.
+  - `id` (UUID v4) se publica también como header `Nats-Msg-Id` para deduplicación (duplicate window por defecto 2min).
+  - Catálogo central tipado con Zod (`packages/eventbus/src/catalog/`), una entrada por tipo de evento con `schemaVersion`. Breaking change → entrada nueva (p.ej. `property.created` v2), no se rompe v1.
+  - El payload se valida con Zod **antes** de publicar (fail-fast).
+- **Razón:** NATS JetStream es ligero (1 binario, 4222/8222 ports), muy rápido, soporta exactly-once vía dedup, y tiene API moderna en Node. Suficiente para 1-1000 hoteles. Kafka introduciría complejidad operativa (Zookeeper/KRaft, particionado) sin beneficio a esta escala.
+- **Alternativas descartadas:** Kafka (overkill), Redis Streams (sin replicación robusta), RabbitMQ (no es tan stream-first).
+- **Pendiente próximos sprints:** consumer groups durables por tipo, dead-letter handling, métricas Prometheus de lag, schema registry separado del código si crecen los consumers externos.
 
 ---
 

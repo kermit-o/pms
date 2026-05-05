@@ -1,13 +1,19 @@
 import { Controller, Get, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Public } from '../auth';
 import { PrismaService } from '../db';
+import { EventbusService } from '../eventbus';
+
+type CheckStatus = 'ok' | 'fail';
 
 @Public()
 @Controller()
 export class HealthController {
   private readonly logger = new Logger(HealthController.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventbus: EventbusService,
+  ) {}
 
   @Get('healthz')
   liveness() {
@@ -16,7 +22,8 @@ export class HealthController {
 
   @Get('readyz')
   async readiness() {
-    const checks: Record<string, 'ok' | 'fail'> = { db: 'fail' };
+    const checks: Record<string, CheckStatus> = { db: 'fail', nats: 'fail' };
+
     try {
       await this.prisma.ping();
       checks.db = 'ok';
@@ -24,8 +31,19 @@ export class HealthController {
       this.logger.error({ err }, 'readiness DB check failed');
     }
 
+    try {
+      this.eventbus.ping();
+      checks.nats = 'ok';
+    } catch (err) {
+      this.logger.error({ err }, 'readiness NATS check failed');
+    }
+
     const ready = Object.values(checks).every((s) => s === 'ok');
-    const body = { status: ready ? 'ok' : 'fail', checks, timestamp: new Date().toISOString() };
+    const body = {
+      status: ready ? 'ok' : 'fail',
+      checks,
+      timestamp: new Date().toISOString(),
+    };
     if (!ready) {
       throw new ServiceUnavailableException(body);
     }

@@ -42,11 +42,14 @@
 - [x] Tests unitarios de JwtAuthGuard y RolesGuard (mock JwtValidator).
 - [x] Tests e2e: rutas públicas funcionan sin token; rutas protegidas devuelven 401/403 correctamente.
 
-### 4. Event bus
-- [ ] `packages/eventbus` con cliente NATS JetStream tipado.
-- [ ] Catálogo inicial de eventos (Zod schemas).
-- [ ] Publisher inyectable en NestJS.
-- [ ] Consumer base con dead-letter handling.
+### 4. Event bus ✅
+- [x] `packages/eventbus` con cliente NATS JetStream tipado y envelope estándar.
+- [x] Catálogo inicial Zod (`property.created` v1, `property.updated` v1) con `schemaVersion` por entrada.
+- [x] `EventPublisher` con validación Zod previa al publish y `Nats-Msg-Id` para dedup.
+- [x] Stream `pms-events` (Limits / file / 30 días) bootstrap idempotente.
+- [x] `EventbusService` en NestJS con lifecycle (connect/drain) — `/readyz` ahora chequea NATS.
+- [x] Test integración round-trip publish + consume contra NATS real.
+- [ ] Consumer base + dead-letter handling — diferido a Sprint 2 cuando empecemos a consumir eventos en services.
 
 ### 5. MCP server skeleton
 - [ ] `packages/mcp-tools` con server MCP básico.

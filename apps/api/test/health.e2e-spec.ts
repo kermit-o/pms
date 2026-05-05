@@ -4,6 +4,7 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { AppModule } from '../src/app.module';
 import { JwtValidatorService } from '../src/auth';
 import { PrismaService } from '../src/db';
+import { EventbusService } from '../src/eventbus';
 
 const baseEnv = {
   NODE_ENV: 'test',
@@ -26,6 +27,18 @@ class FakePrismaService {
   }
 }
 
+class FakeEventbusService {
+  pingResult: 'ok' | 'fail' = 'ok';
+  async onModuleInit() {}
+  async onModuleDestroy() {}
+  ping() {
+    if (this.pingResult === 'fail') throw new Error('simulated NATS closed');
+  }
+  publish() {
+    return Promise.resolve({ id: 'fake-id', sequence: 1, type: 'test' });
+  }
+}
+
 class FakeJwtValidatorService {
   // Token format: 'fake:<sub>:<tenantId>:<roles-csv>'
   onModuleInit() {}
@@ -44,6 +57,7 @@ class FakeJwtValidatorService {
 describe('Health + Auth (e2e)', () => {
   let app: NestFastifyApplication;
   let fakePrisma: FakePrismaService;
+  let fakeEventbus: FakeEventbusService;
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeAll(async () => {
@@ -51,6 +65,7 @@ describe('Health + Auth (e2e)', () => {
     Object.assign(process.env, baseEnv);
 
     fakePrisma = new FakePrismaService();
+    fakeEventbus = new FakeEventbusService();
     const fakeJwt = new FakeJwtValidatorService();
 
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -58,6 +73,8 @@ describe('Health + Auth (e2e)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(fakePrisma)
+      .overrideProvider(EventbusService)
+      .useValue(fakeEventbus)
       .overrideProvider(JwtValidatorService)
       .useValue(fakeJwt)
       .compile();
@@ -87,8 +104,18 @@ describe('Health + Auth (e2e)', () => {
 
     it('GET /readyz returns 503 when DB ping fails', async () => {
       fakePrisma.pingResult = 'fail';
+      fakeEventbus.pingResult = 'ok';
       const res = await app.inject({ method: 'GET', url: '/readyz' });
       expect(res.statusCode).toBe(503);
+      fakePrisma.pingResult = 'ok';
+    });
+
+    it('GET /readyz returns 503 when NATS ping fails', async () => {
+      fakePrisma.pingResult = 'ok';
+      fakeEventbus.pingResult = 'fail';
+      const res = await app.inject({ method: 'GET', url: '/readyz' });
+      expect(res.statusCode).toBe(503);
+      fakeEventbus.pingResult = 'ok';
     });
 
     it('echoes incoming x-correlation-id header on /healthz', async () => {
