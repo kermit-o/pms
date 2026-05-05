@@ -3,3 +3,5 @@ node_modules
 .turbo
 *.tsbuildinfo
 .env*.local
+playwright-report
+test-results

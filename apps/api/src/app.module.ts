@@ -12,6 +12,7 @@ import { FolioModule } from './folio';
 import { GuestsModule } from './guests';
 import { RoomsModule } from './rooms';
 import { BusinessDayModule } from './business-day';
+import { SesHospedajesModule } from './compliance/ses-hospedajes';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { BusinessDayModule } from './business-day';
     GuestsModule,
     RoomsModule,
     BusinessDayModule,
+    SesHospedajesModule,
   ],
 })
 export class AppModule {}

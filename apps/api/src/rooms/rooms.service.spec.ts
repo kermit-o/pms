@@ -47,8 +47,19 @@ const user: AuthUser = {
   roles: ['front_desk'],
 };
 
+type RoomFixture = {
+  id: string;
+  number: string;
+  floor: string | null;
+  status: RoomStatus;
+  isOutOfOrder: boolean;
+  outOfOrderReason: string | null;
+  roomTypeId: string;
+  propertyId: string;
+};
+
 function buildService(opts: {
-  rooms?: typeof ROOM_A[];
+  rooms?: RoomFixture[];
   reservations?: Array<{
     id: string;
     code: string;
@@ -57,7 +68,7 @@ function buildService(opts: {
     arrivalDate: Date;
     departureDate: Date;
   }>;
-  roomFindFirst?: typeof ROOM_A | null;
+  roomFindFirst?: RoomFixture | null;
 }) {
   const roomFindMany = vi.fn().mockResolvedValue(opts.rooms ?? []);
   const reservationFindMany = vi.fn().mockResolvedValue(opts.reservations ?? []);

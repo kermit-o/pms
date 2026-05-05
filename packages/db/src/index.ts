@@ -9,6 +9,7 @@ export {
   RoomStatus,
   FolioStatus,
   BusinessDayStatus,
+  SesSubmissionStatus,
 } from '@prisma/client';
 
 export type {
@@ -25,6 +26,7 @@ export type {
   Folio,
   FolioEntry,
   BusinessDayState,
+  SesHospedajesSubmission,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

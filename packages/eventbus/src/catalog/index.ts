@@ -4,6 +4,11 @@ import {
   businessDayReopenedV1,
 } from './business-day';
 import {
+  sesSubmissionFailedV1,
+  sesSubmissionQueuedV1,
+  sesSubmissionSentV1,
+} from './compliance';
+import {
   folioChargeAddedV1,
   folioClosedV1,
   folioPaymentReceivedV1,
@@ -68,6 +73,18 @@ export const catalog = {
   'room.status_changed': { schema: roomStatusChangedV1, schemaVersion: 1 },
   'business_day.closed': { schema: businessDayClosedV1, schemaVersion: 1 },
   'business_day.reopened': { schema: businessDayReopenedV1, schemaVersion: 1 },
+  'compliance.ses_submission_queued': {
+    schema: sesSubmissionQueuedV1,
+    schemaVersion: 1,
+  },
+  'compliance.ses_submission_sent': {
+    schema: sesSubmissionSentV1,
+    schemaVersion: 1,
+  },
+  'compliance.ses_submission_failed': {
+    schema: sesSubmissionFailedV1,
+    schemaVersion: 1,
+  },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -135,3 +152,14 @@ export type {
   BusinessDayClosedV1Payload,
   BusinessDayReopenedV1Payload,
 } from './business-day';
+
+export {
+  sesSubmissionFailedV1,
+  sesSubmissionQueuedV1,
+  sesSubmissionSentV1,
+} from './compliance';
+export type {
+  SesSubmissionFailedV1Payload,
+  SesSubmissionQueuedV1Payload,
+  SesSubmissionSentV1Payload,
+} from './compliance';

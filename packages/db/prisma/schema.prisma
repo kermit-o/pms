@@ -41,6 +41,7 @@ model Tenant {
   folios             Folio[]
   folioEntries       FolioEntry[]
   businessDays       BusinessDayState[]
+  sesSubmissions     SesHospedajesSubmission[]
 
   @@map("tenants")
 }
@@ -107,6 +108,7 @@ model Property {
   reservationGroups ReservationGroup[]
   ratePlans         RatePlan[]
   businessDays      BusinessDayState[]
+  sesSubmissions    SesHospedajesSubmission[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -524,4 +526,43 @@ enum BusinessDayStatus {
   CLOSED
 
   @@map("business_day_status")
+}
+
+// ----------------------------------------------------------------------------
+// SES.HOSPEDAJES — partes diarios para la Guardia Civil (RD 933/2021).
+// ----------------------------------------------------------------------------
+
+model SesHospedajesSubmission {
+  id            String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String              @map("tenant_id") @db.Uuid
+  propertyId    String              @map("property_id") @db.Uuid
+  businessDate  DateTime            @map("business_date") @db.Date
+  status        SesSubmissionStatus @default(QUEUED)
+  xmlPayload    String?             @map("xml_payload")
+  xmlSignature  String?             @map("xml_signature")
+  submittedAt   DateTime?           @map("submitted_at")
+  responseCode  Int?                @map("response_code")
+  responseBody  String?             @map("response_body")
+  retryCount    Int                 @default(0) @map("retry_count")
+  lastError     String?             @map("last_error")
+  nextAttemptAt DateTime?           @map("next_attempt_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, businessDate])
+  @@index([tenantId, propertyId])
+  @@index([status, nextAttemptAt])
+  @@map("ses_hospedajes_submissions")
+}
+
+enum SesSubmissionStatus {
+  QUEUED
+  SENT
+  FAILED
+  DEAD_LETTER
+
+  @@map("ses_submission_status")
 }

@@ -457,3 +457,85 @@ export async function reopenBusinessDay(
     body: JSON.stringify({ propertyId, businessDate, reason }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// SES.HOSPEDAJES
+// ---------------------------------------------------------------------------
+
+export type SesSubmissionStatus =
+  | 'QUEUED'
+  | 'SENT'
+  | 'FAILED'
+  | 'DEAD_LETTER';
+
+export interface SesSubmission {
+  id: string;
+  propertyId: string;
+  businessDate: string;
+  status: SesSubmissionStatus;
+  submittedAt: string | null;
+  retryCount: number;
+  lastError: string | null;
+  nextAttemptAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SesSubmissionDetail = SesSubmission & {
+  xmlPayload: string | null;
+  xmlSignature: string | null;
+  responseCode: number | null;
+  responseBody: string | null;
+};
+
+export async function listSesSubmissions(
+  accessToken: string | undefined,
+  query: {
+    propertyId?: string;
+    status?: SesSubmissionStatus;
+    from?: string;
+    to?: string;
+  } = {},
+): Promise<SesSubmission[]> {
+  const params = new URLSearchParams();
+  if (query.propertyId) params.set('propertyId', query.propertyId);
+  if (query.status) params.set('status', query.status);
+  if (query.from) params.set('from', query.from);
+  if (query.to) params.set('to', query.to);
+  const q = params.toString();
+  return apiFetch(
+    `/compliance/ses-hospedajes/submissions${q ? `?${q}` : ''}`,
+    { accessToken },
+  );
+}
+
+export async function getSesSubmission(
+  accessToken: string | undefined,
+  id: string,
+): Promise<SesSubmissionDetail> {
+  return apiFetch(`/compliance/ses-hospedajes/submissions/${id}`, {
+    accessToken,
+  });
+}
+
+export async function queueSesSubmission(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<{ submissionId: string; xmlPayload: string; guestCount: number }> {
+  return apiFetch('/compliance/ses-hospedajes/submissions', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ propertyId, businessDate }),
+  });
+}
+
+export async function sendSesSubmission(
+  accessToken: string | undefined,
+  id: string,
+): Promise<{ submissionId: string; status: SesSubmissionStatus }> {
+  return apiFetch(`/compliance/ses-hospedajes/submissions/${id}/send`, {
+    method: 'POST',
+    accessToken,
+  });
+}
