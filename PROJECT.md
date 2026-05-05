@@ -9,23 +9,16 @@
 
 ## 0. Estado actual
 
-- **Fase:** Sprint 1 — Foundation técnica.
-  - ✅ Tarea 1: NestJS API skeleton con Fastify, Pino, Zod env validation, health endpoints.
-  - ✅ Tarea 2: Prisma + multi-tenancy con RLS + audit log via triggers + tenant-scoped client.
-  - ✅ Tarea 3: Keycloak bootstrap, JWT validation con jose, JwtAuthGuard + RolesGuard + decoradores, demo endpoints `/me` y `/properties`.
-  - ✅ Tarea 4: NATS JetStream eventbus tipado, envelope versionado, catálogo Zod, `EventbusService` integrado en API, `/readyz` chequea NATS.
-  - ✅ Tarea 5: MCP server skeleton — `ToolRegistry` con validación Zod, tool inicial `get_tenant_info`, server adapter transport-agnostic, entry point stdio para Claude Desktop.
-  - ✅ Tarea 6: OpenTelemetry — auto-instrumentations (HTTP, Fastify, Prisma, NATS, Pino), OTLP traces opcional, Prometheus `/metrics` siempre activo, `trace_id`/`span_id` automáticos en logs Pino.
-- **Sprint 1 cerrado.**
-- **Fase actual: Sprint 1.5 — pulir antes de Sprint 2.** Plan en [`docs/SPRINT-1.5-PLAN.md`](./docs/SPRINT-1.5-PLAN.md).
-  - ✅ CI verde (format, lint, typecheck, test, build) — `pnpm-lock.yaml` committeado.
-  - ✅ RUNBOOK operativo en [`RUNBOOK.md`](./RUNBOOK.md).
-  - ✅ Guion de discovery con hoteles en [`docs/HOTEL-DISCOVERY.md`](./docs/HOTEL-DISCOVERY.md).
-  - ⏳ Mergear a `main` con PR limpio (pendiente de validación CI).
-  - ⏳ Hablar con 2-3 hoteles boutique (en paralelo — trabajo del usuario).
-  - ⏳ (Opcional) Deploy a staging (Fly.io / Railway).
-- Próximo tras Sprint 1.5: **Sprint 2 — MVP Front Office** (reservas, check-in/out, folio, cardex).
-- **Branch de desarrollo:** `claude/plan-hotel-saas-rWaWw`
+- **Sprint 1 (Foundation) ✅ mergeado a `main` (PR #2).** 6 tareas: NestJS API + Prisma RLS + Keycloak/JWT + NATS eventbus + MCP server + OpenTelemetry. Plan en [`docs/SPRINT-1-PLAN.md`](./docs/SPRINT-1-PLAN.md).
+- **Sprint 1.5 (Polish) ✅ mergeado a `main` (PR #2).** CI verde, lockfile, RUNBOOK, discovery doc. Plan en [`docs/SPRINT-1.5-PLAN.md`](./docs/SPRINT-1.5-PLAN.md).
+- **Fase actual: Sprint 2 pre-work — modelo de datos canónico de Front Office.** Plan en [`docs/SPRINT-2-PREP.md`](./docs/SPRINT-2-PREP.md).
+  - ✅ Schema extendido: `RoomType`, `Room`, `Guest` (compliance ES), `RatePlan`, `Reservation`, `ReservationGuest`, `Folio`, `FolioEntry`.
+  - ✅ Migración con RLS `FORCE` + audit triggers + GRANTs en cada tabla nueva.
+  - ✅ Seed extendido con datos demo (2 room types, 6 rooms, 1 rate plan).
+  - ⏳ Hablar con 2-3 hoteles boutique antes de cerrar el alcance funcional (Sprint 2 features).
+  - ⏳ (Opcional) Deploy a staging.
+- **Próximo: Sprint 2 funcional — workflows FO** (reservas CRUD, check-in/out, folio operations, cardex, SES.HOSPEDAJES). Arranca tras feedback de hoteles.
+- **Branch de desarrollo actual:** `claude/sprint-2-pre-fo` (pre-work, sin features de negocio).
 - **Última actualización:** 2026-05-05
 
 ---
@@ -348,6 +341,18 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 - **Decisión:** Los handlers reciben `@CurrentUser()` y pasan `tenantId`, `actorId`, `correlationId` explícitamente a `prisma.withTenant()`. No usamos AsyncLocalStorage para auto-propagación.
 - **Razón:** Más simple, más explícito, más fácil de testear. ALS añade complejidad y debugging difícil; lo introducimos sólo si el explícito empieza a doler (probable en Sprint 2 cuando haya muchos services).
 - **Alternativas descartadas:** ALS desde día 1 (overkill), `nestjs-cls` (otra dep para algo que no necesitamos aún).
+
+### ADR-018 — 2026-05-05 — Modelo de datos pre-work antes de hablar con hoteles
+
+- **Decisión:** Avanzar el schema de Sprint 2 (RoomType, Room, Guest, RatePlan, Reservation, ReservationGuest, Folio, FolioEntry) **antes** de las conversaciones con hoteles, asumiendo el shape universal de la industria PMS. **Workflows / features quedan pausados** hasta tener feedback.
+- **Razón:** Los _entities_ y _attributes core_ son convergentes en cualquier PMS hotelero (Mews, Cloudbeds, Apaleo, Opera) — guests con DNI/NIE/passport, reservas con arrival/departure/status, folios append-only, room status enum, etc. Pre-trabajar el schema **desbloquea Sprint 2 funcional el día que llegue feedback**, sin re-trabajar arquitectura. Lo que cambia con feedback son enums (statuses específicos) y campos `attributes` (jsonb) — extensibles sin migración.
+- **Mecanismo de extensibilidad:**
+  - Cada entidad operativa lleva un campo `attributes JSONB` para hotel-specific extras (loyalty number, bed config, restricciones de tarifa) sin ALTER TABLE.
+  - Enums conservadores (5-9 valores comunes); valores adicionales se añaden con `ALTER TYPE … ADD VALUE`.
+  - `notes TEXT` libre en entidades grandes (Guest, Reservation) para cosas que no caben en estructura.
+- **Lo que NO se pre-trabaja:** controllers, services, DTOs de API, eventos del dominio (`reservation.created`, etc.), tools MCP de FO. Eso espera al feedback porque el _contrato_ depende del _workflow_.
+- **Riesgo asumido:** si el feedback obliga a re-modelar una entidad core (poco probable), tendremos una migración de cleanup adicional. Probabilidad estimada: <15% según benchmarks con Mews/Apaleo data models.
+- **Alternativas descartadas:** esperar 100% al feedback (perder semanas), ir hasta features (re-trabajar mucho si feedback obliga a ajustar dominio).
 
 ### ADR-017 — 2026-05-05 — Observabilidad: OpenTelemetry SDK + Prometheus + correlación con Pino
 

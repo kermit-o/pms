@@ -11,7 +11,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { config as loadDotenv } from 'dotenv';
-import { PrismaClient, TenantStatus, UserStatus } from '@prisma/client';
+import { PrismaClient, RoomStatus, TenantStatus, UserStatus } from '@prisma/client';
 
 const envCandidates = [resolve(process.cwd(), '.env'), resolve(process.cwd(), '../../.env')];
 for (const path of envCandidates) {
@@ -31,6 +31,10 @@ export const DEMO_TENANT_ID = '11111111-1111-1111-1111-111111111111';
 export const DEMO_PROPERTY_ID = '11111111-1111-1111-1111-111111111002';
 export const DEMO_ADMIN_USER_ID = '11111111-1111-1111-1111-111111111003';
 export const DEMO_ADMIN_EMAIL = 'admin@demo.local';
+
+export const DEMO_ROOM_TYPE_STD_ID = '11111111-1111-1111-1111-1111111110a1';
+export const DEMO_ROOM_TYPE_DLX_ID = '11111111-1111-1111-1111-1111111110a2';
+export const DEMO_RATE_PLAN_BAR_ID = '11111111-1111-1111-1111-1111111110b1';
 
 const prisma = new PrismaClient({
   datasources: { db: { url: adminUrl } },
@@ -74,10 +78,94 @@ async function main() {
     },
   });
 
-  // Output a stderr — la regla no-console permite warn/error pero no log.
-  // Es un script CLI, no es un servicio.
+  // ----- Sprint 2 pre-work demo data -----
+
+  const standardType = await prisma.roomType.upsert({
+    where: { id: DEMO_ROOM_TYPE_STD_ID },
+    update: {},
+    create: {
+      id: DEMO_ROOM_TYPE_STD_ID,
+      tenantId: tenant.id,
+      propertyId: property.id,
+      code: 'STD',
+      name: 'Standard Double',
+      description: 'Habitacion estandar con cama de matrimonio.',
+      baseOccupancy: 2,
+      maxOccupancy: 2,
+      defaultRate: 95.0,
+    },
+  });
+
+  const deluxeType = await prisma.roomType.upsert({
+    where: { id: DEMO_ROOM_TYPE_DLX_ID },
+    update: {},
+    create: {
+      id: DEMO_ROOM_TYPE_DLX_ID,
+      tenantId: tenant.id,
+      propertyId: property.id,
+      code: 'DLX',
+      name: 'Deluxe',
+      description: 'Habitacion deluxe con vistas y zona de estar.',
+      baseOccupancy: 2,
+      maxOccupancy: 3,
+      defaultRate: 145.0,
+    },
+  });
+
+  // 6 habitaciones — 4 STD (101-104) + 2 DLX (201-202)
+  const roomDefs = [
+    { number: '101', floor: '1', roomTypeId: standardType.id },
+    { number: '102', floor: '1', roomTypeId: standardType.id },
+    { number: '103', floor: '1', roomTypeId: standardType.id },
+    { number: '104', floor: '1', roomTypeId: standardType.id },
+    { number: '201', floor: '2', roomTypeId: deluxeType.id },
+    { number: '202', floor: '2', roomTypeId: deluxeType.id },
+  ];
+
+  for (const def of roomDefs) {
+    await prisma.room.upsert({
+      where: {
+        tenantId_propertyId_number: {
+          tenantId: tenant.id,
+          propertyId: property.id,
+          number: def.number,
+        },
+      },
+      update: {},
+      create: {
+        tenantId: tenant.id,
+        propertyId: property.id,
+        roomTypeId: def.roomTypeId,
+        number: def.number,
+        floor: def.floor,
+        status: RoomStatus.CLEAN,
+      },
+    });
+  }
+
+  const ratePlan = await prisma.ratePlan.upsert({
+    where: { id: DEMO_RATE_PLAN_BAR_ID },
+    update: {},
+    create: {
+      id: DEMO_RATE_PLAN_BAR_ID,
+      tenantId: tenant.id,
+      propertyId: property.id,
+      code: 'BAR',
+      name: 'Best Available Rate',
+      description: 'Tarifa flexible. Cancelacion gratuita hasta 24h antes.',
+      isPublic: true,
+    },
+  });
+
   console.error('Seed completed:');
-  console.error({ tenantId: tenant.id, propertyId: property.id, adminUserId: adminUser.id });
+  console.error({
+    tenantId: tenant.id,
+    propertyId: property.id,
+    adminUserId: adminUser.id,
+    roomTypes: { std: standardType.id, dlx: deluxeType.id },
+    rooms: roomDefs.length,
+    ratePlan: ratePlan.id,
+  });
 }
 
 main()
