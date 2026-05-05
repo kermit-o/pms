@@ -1,0 +1,52 @@
+# Excluye del contexto de build todo lo que no necesita el Dockerfile.
+# Reduce drasticamente el tiempo de upload del contexto y el tamano de capas.
+
+.git
+.github
+.husky
+
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/build
+**/.turbo
+**/.nest
+**/coverage
+**/*.tsbuildinfo
+
+# Apps que no se compilan en este Dockerfile.
+apps/web-fo
+apps/web-hsk
+
+# Tooling local
+.vscode
+.idea
+.devcontainer
+
+# Docker / docker-compose local
+Dockerfile.dockerignore
+docker-compose.yml
+
+# Env / secretos / lockfiles de otros gestores
+.env
+.env.*
+!.env.example
+yarn.lock
+package-lock.json
+
+# Docs y otros archivos no usados por el runtime
+*.md
+!README.md
+docs
+RUNBOOK.md
+
+# Tests (la imagen runtime no los necesita)
+**/*.spec.ts
+**/*.e2e-spec.ts
+**/test
+**/tests
+
+# Misc
+*.log
+.DS_Store
