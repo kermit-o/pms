@@ -8,6 +8,9 @@
     "allowJs": true,
     "noEmit": true,
     "incremental": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"]
