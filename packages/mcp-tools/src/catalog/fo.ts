@@ -81,6 +81,13 @@ export const assignRoomInput = z.object({
 });
 export type AssignRoomInput = z.infer<typeof assignRoomInput>;
 
+export const generateReportInput = z.object({
+  propertyId: z.string().uuid(),
+  businessDate: isoDate,
+  focus: z.enum(['overview', 'revenue', 'occupancy', 'incidents']).default('overview'),
+});
+export type GenerateReportInput = z.infer<typeof generateReportInput>;
+
 export interface FoToolMeta {
   name: string;
   description: string;
@@ -136,6 +143,14 @@ export const foToolCatalog = {
       'Assigns or changes the room of an active reservation. Validates room belongs to the property and matches the booked room type.',
     inputSchema: assignRoomInput,
     mutating: true,
+    financial: false,
+  },
+  generate_report: {
+    name: 'generate_report',
+    description:
+      'Returns a narrative summary of a business date by reading the night-audit snapshots and the live Manager / Revenue / Tax / In-house reports. Read-only; no side effects.',
+    inputSchema: generateReportInput,
+    mutating: false,
     financial: false,
   },
 } as const satisfies Record<string, FoToolMeta>;

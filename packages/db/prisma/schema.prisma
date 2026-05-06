@@ -40,8 +40,12 @@ model Tenant {
   ratePlans          RatePlan[]
   folios             Folio[]
   folioEntries       FolioEntry[]
-  businessDays       BusinessDayState[]
-  sesSubmissions     SesHospedajesSubmission[]
+  businessDays        BusinessDayState[]
+  sesSubmissions      SesHospedajesSubmission[]
+  nightAuditRuns      NightAuditRun[]
+  nightAuditRunSteps  NightAuditRunStep[]
+  nightAuditSnapshots NightAuditSnapshot[]
+  cashReconciliations CashDrawerReconciliation[]
 
   @@map("tenants")
 }
@@ -101,14 +105,17 @@ model Property {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  roomTypes         RoomType[]
-  rooms             Room[]
-  reservations      Reservation[]
-  reservationGroups ReservationGroup[]
-  ratePlans         RatePlan[]
-  businessDays      BusinessDayState[]
-  sesSubmissions    SesHospedajesSubmission[]
+  tenant              Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roomTypes           RoomType[]
+  rooms               Room[]
+  reservations        Reservation[]
+  reservationGroups   ReservationGroup[]
+  ratePlans           RatePlan[]
+  businessDays        BusinessDayState[]
+  sesSubmissions      SesHospedajesSubmission[]
+  nightAuditRuns      NightAuditRun[]
+  nightAuditSnapshots NightAuditSnapshot[]
+  cashReconciliations CashDrawerReconciliation[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -565,4 +572,144 @@ enum SesSubmissionStatus {
   DEAD_LETTER
 
   @@map("ses_submission_status")
+}
+
+// ----------------------------------------------------------------------------
+// Night Audit (Sprint 3) — cierre nocturno orquestado e idempotente.
+// ----------------------------------------------------------------------------
+
+model NightAuditRun {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String              @map("tenant_id") @db.Uuid
+  propertyId          String              @map("property_id") @db.Uuid
+  businessDate        DateTime            @map("business_date") @db.Date
+  status              NightAuditRunStatus @default(PENDING)
+  startedAt           DateTime?           @map("started_at")
+  completedAt         DateTime?           @map("completed_at")
+  lastFailedStep      NightAuditStep?     @map("last_failed_step")
+  lastError           String?             @map("last_error")
+  startedByUserId     String?             @map("started_by_user_id") @db.Uuid
+  completedByUserId   String?             @map("completed_by_user_id") @db.Uuid
+  totals              Json?
+  attributes          Json?
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  tenant    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property  Property                @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  steps     NightAuditRunStep[]
+  snapshots NightAuditSnapshot[]
+
+  @@unique([propertyId, businessDate])
+  @@index([tenantId, propertyId])
+  @@index([status])
+  @@map("night_audit_runs")
+}
+
+enum NightAuditRunStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+
+  @@map("night_audit_run_status")
+}
+
+enum NightAuditStep {
+  POST_ROOM_CHARGES
+  POST_TAXES
+  POST_PACKAGES
+  MARK_NO_SHOWS
+  SNAPSHOT_REPORTS
+  CLOSE_DAY
+
+  @@map("night_audit_step")
+}
+
+model NightAuditRunStep {
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String                 @map("tenant_id") @db.Uuid
+  runId       String                 @map("run_id") @db.Uuid
+  step        NightAuditStep
+  status      NightAuditStepStatus   @default(PENDING)
+  startedAt   DateTime?              @map("started_at")
+  completedAt DateTime?              @map("completed_at")
+  durationMs  Int?                   @map("duration_ms")
+  error       String?
+  result      Json?
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  run    NightAuditRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, step])
+  @@index([tenantId, runId])
+  @@map("night_audit_run_steps")
+}
+
+enum NightAuditStepStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+
+  @@map("night_audit_step_status")
+}
+
+model NightAuditSnapshot {
+  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String                @map("tenant_id") @db.Uuid
+  propertyId   String                @map("property_id") @db.Uuid
+  businessDate DateTime              @map("business_date") @db.Date
+  reportType   NightAuditReportType  @map("report_type")
+  payload      Json
+  generatedAt  DateTime              @default(now()) @map("generated_at")
+  runId        String?               @map("run_id") @db.Uuid
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  run      NightAuditRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@unique([propertyId, businessDate, reportType])
+  @@index([tenantId, propertyId])
+  @@map("night_audit_snapshots")
+}
+
+enum NightAuditReportType {
+  MANAGER
+  IN_HOUSE
+  ARRIVALS_DEPARTURES
+  REVENUE
+  TAX
+
+  @@map("night_audit_report_type")
+}
+
+// ----------------------------------------------------------------------------
+// Cash drawer reconciliation — gates the Night Audit close.
+// ----------------------------------------------------------------------------
+
+model CashDrawerReconciliation {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  propertyId       String   @map("property_id") @db.Uuid
+  businessDate     DateTime @map("business_date") @db.Date
+  currency         String   @default("EUR") @db.Char(3)
+  expectedAmount   Decimal  @default(0) @map("expected_amount") @db.Decimal(12, 2)
+  countedAmount    Decimal  @default(0) @map("counted_amount") @db.Decimal(12, 2)
+  discrepancy      Decimal  @default(0) @db.Decimal(12, 2)
+  toleranceCents   Int      @default(0) @map("tolerance_cents")
+  countedByUserId  String?  @map("counted_by_user_id") @db.Uuid
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, businessDate])
+  @@index([tenantId, propertyId])
+  @@map("cash_drawer_reconciliations")
 }

@@ -221,3 +221,88 @@ pnpm --filter @pms/db migrate:dev --name <descripcion>
 - Conventional commits (`feat:`, `fix:`, `chore:`, `docs:`).
 - PRs a `main` con CI verde.
 - No mergear sin que pasen format + lint + typecheck + test + build.
+
+## 12. Cierre nocturno (Night Audit)
+
+> Guion para el auditor nocturno (rol `night_auditor`). Ejecuta el cierre del día anterior cada noche. Toda la operación es auditada y reanudable.
+
+### 12.1 Pre-requisitos
+
+- Sesión iniciada en la UI (`/login` → Keycloak) con rol `night_auditor` o `tenant_admin`.
+- Property ID a mano (UUID del hotel).
+- Caja física contada con la fecha que vas a cerrar (no el día de hoy).
+
+### 12.2 Flujo en la UI
+
+1. Abre `/night-audit?propertyId=<UUID>&businessDate=<YYYY-MM-DD>`.
+2. Panel "Reconciliación de cajas":
+   - Lee el campo "Esperado" (suma de pagos en efectivo del día).
+   - Introduce el conteo real en "Cash count" (decimales con punto).
+   - Ajusta tolerancia en centavos si tu hotel acepta cuadres no exactos. Si la discrepancia supera la tolerancia, el cierre se bloquea hasta corregir.
+   - Guarda. Si hay diferencia, queda registrada en el audit log y emite `cash.reconciliation_discrepancy`.
+3. Pulsa "Lanzar cierre". El sistema ejecuta los 6 pasos:
+   - `POST_ROOM_CHARGES`
+   - `POST_TAXES`
+   - `POST_PACKAGES`
+   - `MARK_NO_SHOWS`
+   - `SNAPSHOT_REPORTS`
+   - `CLOSE_DAY`
+4. Si un paso falla, la fila del run queda en `FAILED` con `lastFailedStep` y `lastError`. Corrige la causa y pulsa "Reanudar"; los pasos COMPLETED no se re-ejecutan.
+5. Cuando el run sale `COMPLETED`, abre `/reports?propertyId=<UUID>&date=<YYYY-MM-DD>` para ver Manager / Revenue / Tax / In-house / Arrivals-Departures del día. Cada reporte tiene "Descargar CSV".
+
+### 12.3 Modo CLI (curl, sin UI)
+
+```bash
+# 1. Conta caja:
+curl -X POST "$API_URL/cash/reconciliations" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"propertyId":"'$PROPERTY_ID'","businessDate":"2026-06-10","countedAmount":250.00,"toleranceCents":0}'
+
+# 2. Lanza el cierre:
+curl -X POST "$API_URL/night-audit/run" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"propertyId":"'$PROPERTY_ID'","businessDate":"2026-06-10"}'
+
+# 3. Si falla, reanuda con el runId:
+curl -X POST "$API_URL/night-audit/runs/<RUN_ID>/resume" \
+  -H "authorization: Bearer $TOKEN"
+
+# 4. Estado actual del día:
+curl "$API_URL/night-audit/state?propertyId=$PROPERTY_ID&businessDate=2026-06-10" \
+  -H "authorization: Bearer $TOKEN"
+
+# 5. Reportes (JSON o CSV):
+curl "$API_URL/reports/manager?propertyId=$PROPERTY_ID&businessDate=2026-06-10" \
+  -H "authorization: Bearer $TOKEN"
+curl "$API_URL/reports/revenue?propertyId=$PROPERTY_ID&from=2026-06-01&to=2026-06-10&format=csv" \
+  -H "authorization: Bearer $TOKEN" -o revenue.csv
+```
+
+### 12.4 Idempotencia y reanudación
+
+- Una sola fila `night_audit_runs` por `(property, businessDate)`. Re-ejecutar `POST /night-audit/run` sobre un día ya `COMPLETED` retorna el resumen sin ejecutar nada.
+- Cada paso usa una `idempotency_key` derivada de `(businessDate, step, scope)`:
+  - `POST_ROOM_CHARGES`: `na:room:<date>:<reservationId>`
+  - `POST_TAXES`: `na:tax:<date>:<reservationId>`
+  - `POST_PACKAGES`: `na:pkg:<date>:<reservationId>:<pkgCode>`
+- Las `folio_entries` son append-only. Una corrección posterior se postea como entry inversa, nunca con `UPDATE`.
+
+### 12.5 Cosas que pueden ir mal
+
+- **`Cash reconciliation missing for ...`** — falta el conteo de caja. Vuelve al panel y guárdalo.
+- **`Cash discrepancy ... exceeds tolerance ...`** — la diferencia supera la tolerancia. Cuenta otra vez o sube `toleranceCents` con justificación en `notes`.
+- **`Reservation in status NO_SHOW cannot be patched`** — alguien intentó tocar una reserva ya marcada por el step. Llamar a tenant_admin para reabrir el día (`POST /business-day/reopen`) si fue error humano.
+- **El run queda `IN_PROGRESS` sin progresar** — probablemente un fallo en NATS o DB durante un step. `POST /night-audit/runs/:id/resume` lo retoma desde `lastFailedStep`.
+
+### 12.6 Reabrir un día cerrado (admin)
+
+Sólo `tenant_admin`. Queda registrado con motivo en el audit log:
+
+```bash
+curl -X POST "$API_URL/business-day/reopen" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"propertyId":"'$PROPERTY_ID'","businessDate":"2026-06-10","reason":"corrección tardía"}'
+```

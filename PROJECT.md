@@ -15,11 +15,12 @@
 - **Sprint 1 (Foundation) ✅ mergeado a `main` (PR #2).** NestJS API + Prisma RLS + Keycloak/JWT + NATS eventbus + MCP server + OpenTelemetry. Plan en [`docs/SPRINT-1-PLAN.md`](./docs/SPRINT-1-PLAN.md).
 - **Sprint 1.5 (Polish) ✅ mergeado a `main` (PR #2).** CI verde, lockfile, RUNBOOK, discovery doc. Plan en [`docs/SPRINT-1.5-PLAN.md`](./docs/SPRINT-1.5-PLAN.md).
 - **Sprint 2 pre-work ✅ mergeado a `main` (PR #3).** Modelo de datos canónico FO: `RoomType`, `Room`, `Guest`, `RatePlan`, `Reservation`, `ReservationGuest`, `Folio`, `FolioEntry`, con RLS + audit triggers + seed. Plan en [`docs/SPRINT-2-PREP.md`](./docs/SPRINT-2-PREP.md).
-- **Sprint 1.5 staging ✅ mergeado a `main` (PR #4).** Dockerfile multi-stage + Railway compatibility (`process.env.PORT`, role idempotente, binaryTargets musl, copy de workspace completo). Validado end-to-end en Railway: Keycloak → JWT con `tenant_id` → API → `withTenant` → RLS.
-- **Sprint 1.5 RUNBOOK Railway 🟡 PR #5 abierto.** Sección 12 con 7 lecciones aprendidas del despliegue.
-- **Fase actual: Sprint 2 — MVP FO completo (sin recortes).** Producto: **Aubergine**. Alcance per §4.1 íntegro (reservas CRUD, walk-in, group bookings, check-in/out, folio con cargos/pagos/splits, cardex GDPR, SES.HOSPEDAJES, locking) + UI FO Next.js 15 desde día 1 + copiloto conversacional FO básico. Plan en [`docs/SPRINT-2-PLAN.md`](./docs/SPRINT-2-PLAN.md).
-- **Branch de desarrollo actual:** `claude/plan-hotel-saas-rWaWw` (planning + scaffolding de Sprint 2).
-- **Última actualización:** 2026-05-05
+- **Sprint 1.5 staging ✅ mergeado a `main` (PR #4).** Dockerfile multi-stage + Railway compatibility. Validado end-to-end en Railway: Keycloak → JWT con `tenant_id` → API → `withTenant` → RLS.
+- **Sprint 1.5 RUNBOOK Railway ✅ mergeado a `main` (PR #5).** Sección 12 con 7 lecciones aprendidas del despliegue.
+- **Sprint 2 (MVP FO completo) ✅ mergeado a `main` (PR #6).** Producto: **Aubergine**. Alcance per §4.1 íntegro: reservas CRUD/walk-in/group bookings, check-in/out, folio con cargos/pagos/close + idempotencia, cardex GDPR, rooms availability matrix, business-day locking, SES.HOSPEDAJES sender con retries + DLQ. UI Next.js 15 con 19 rutas (login OIDC, dashboard, calendar, reservations, guests, rooms, business-day, compliance/ses) + copiloto conversacional con MCP tools y confirmación humana (ADR-020). 89/89 unit tests + 5 Playwright smoke specs. Plan en [`docs/SPRINT-2-PLAN.md`](./docs/SPRINT-2-PLAN.md).
+- **Fase actual: Sprint 3 — MVP Night Audit (sin recortes).** Alcance per §4.2 íntegro: cierre diario con post de room charges + taxes + packages, roll-over de fecha de negocio, no-shows automáticos, reportes (Manager / In-house / Arrivals-Departures / Revenue / Tax), reconciliación de cajas, locking inmutable del día cerrado. Plan en [`docs/SPRINT-3-PLAN.md`](./docs/SPRINT-3-PLAN.md).
+- **Branch de desarrollo actual:** `claude/sprint-3-night-audit`.
+- **Última actualización:** 2026-05-06
 
 ---
 
@@ -387,6 +388,20 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 - **Lo que NO se mete en Sprint 2:** NA, HSK, multi-property, Channel Manager, integraciones POS/contabilidad, booking engine — todo esto sigue en §4.4 / §10.
 - **Riesgo asumido:** ventana de Sprint 2 más larga (estimación 6-7 semanas en lugar de 4) pero el resultado es _piloteable_ por un hotel real, no un demo.
 - **Alternativas descartadas:** "MVP del MVP" (ya rechazado por el sponsor — el SaaS no se vende sin UI ni sin compliance ES), entregar UI en Sprint 3 (riesgo de _backend que nadie valida_), posponer SES.HOSPEDAJES a piloto (es ilegal operar en España sin él).
+
+### ADR-021 — 2026-05-06 — Sprint 3 = MVP Night Audit **completo** (sin recortes), batch idempotente + reportes generativos
+
+- **Decisión:** Sprint 3 entrega §4.2 íntegro: cierre diario que postea room charges + taxes + packages, roll-over de fecha de negocio (avanza `business_date` global del property), no-shows automáticos, los 5 reportes esenciales (Manager Report, In-house, Arrivals/Departures, Revenue, Tax), reconciliación de cajas (cash drawer count vs payments) y locking inmutable del día cerrado (ya existe `business_day_states` desde Sprint 2; NA lo activa). Con UI desde el día 1 (página `/night-audit` + `/reports`) y consume `business_day.closed` que ya emite Sprint 2.
+- **Arquitectura del cierre:**
+  - Operación idempotente sobre `(propertyId, businessDate)`. Re-ejecutar el cierre del mismo día retorna el mismo resumen sin duplicar cargos.
+  - Implementado como una **secuencia de pasos** (post charges → tax → packages → no-shows → snapshot → close). Cada paso emite un evento `night_audit.step_completed`. Si un paso falla, el cierre queda en `IN_PROGRESS` con el `lastFailedStep` y se puede reanudar (no rollback completo: las entries del folio son append-only).
+  - Cada paso tiene su propio `idempotencyKey` interno derivado de `(businessDate, step, scope)`, así que un retry no inserta dos veces.
+- **Snapshot de reportes:** los 5 reportes core se generan al cerrar el día y se persisten en `night_audit_snapshots` (JSONB) — son inmutables. Reportes ad-hoc en cualquier fecha siguen siendo computados on-demand desde las entries de folio (lectura).
+- **No-shows:** el cierre marca `NO_SHOW` toda reservation con `arrivalDate <= businessDate` que siga en `PENDING`/`CONFIRMED`. Aplica penalty fee según política del rate plan (campo `attributes.noShowPolicy`); si no hay política, se loguea sin cargo.
+- **Reportes generativos (IA):** además de los 5 estructurados, el copiloto FO existente expone una nueva tool `generate_report` (read-only, auto-exec) que toma una fecha y devuelve un resumen narrativo del día. **No** es decisión-making — es transparencia operacional.
+- **Lo que NO se mete en Sprint 3:** HSK PWA (Sprint 4), forecasting/anomaly detection (post-MVP), auto-reconciliación bancaria (necesita integración bancaria real), reportes BI complejos (RevPAR/ADR trends multi-mes).
+- **Riesgo asumido:** ventana de Sprint 3 estimada 5-6 semanas. El paso más complejo es la reconciliación de cajas — depende de cómo el hotel piloto cuente efectivo (papel vs digital). Validar con UAT antes de cerrar la UI.
+- **Alternativas descartadas:** transaction-style rollback (incompatible con append-only de Sprint 2; los cargos posteados son legalmente inmutables), cierre manual sin batch (rompe idempotencia y compliance), reportes solo on-demand (un día auditado tiene que ser un snapshot inmutable o el director no puede confiar en los números).
 
 ### ADR-016 — 2026-05-05 — Eventbus: NATS JetStream + envelope estándar + catálogo Zod versionado
 

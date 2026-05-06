@@ -10,6 +10,10 @@ export {
   FolioStatus,
   BusinessDayStatus,
   SesSubmissionStatus,
+  NightAuditRunStatus,
+  NightAuditStep,
+  NightAuditStepStatus,
+  NightAuditReportType,
 } from '@prisma/client';
 
 export type {
@@ -27,6 +31,10 @@ export type {
   FolioEntry,
   BusinessDayState,
   SesHospedajesSubmission,
+  NightAuditRun,
+  NightAuditRunStep,
+  NightAuditSnapshot,
+  CashDrawerReconciliation,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

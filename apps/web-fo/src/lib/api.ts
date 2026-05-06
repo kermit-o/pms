@@ -604,3 +604,248 @@ export async function confirmCopilotTool(
     body: JSON.stringify({ pendingToolId, decision }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Night Audit
+// ---------------------------------------------------------------------------
+
+export type NightAuditRunStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+
+export type NightAuditStep =
+  | 'POST_ROOM_CHARGES'
+  | 'POST_TAXES'
+  | 'POST_PACKAGES'
+  | 'MARK_NO_SHOWS'
+  | 'SNAPSHOT_REPORTS'
+  | 'CLOSE_DAY';
+
+export type NightAuditStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
+
+export interface NightAuditRunSummary {
+  id: string;
+  propertyId: string;
+  businessDate: string;
+  status: NightAuditRunStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  lastFailedStep: NightAuditStep | null;
+  lastError: string | null;
+  totals: Record<string, unknown>;
+  steps: { step: NightAuditStep; status: NightAuditStepStatus }[];
+}
+
+export interface NightAuditState {
+  propertyId: string;
+  businessDate: string;
+  run: NightAuditRunSummary | null;
+}
+
+export async function getNightAuditState(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<NightAuditState> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/night-audit/state?${params.toString()}`, { accessToken });
+}
+
+export async function listNightAuditRuns(
+  accessToken: string | undefined,
+  query: {
+    propertyId?: string;
+    status?: NightAuditRunStatus;
+    from?: string;
+    to?: string;
+  } = {},
+): Promise<NightAuditRunSummary[]> {
+  const params = new URLSearchParams();
+  if (query.propertyId) params.set('propertyId', query.propertyId);
+  if (query.status) params.set('status', query.status);
+  if (query.from) params.set('from', query.from);
+  if (query.to) params.set('to', query.to);
+  const q = params.toString();
+  return apiFetch(`/night-audit/runs${q ? `?${q}` : ''}`, { accessToken });
+}
+
+export async function runNightAudit(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<NightAuditRunSummary> {
+  return apiFetch('/night-audit/run', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ propertyId, businessDate }),
+  });
+}
+
+export async function resumeNightAuditRun(
+  accessToken: string | undefined,
+  runId: string,
+): Promise<NightAuditRunSummary> {
+  return apiFetch(`/night-audit/runs/${runId}/resume`, {
+    method: 'POST',
+    accessToken,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+export interface ManagerReport {
+  businessDate: string;
+  totalRooms: number;
+  inHouse: number;
+  arrivals: number;
+  departures: number;
+  cancellationsToday: number;
+  occupancyPct: number;
+  adr: string;
+  revpar: string;
+  charges: { count: number; totalAmount: string };
+}
+
+export interface RevenueReport {
+  range: { from: string; to: string };
+  rows: Array<{ type: string; count: number; totalAmount: string }>;
+  totalAmount: string;
+}
+
+export interface TaxReport {
+  range: { from: string; to: string };
+  rows: Array<{ description: string; count: number; totalAmount: string }>;
+  totalAmount: string;
+}
+
+export async function getManagerReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<ManagerReport> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/reports/manager?${params.toString()}`, { accessToken });
+}
+
+export async function getRevenueReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  from: string,
+  to: string,
+): Promise<RevenueReport> {
+  const params = new URLSearchParams({ propertyId, from, to });
+  return apiFetch(`/reports/revenue?${params.toString()}`, { accessToken });
+}
+
+export async function getTaxReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  from: string,
+  to: string,
+): Promise<TaxReport> {
+  const params = new URLSearchParams({ propertyId, from, to });
+  return apiFetch(`/reports/tax?${params.toString()}`, { accessToken });
+}
+
+// W4 — In-house + Arrivals/Departures
+
+export interface InHouseRow {
+  reservationId: string;
+  code: string;
+  arrivalDate: string;
+  departureDate: string;
+  roomNumber: string | null;
+  primaryGuest: string | null;
+  adults: number;
+  children: number;
+  balance: string;
+  currency: string;
+}
+
+export interface InHouseReport {
+  businessDate: string;
+  count: number;
+  rows: InHouseRow[];
+}
+
+export interface ArrivalsDeparturesRow {
+  reservationId: string;
+  code: string;
+  status: string;
+  arrivalDate: string;
+  departureDate: string;
+  roomNumber: string | null;
+  primaryGuest: string | null;
+}
+
+export interface ArrivalsDeparturesReport {
+  businessDate: string;
+  arrivals: ArrivalsDeparturesRow[];
+  departures: ArrivalsDeparturesRow[];
+}
+
+export async function getInHouseReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<InHouseReport> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/reports/in-house?${params.toString()}`, { accessToken });
+}
+
+export async function getArrivalsDeparturesReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<ArrivalsDeparturesReport> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/reports/arrivals-departures?${params.toString()}`, {
+    accessToken,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Cash drawer reconciliation
+// ---------------------------------------------------------------------------
+
+export interface CashReconciliation {
+  id: string | null;
+  propertyId: string;
+  businessDate: string;
+  currency: string;
+  expectedAmount: string;
+  countedAmount: string;
+  discrepancy: string;
+  toleranceCents: number;
+  countedByUserId: string | null;
+  notes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export async function getCashReconciliation(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<CashReconciliation> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/cash/reconciliations?${params.toString()}`, { accessToken });
+}
+
+export async function upsertCashReconciliation(
+  accessToken: string | undefined,
+  input: {
+    propertyId: string;
+    businessDate: string;
+    countedAmount: number;
+    currency?: string;
+    toleranceCents?: number;
+    notes?: string;
+  },
+): Promise<CashReconciliation> {
+  return apiFetch('/cash/reconciliations', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
