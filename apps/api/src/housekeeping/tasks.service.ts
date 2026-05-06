@@ -3,7 +3,14 @@ import { HousekeepingTaskStatus, HousekeepingTaskType, Prisma, RoomStatus } from
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
-import { CancelTaskDto, CompleteTaskDto, CreateTaskDto, ListTasksQuery } from './dto';
+import {
+  CancelTaskDto,
+  CompleteTaskDto,
+  CreateTaskDto,
+  ListTasksQuery,
+  ReassignTaskDto,
+  SummaryQuery,
+} from './dto';
 
 /**
  * Housekeeping tasks service. Sprint 4 W1.
@@ -259,6 +266,131 @@ export class HousekeepingTasksService {
 
     return toView(result);
   }
+
+  async reassign(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+    input: ReassignTaskDto,
+  ): Promise<TaskView> {
+    const ctx = tenantCtx(user, correlationId);
+
+    const result = await this.prisma.withTenant(ctx, async (tx) => {
+      const existing = await tx.housekeepingTask.findFirst({
+        where: { id, deletedAt: null },
+      });
+      if (!existing) throw new NotFoundException(`Task ${id} not found`);
+      if (
+        existing.status === HousekeepingTaskStatus.COMPLETED ||
+        existing.status === HousekeepingTaskStatus.CANCELLED
+      ) {
+        throw new ConflictException(`Task in status ${existing.status} cannot be reassigned`);
+      }
+      return tx.housekeepingTask.update({
+        where: { id: existing.id },
+        data: {
+          assignedToUserId: input.assignedToUserId,
+          assignedAt: input.assignedToUserId ? new Date() : null,
+        },
+      });
+    });
+
+    // Reuse task_assigned: a reassign is conceptually a re-emission of the
+    // assignment fact. Consumers (timeline, audit) get the new owner.
+    await this.events.publish('housekeeping.task_assigned', ctx, {
+      taskId: result.id,
+      propertyId: result.propertyId,
+      roomId: result.roomId,
+      businessDate: result.businessDate.toISOString().slice(0, 10),
+      taskType: result.taskType,
+      assignedToUserId: result.assignedToUserId,
+      assignedAt: (result.assignedAt ?? new Date()).toISOString(),
+    });
+
+    return toView(result);
+  }
+
+  async summary(
+    user: AuthUser,
+    correlationId: string,
+    query: SummaryQuery,
+  ): Promise<TaskSummary> {
+    const ctx = tenantCtx(user, correlationId);
+    const businessDate = new Date(query.businessDate);
+
+    const rows = await this.prisma.withTenant(ctx, (tx) =>
+      tx.housekeepingTask.findMany({
+        where: {
+          propertyId: query.propertyId,
+          businessDate,
+          deletedAt: null,
+        },
+        select: {
+          status: true,
+          taskType: true,
+          durationMin: true,
+          assignedToUserId: true,
+        },
+      }),
+    );
+
+    const byStatus: Record<HousekeepingTaskStatus, number> = {
+      PENDING: 0,
+      IN_PROGRESS: 0,
+      COMPLETED: 0,
+      CANCELLED: 0,
+    };
+    const byType: Record<HousekeepingTaskType, number> = {
+      CHECKOUT_CLEAN: 0,
+      STAYOVER_CLEAN: 0,
+      INSPECTION: 0,
+      MAINTENANCE: 0,
+    };
+    const byAssignee = new Map<string, { total: number; completed: number }>();
+    let totalDurationMin = 0;
+    let completedWithDuration = 0;
+
+    for (const r of rows) {
+      byStatus[r.status] += 1;
+      byType[r.taskType] += 1;
+      const key = r.assignedToUserId ?? '__unassigned__';
+      const slot = byAssignee.get(key) ?? { total: 0, completed: 0 };
+      slot.total += 1;
+      if (r.status === HousekeepingTaskStatus.COMPLETED) slot.completed += 1;
+      byAssignee.set(key, slot);
+      if (r.durationMin != null && r.status === HousekeepingTaskStatus.COMPLETED) {
+        totalDurationMin += r.durationMin;
+        completedWithDuration += 1;
+      }
+    }
+
+    return {
+      propertyId: query.propertyId,
+      businessDate: query.businessDate,
+      total: rows.length,
+      byStatus,
+      byType,
+      byAssignee: Array.from(byAssignee.entries()).map(([userId, v]) => ({
+        userId: userId === '__unassigned__' ? null : userId,
+        total: v.total,
+        completed: v.completed,
+      })),
+      avgDurationMin:
+        completedWithDuration > 0 ? Math.round(totalDurationMin / completedWithDuration) : null,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+export interface TaskSummary {
+  propertyId: string;
+  businessDate: string;
+  total: number;
+  byStatus: Record<HousekeepingTaskStatus, number>;
+  byType: Record<HousekeepingTaskType, number>;
+  byAssignee: { userId: string | null; total: number; completed: number }[];
+  avgDurationMin: number | null;
 }
 
 // ---------------------------------------------------------------------------

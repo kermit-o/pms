@@ -2,7 +2,14 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
-import { CancelTaskDto, CompleteTaskDto, CreateTaskDto, ListTasksQuery } from './dto';
+import {
+  CancelTaskDto,
+  CompleteTaskDto,
+  CreateTaskDto,
+  ListTasksQuery,
+  ReassignTaskDto,
+  SummaryQuery,
+} from './dto';
 import { HousekeepingTasksService } from './tasks.service';
 
 const READ_ROLES = [
@@ -27,6 +34,17 @@ export class HousekeepingTasksController {
   ) {
     const query = ListTasksQuery.parse(rawQuery);
     return this.tasks.list(user, correlationIdOf(req), query);
+  }
+
+  @Get('summary')
+  @Roles('tenant_admin', 'housekeeping_supervisor')
+  async summary(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Query() rawQuery: Record<string, string | undefined>,
+  ) {
+    const query = SummaryQuery.parse(rawQuery);
+    return this.tasks.summary(user, correlationIdOf(req), query);
   }
 
   @Get(':id')
@@ -66,6 +84,18 @@ export class HousekeepingTasksController {
   ) {
     const input = CompleteTaskDto.parse(body ?? {});
     return this.tasks.complete(user, correlationIdOf(req), id, input);
+  }
+
+  @Post(':id/reassign')
+  @Roles('tenant_admin', 'housekeeping_supervisor')
+  async reassign(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = ReassignTaskDto.parse(body);
+    return this.tasks.reassign(user, correlationIdOf(req), id, input);
   }
 
   @Post(':id/cancel')

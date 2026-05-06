@@ -16,6 +16,7 @@ export {
   NightAuditReportType,
   HousekeepingTaskStatus,
   HousekeepingTaskType,
+  LostFoundStatus,
 } from '@prisma/client';
 
 export type {
@@ -38,6 +39,7 @@ export type {
   NightAuditSnapshot,
   CashDrawerReconciliation,
   HousekeepingTask,
+  LostFoundItem,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

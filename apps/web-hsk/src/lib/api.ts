@@ -110,3 +110,106 @@ export async function completeTask(
     body: JSON.stringify(input),
   });
 }
+
+export async function reassignTask(
+  accessToken: string | undefined,
+  taskId: string,
+  assignedToUserId: string | null,
+): Promise<Task> {
+  return apiFetch(`/housekeeping/tasks/${taskId}/reassign`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ assignedToUserId }),
+  });
+}
+
+export interface TaskSummary {
+  propertyId: string;
+  businessDate: string;
+  total: number;
+  byStatus: Record<TaskStatus, number>;
+  byType: Record<TaskType, number>;
+  byAssignee: { userId: string | null; total: number; completed: number }[];
+  avgDurationMin: number | null;
+}
+
+export async function getTaskSummary(
+  accessToken: string | undefined,
+  query: { propertyId: string; businessDate: string },
+): Promise<TaskSummary> {
+  const params = new URLSearchParams(query);
+  return apiFetch(`/housekeeping/tasks/summary?${params.toString()}`, { accessToken });
+}
+
+// ---------------------------------------------------------------------------
+// Lost & Found
+// ---------------------------------------------------------------------------
+
+export type LostFoundStatus = 'FOUND' | 'CLAIMED' | 'DISPOSED';
+
+export interface LostFoundItem {
+  id: string;
+  propertyId: string;
+  roomId: string | null;
+  foundByUserId: string;
+  foundAt: string;
+  description: string;
+  hasPhoto: boolean;
+  status: LostFoundStatus;
+  claimedByGuestId: string | null;
+  claimedAt: string | null;
+  disposedAt: string | null;
+  notes: string | null;
+}
+
+export async function listLostFound(
+  accessToken: string | undefined,
+  query: { propertyId?: string; status?: LostFoundStatus } = {},
+): Promise<LostFoundItem[]> {
+  const params = new URLSearchParams();
+  if (query.propertyId) params.set('propertyId', query.propertyId);
+  if (query.status) params.set('status', query.status);
+  const q = params.toString();
+  return apiFetch(`/housekeeping/lost-found${q ? `?${q}` : ''}`, { accessToken });
+}
+
+export async function registerLostFound(
+  accessToken: string | undefined,
+  input: {
+    propertyId: string;
+    roomId?: string;
+    description: string;
+    photoBase64?: string;
+    notes?: string;
+  },
+): Promise<LostFoundItem> {
+  return apiFetch(`/housekeeping/lost-found`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function claimLostFound(
+  accessToken: string | undefined,
+  itemId: string,
+  input: { guestId?: string; notes?: string } = {},
+): Promise<LostFoundItem> {
+  return apiFetch(`/housekeeping/lost-found/${itemId}/claim`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function disposeLostFound(
+  accessToken: string | undefined,
+  itemId: string,
+  reason: string,
+): Promise<LostFoundItem> {
+  return apiFetch(`/housekeeping/lost-found/${itemId}/dispose`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ reason }),
+  });
+}

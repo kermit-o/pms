@@ -26,10 +26,25 @@ mergea.
 ## Roadmap
 
 - W1 — scaffold + lista de tareas
-- W2 — `/task/[id]` (start/complete) + cola offline IndexedDB (este commit)
-- W3 — `/lost-found` con foto base64 + `/supervisor` (panel desktop)
+- W2 — `/task/[id]` (start/complete) + cola offline IndexedDB
+- W3 — `/lost-found` con foto base64 + `/supervisor` (panel desktop) (este commit)
 - W4 — login QR + 4 tools MCP HSK
 - W5 — UAT + RUNBOOK §13 + métricas Prometheus
+
+## Lost & Found (W3)
+
+`/lost-found?propertyId=<uuid>`. La cámara captura una imagen, se redimensiona
+a `1280` px en un canvas (calidad JPEG 0.7) y se envía como `data:image/jpeg`
+a la API. Si en el futuro las fotos pasan a S3 (V2), el contrato de la API
+no cambia: `photoBase64` deja de almacenarse y aparece un `photoUrl` firmado.
+
+## Panel supervisor (W3)
+
+`/supervisor?propertyId=<uuid>&date=YYYY-MM-DD` (desktop, max-w-6xl). Muestra
+KPIs del día (total / en curso / completadas / duración media), agregaciones
+por camarera (total/completed/%) y la tabla de tareas con un control inline
+de reasignación (input UUID + Enter). El reassign emite `task_assigned` de
+nuevo para que el timeline lo registre.
 
 ## Cola offline (W2)
 

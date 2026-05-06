@@ -38,3 +38,14 @@ export const CancelTaskDto = z.object({
   reason: z.string().min(1).max(500),
 });
 export type CancelTaskDto = z.infer<typeof CancelTaskDto>;
+
+export const ReassignTaskDto = z.object({
+  assignedToUserId: z.string().uuid().nullable(),
+});
+export type ReassignTaskDto = z.infer<typeof ReassignTaskDto>;
+
+export const SummaryQuery = z.object({
+  propertyId: z.string().uuid(),
+  businessDate: isoDate,
+});
+export type SummaryQuery = z.infer<typeof SummaryQuery>;

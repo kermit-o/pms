@@ -9,6 +9,11 @@ import {
   housekeepingTaskStartedV1,
 } from './housekeeping';
 import {
+  lostFoundItemClaimedV1,
+  lostFoundItemDisposedV1,
+  lostFoundItemRegisteredV1,
+} from './lost-found';
+import {
   nightAuditRunCompletedV1,
   nightAuditRunStartedV1,
   nightAuditStepCompletedV1,
@@ -123,6 +128,18 @@ export const catalog = {
     schema: housekeepingTaskCancelledV1,
     schemaVersion: 1,
   },
+  'lost_found.item_registered': {
+    schema: lostFoundItemRegisteredV1,
+    schemaVersion: 1,
+  },
+  'lost_found.item_claimed': {
+    schema: lostFoundItemClaimedV1,
+    schemaVersion: 1,
+  },
+  'lost_found.item_disposed': {
+    schema: lostFoundItemDisposedV1,
+    schemaVersion: 1,
+  },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -218,3 +235,14 @@ export type {
   HousekeepingTaskCompletedV1Payload,
   HousekeepingTaskStartedV1Payload,
 } from './housekeeping';
+
+export {
+  lostFoundItemClaimedV1,
+  lostFoundItemDisposedV1,
+  lostFoundItemRegisteredV1,
+} from './lost-found';
+export type {
+  LostFoundItemClaimedV1Payload,
+  LostFoundItemDisposedV1Payload,
+  LostFoundItemRegisteredV1Payload,
+} from './lost-found';

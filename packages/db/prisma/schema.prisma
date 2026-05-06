@@ -47,6 +47,7 @@ model Tenant {
   nightAuditSnapshots NightAuditSnapshot[]
   cashReconciliations CashDrawerReconciliation[]
   housekeepingTasks   HousekeepingTask[]
+  lostFoundItems      LostFoundItem[]
 
   @@map("tenants")
 }
@@ -118,6 +119,7 @@ model Property {
   nightAuditSnapshots NightAuditSnapshot[]
   cashReconciliations CashDrawerReconciliation[]
   housekeepingTasks   HousekeepingTask[]
+  lostFoundItems      LostFoundItem[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -215,6 +217,7 @@ model Room {
   roomType          RoomType           @relation(fields: [roomTypeId], references: [id])
   reservations      Reservation[]
   housekeepingTasks HousekeepingTask[]
+  lostFoundItems    LostFoundItem[]
 
   @@unique([tenantId, propertyId, number])
   @@index([tenantId, propertyId])
@@ -269,8 +272,9 @@ model Guest {
   updatedAt              DateTime      @updatedAt @map("updated_at")
   deletedAt              DateTime?     @map("deleted_at")
 
-  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  reservations ReservationGuest[]
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reservations   ReservationGuest[]
+  lostFoundItems LostFoundItem[]
 
   @@index([tenantId])
   @@index([tenantId, email])
@@ -769,4 +773,47 @@ enum HousekeepingTaskType {
   MAINTENANCE
 
   @@map("housekeeping_task_type")
+}
+
+// ----------------------------------------------------------------------------
+// Lost & Found — objetos olvidados por huespedes. Sprint 4 W3.
+// ----------------------------------------------------------------------------
+
+model LostFoundItem {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String          @map("tenant_id") @db.Uuid
+  propertyId         String          @map("property_id") @db.Uuid
+  roomId             String?         @map("room_id") @db.Uuid
+  foundByUserId      String          @map("found_by_user_id") @db.Uuid
+  foundAt            DateTime        @default(now()) @map("found_at")
+  description        String
+  photoBase64        String?         @map("photo_base64")
+  status             LostFoundStatus @default(FOUND)
+  claimedByGuestId   String?         @map("claimed_by_guest_id") @db.Uuid
+  claimedAt          DateTime?       @map("claimed_at")
+  claimedNotes       String?         @map("claimed_notes")
+  disposedAt         DateTime?       @map("disposed_at")
+  disposedNotes      String?         @map("disposed_notes")
+  notes              String?
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  deletedAt          DateTime?       @map("deleted_at")
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property       Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  room           Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  claimedByGuest Guest?   @relation(fields: [claimedByGuestId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, propertyId, status])
+  @@index([tenantId, propertyId, foundAt])
+  @@index([tenantId, roomId])
+  @@map("lost_found_items")
+}
+
+enum LostFoundStatus {
+  FOUND
+  CLAIMED
+  DISPOSED
+
+  @@map("lost_found_status")
 }

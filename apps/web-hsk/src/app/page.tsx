@@ -131,8 +131,25 @@ export default async function HomePage({ searchParams }: PageProps) {
         );
       })}
 
+      {propertyId && (
+        <nav className="flex gap-2 pt-2 text-xs">
+          <a
+            href={`/lost-found?propertyId=${propertyId}`}
+            className="flex-1 rounded-xl bg-white px-3 py-2 text-center font-medium text-aubergine-700 ring-1 ring-aubergine-100"
+          >
+            Lost &amp; Found
+          </a>
+          <a
+            href={`/supervisor?propertyId=${propertyId}&date=${today}`}
+            className="flex-1 rounded-xl bg-white px-3 py-2 text-center font-medium text-aubergine-700 ring-1 ring-aubergine-100"
+          >
+            Supervisor
+          </a>
+        </nav>
+      )}
+
       <p className="pb-2 text-center text-[10px] text-aubergine-700/40">
-        Sprint 4 W1 · scaffold inicial. Detalle de habitación en W2.
+        Sprint 4 W3 · Lost &amp; Found + supervisor.
       </p>
     </main>
   );

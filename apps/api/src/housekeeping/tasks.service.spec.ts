@@ -203,6 +203,78 @@ describe('HousekeepingTasksService.complete', () => {
   });
 });
 
+describe('HousekeepingTasksService.reassign', () => {
+  it('reassigns a PENDING task and re-emits task_assigned', async () => {
+    const { service, events } = buildService({
+      existingTask: buildExistingTask({ status: HousekeepingTaskStatus.PENDING }),
+    });
+    const NEW_USER = '99999999-9999-9999-9999-999999999999';
+    const out = await service.reassign(user, 'corr', TASK_ID, {
+      assignedToUserId: NEW_USER,
+    });
+    expect(out.assignedToUserId).toBe(NEW_USER);
+    expect(events.publish.mock.calls[0]![0]).toBe('housekeeping.task_assigned');
+  });
+
+  it('rejects reassign on COMPLETED task', async () => {
+    const { service } = buildService({
+      existingTask: buildExistingTask({ status: HousekeepingTaskStatus.COMPLETED }),
+    });
+    await expect(
+      service.reassign(user, 'corr', TASK_ID, {
+        assignedToUserId: USER_ID,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe('HousekeepingTasksService.summary', () => {
+  it('aggregates by status, type, assignee and avg duration', async () => {
+    const NEW_USER = '99999999-9999-9999-9999-999999999999';
+    const { service, tx } = buildService({});
+    tx.housekeepingTask.findMany.mockResolvedValueOnce([
+      {
+        status: HousekeepingTaskStatus.COMPLETED,
+        taskType: HousekeepingTaskType.CHECKOUT_CLEAN,
+        durationMin: 30,
+        assignedToUserId: USER_ID,
+      },
+      {
+        status: HousekeepingTaskStatus.COMPLETED,
+        taskType: HousekeepingTaskType.STAYOVER_CLEAN,
+        durationMin: 20,
+        assignedToUserId: USER_ID,
+      },
+      {
+        status: HousekeepingTaskStatus.PENDING,
+        taskType: HousekeepingTaskType.CHECKOUT_CLEAN,
+        durationMin: null,
+        assignedToUserId: NEW_USER,
+      },
+      {
+        status: HousekeepingTaskStatus.IN_PROGRESS,
+        taskType: HousekeepingTaskType.INSPECTION,
+        durationMin: null,
+        assignedToUserId: null,
+      },
+    ]);
+    const out = await service.summary(user, 'corr', {
+      propertyId: PROPERTY_ID,
+      businessDate: '2026-06-10',
+    });
+    expect(out.total).toBe(4);
+    expect(out.byStatus.COMPLETED).toBe(2);
+    expect(out.byStatus.PENDING).toBe(1);
+    expect(out.byStatus.IN_PROGRESS).toBe(1);
+    expect(out.byType.CHECKOUT_CLEAN).toBe(2);
+    expect(out.avgDurationMin).toBe(25);
+    const me = out.byAssignee.find((a) => a.userId === USER_ID);
+    expect(me).toMatchObject({ total: 2, completed: 2 });
+    const unassigned = out.byAssignee.find((a) => a.userId === null);
+    expect(unassigned).toMatchObject({ total: 1, completed: 0 });
+  });
+});
+
 describe('HousekeepingTasksService.cancel', () => {
   it('cancels a PENDING task and emits task_cancelled', async () => {
     const { service, events } = buildService({
