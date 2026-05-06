@@ -16,17 +16,15 @@ const user: AuthUser = {
 };
 
 function buildService(opts: {
-  existing?:
-    | {
-        propertyId: string;
-        businessDate: Date;
-        status: BusinessDayStatus;
-        closedAt: Date | null;
-        closedByUserId: string | null;
-        reopenedAt: Date | null;
-        reopenedReason: string | null;
-      }
-    | null;
+  existing?: {
+    propertyId: string;
+    businessDate: Date;
+    status: BusinessDayStatus;
+    closedAt: Date | null;
+    closedByUserId: string | null;
+    reopenedAt: Date | null;
+    reopenedReason: string | null;
+  } | null;
 }) {
   const findFirst = vi.fn().mockResolvedValue(opts.existing ?? null);
   const create = vi.fn().mockResolvedValue({});
@@ -158,12 +156,7 @@ describe('BusinessDayService.reopen', () => {
 describe('BusinessDayService.getState', () => {
   it('returns OPEN default when no row exists', async () => {
     const { service } = buildService({ existing: null });
-    const out = await service.getState(
-      user,
-      'corr',
-      PROPERTY_ID,
-      '2026-06-10',
-    );
+    const out = await service.getState(user, 'corr', PROPERTY_ID, '2026-06-10');
     expect(out.status).toBe(BusinessDayStatus.OPEN);
     expect(out.closedAt).toBeNull();
   });

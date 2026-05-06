@@ -1,9 +1,5 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import {
-  Prisma,
-  ReservationSource,
-  ReservationStatus,
-} from '@pms/db';
+import { Prisma, ReservationSource, ReservationStatus } from '@pms/db';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../auth';
 import { ReservationsService } from './reservations.service';
@@ -60,9 +56,7 @@ function buildService(overrides: {
     id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
     code: 'GRP-BCN-ABCD',
   });
-  const reservationFindFirst = vi
-    .fn()
-    .mockResolvedValue(overrides.reservationOnFind ?? null);
+  const reservationFindFirst = vi.fn().mockResolvedValue(overrides.reservationOnFind ?? null);
   const reservationUpdate = vi.fn().mockResolvedValue({
     id: RESERVATION_ID,
     propertyId: PROPERTY_ID,
@@ -92,10 +86,7 @@ function buildService(overrides: {
 
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
 
-  const service = new ReservationsService(
-    prisma as never,
-    events as never,
-  );
+  const service = new ReservationsService(prisma as never, events as never);
 
   return { service, tx, prisma, events, calls: { reservationUpdate } };
 }
@@ -254,8 +245,7 @@ describe('ReservationsService.patch', () => {
     expect(events.publish).toHaveBeenCalledOnce();
     expect(events.publish.mock.calls[0]![0]).toBe('reservation.updated');
     expect(
-      (events.publish.mock.calls[0]![2] as { changes: Record<string, unknown> })
-        .changes,
+      (events.publish.mock.calls[0]![2] as { changes: Record<string, unknown> }).changes,
     ).toEqual({ notes: 'late check-in expected' });
   });
 

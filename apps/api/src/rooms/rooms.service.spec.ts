@@ -118,12 +118,7 @@ describe('RoomsService.availability', () => {
       to: '2026-06-13',
     });
 
-    expect(matrix.days).toEqual([
-      '2026-06-09',
-      '2026-06-10',
-      '2026-06-11',
-      '2026-06-12',
-    ]);
+    expect(matrix.days).toEqual(['2026-06-09', '2026-06-10', '2026-06-11', '2026-06-12']);
     expect(matrix.cells[ROOM_A.id]!['2026-06-09']!.state).toBe('CLEAN');
     expect(matrix.cells[ROOM_A.id]!['2026-06-10']!.state).toBe('OCC');
     expect(matrix.cells[ROOM_A.id]!['2026-06-11']!.state).toBe('OCC');

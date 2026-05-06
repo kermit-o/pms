@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Query,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
@@ -40,22 +33,14 @@ export class BusinessDayController {
 
   @Post('close')
   @Roles('tenant_admin', 'front_desk', 'night_auditor')
-  async close(
-    @CurrentUser() user: AuthUser,
-    @Req() req: FastifyRequest,
-    @Body() body: unknown,
-  ) {
+  async close(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest, @Body() body: unknown) {
     const input = CloseDayDto.parse(body);
     return this.service.close(user, correlationIdOf(req), input);
   }
 
   @Post('reopen')
   @Roles('tenant_admin')
-  async reopen(
-    @CurrentUser() user: AuthUser,
-    @Req() req: FastifyRequest,
-    @Body() body: unknown,
-  ) {
+  async reopen(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest, @Body() body: unknown) {
     const input = ReopenDayDto.parse(body);
     return this.service.reopen(user, correlationIdOf(req), input);
   }

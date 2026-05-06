@@ -80,22 +80,16 @@ export default function CopilotSidebar() {
     }
   }
 
-  async function decide(
-    pendingToolId: string,
-    decision: 'approve' | 'reject',
-  ): Promise<void> {
+  async function decide(pendingToolId: string, decision: 'approve' | 'reject'): Promise<void> {
     if (!session || busy) return;
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch(
-        `/api/copilot/sessions/${session.sessionId}/confirm-tool`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ pendingToolId, decision }),
-        },
-      );
+      const res = await fetch(`/api/copilot/sessions/${session.sessionId}/confirm-tool`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pendingToolId, decision }),
+      });
       if (!res.ok) throw new Error(await res.text());
       const updated = (await res.json()) as CopilotSession;
       setSession(updated);
@@ -125,12 +119,8 @@ export default function CopilotSidebar() {
         >
           <header className="flex items-start justify-between border-b border-aubergine-100 p-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
-                Aubergine
-              </p>
-              <h2 className="text-lg font-semibold text-aubergine-700">
-                Copilot
-              </h2>
+              <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">Aubergine</p>
+              <h2 className="text-lg font-semibold text-aubergine-700">Copilot</h2>
             </div>
             <button
               type="button"
@@ -144,9 +134,8 @@ export default function CopilotSidebar() {
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 text-sm">
             {!session && (
               <p className="text-aubergine-700/60">
-                Pregúntame por disponibilidad, asignación de habitación o
-                check-in. Las acciones financieras siempre requieren tu
-                confirmación.
+                Pregúntame por disponibilidad, asignación de habitación o check-in. Las acciones
+                financieras siempre requieren tu confirmación.
               </p>
             )}
             {session?.messages.map((m) => (
@@ -163,9 +152,7 @@ export default function CopilotSidebar() {
                 </pre>
                 {m.pendingToolId && (
                   <PendingToolCard
-                    pending={session.pendingTools.find(
-                      (p) => p.id === m.pendingToolId,
-                    )}
+                    pending={session.pendingTools.find((p) => p.id === m.pendingToolId)}
                     onApprove={() => decide(m.pendingToolId!, 'approve')}
                     onReject={() => decide(m.pendingToolId!, 'reject')}
                     busy={busy}
@@ -241,20 +228,14 @@ function PendingToolCard({
   return (
     <div
       className={`mt-2 rounded-xl p-3 text-xs ring-1 ${
-        pending.financial
-          ? 'bg-amber-50 ring-amber-200'
-          : 'bg-white ring-aubergine-100'
+        pending.financial ? 'bg-amber-50 ring-amber-200' : 'bg-white ring-aubergine-100'
       }`}
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="font-mono text-[11px] font-semibold text-aubergine-700">
-            {pending.tool}
-          </p>
+          <p className="font-mono text-[11px] font-semibold text-aubergine-700">{pending.tool}</p>
           {pending.financial && (
-            <p className="text-[10px] uppercase tracking-wide text-amber-700">
-              acción financiera
-            </p>
+            <p className="text-[10px] uppercase tracking-wide text-amber-700">acción financiera</p>
           )}
         </div>
         <span
@@ -272,7 +253,7 @@ function PendingToolCard({
         </span>
       </div>
       <pre className="mt-2 overflow-auto rounded bg-aubergine-50/80 p-2 text-[11px] text-aubergine-900">
-{JSON.stringify(pending.input, null, 2)}
+        {JSON.stringify(pending.input, null, 2)}
       </pre>
       {!decided && (
         <div className="mt-2 flex justify-end gap-2">

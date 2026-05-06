@@ -19,8 +19,7 @@ export default async function GuestsPage({ searchParams }: PageProps) {
     const res = await listGuests(session?.accessToken, { q, limit: 100 });
     items = res.items;
   } catch (err) {
-    error =
-      err instanceof ApiError ? `API ${err.status}` : (err as Error).message;
+    error = err instanceof ApiError ? `API ${err.status}` : (err as Error).message;
   }
 
   return (
@@ -68,10 +67,7 @@ export default async function GuestsPage({ searchParams }: PageProps) {
           <tbody className="divide-y divide-aubergine-100/70">
             {items.length === 0 && !error && (
               <tr>
-                <td
-                  colSpan={4}
-                  className="px-4 py-12 text-center text-aubergine-700/60"
-                >
+                <td colSpan={4} className="px-4 py-12 text-center text-aubergine-700/60">
                   Sin resultados.
                 </td>
               </tr>
@@ -79,16 +75,11 @@ export default async function GuestsPage({ searchParams }: PageProps) {
             {items.map((g) => (
               <tr key={g.id} className="hover:bg-aubergine-50/50">
                 <td className="px-4 py-3 font-medium">
-                  <Link
-                    href={`/guests/${g.id}`}
-                    className="text-aubergine-700 hover:underline"
-                  >
+                  <Link href={`/guests/${g.id}`} className="text-aubergine-700 hover:underline">
                     {g.lastName}, {g.firstName}
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-aubergine-700/80">
-                  {g.email ?? '—'}
-                </td>
+                <td className="px-4 py-3 text-aubergine-700/80">{g.email ?? '—'}</td>
                 <td className="px-4 py-3 text-aubergine-700/80">
                   {g.documentType ? (
                     <span className="font-mono text-xs">
@@ -98,9 +89,7 @@ export default async function GuestsPage({ searchParams }: PageProps) {
                     '—'
                   )}
                 </td>
-                <td className="px-4 py-3 text-aubergine-700/80">
-                  {g.nationality ?? '—'}
-                </td>
+                <td className="px-4 py-3 text-aubergine-700/80">{g.nationality ?? '—'}</td>
               </tr>
             ))}
           </tbody>

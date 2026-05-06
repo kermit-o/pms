@@ -1,22 +1,8 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  Query,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
-import {
-  AvailabilityQuery,
-  ChangeStatusDto,
-  ListRoomsQuery,
-  SearchAvailabilityQuery,
-} from './dto';
+import { AvailabilityQuery, ChangeStatusDto, ListRoomsQuery, SearchAvailabilityQuery } from './dto';
 import { RoomsService } from './rooms.service';
 
 const READ_ROLES = [

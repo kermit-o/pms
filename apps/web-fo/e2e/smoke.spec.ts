@@ -5,19 +5,13 @@ import { expect, test } from '@playwright/test';
  * middleware contracts that we don't want to regress.
  */
 test.describe('routing and middleware', () => {
-  test('/login renders the Aubergine wordmark and Keycloak CTA', async ({
-    page,
-  }) => {
+  test('/login renders the Aubergine wordmark and Keycloak CTA', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByText('Aubergine')).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: /Continuar con Keycloak/i }),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /Continuar con Keycloak/i })).toBeVisible();
   });
 
-  test('unauthenticated /dashboard redirects to /login with callbackUrl', async ({
-    page,
-  }) => {
+  test('unauthenticated /dashboard redirects to /login with callbackUrl', async ({ page }) => {
     await page.goto('/dashboard');
     await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fdashboard$/);
   });
@@ -27,9 +21,7 @@ test.describe('routing and middleware', () => {
     await expect(page).toHaveURL(/\/login\?callbackUrl=%2Freservations$/);
   });
 
-  test('unauthenticated /compliance/ses redirects to /login', async ({
-    page,
-  }) => {
+  test('unauthenticated /compliance/ses redirects to /login', async ({ page }) => {
     await page.goto('/compliance/ses');
     await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fcompliance%2Fses$/);
   });

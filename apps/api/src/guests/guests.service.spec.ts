@@ -126,16 +126,16 @@ describe('GuestsService.patch', () => {
 
   it('throws ConflictException when no fields provided', async () => {
     const { service } = buildService({});
-    await expect(
-      service.patch(deskUser, 'corr', GUEST_ID, {}),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.patch(deskUser, 'corr', GUEST_ID, {})).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 
   it('throws NotFoundException when guest does not exist', async () => {
     const { service } = buildService({ guestExists: null });
-    await expect(
-      service.patch(deskUser, 'corr', GUEST_ID, { phone: 'x' }),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.patch(deskUser, 'corr', GUEST_ID, { phone: 'x' })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 

@@ -7,10 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import {
-  type FoToolName,
-  foToolCatalog,
-} from '@pms/mcp-tools';
+import { type FoToolName, foToolCatalog } from '@pms/mcp-tools';
 import type { AuthUser } from '../auth';
 import type { Env } from '../config/env.schema';
 import { FoToolRouter } from './tool-router';
@@ -49,10 +46,7 @@ export class CopilotService {
     this.anthropicApiKey = this.config.get('ANTHROPIC_API_KEY', { infer: true });
   }
 
-  createSession(
-    user: AuthUser,
-    propertyId: string | undefined,
-  ): { sessionId: string } {
+  createSession(user: AuthUser, propertyId: string | undefined): { sessionId: string } {
     const sessionId = randomUUID();
     this.sessions.set(sessionId, {
       id: sessionId,
@@ -168,9 +162,7 @@ export class CopilotService {
       throw new NotFoundException(`Pending tool ${pendingToolId} not found`);
     }
     if (pending.status !== 'pending') {
-      throw new ConflictException(
-        `Pending tool already in status ${pending.status}`,
-      );
+      throw new ConflictException(`Pending tool already in status ${pending.status}`);
     }
 
     if (decision === 'reject') {
@@ -185,12 +177,7 @@ export class CopilotService {
     }
 
     try {
-      const result = await this.router.execute(
-        pending.tool,
-        pending.input,
-        user,
-        correlationId,
-      );
+      const result = await this.router.execute(pending.tool, pending.input, user, correlationId);
       pending.status = 'approved';
       session.messages.push({
         id: randomUUID(),
@@ -223,10 +210,7 @@ export class CopilotService {
    * exposed via tool_use. Without it, we fall back to a deterministic stub
    * that recognises a few intents — enough for tests and demos.
    */
-  private async proposeReply(
-    _session: Session,
-    content: string,
-  ): Promise<ToolProposal> {
+  private async proposeReply(_session: Session, content: string): Promise<ToolProposal> {
     if (!this.anthropicApiKey) {
       return stubProposal(content);
     }
@@ -249,8 +233,7 @@ export class CopilotService {
 // Stub adapter
 // ---------------------------------------------------------------------------
 
-const UUID_RE =
-  /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
 const ISO_DATE_RE = /\b\d{4}-\d{2}-\d{2}\b/;
 
 /**

@@ -18,14 +18,10 @@ const user: AuthUser = {
 
 function buildService() {
   const router = {
-    isMutating: vi.fn().mockImplementation((name: string) =>
-      name !== 'query_availability',
-    ),
+    isMutating: vi.fn().mockImplementation((name: string) => name !== 'query_availability'),
     isFinancial: vi
       .fn()
-      .mockImplementation((name: string) =>
-        name === 'add_folio_charge' || name === 'check_out',
-      ),
+      .mockImplementation((name: string) => name === 'add_folio_charge' || name === 'check_out'),
     execute: vi.fn().mockResolvedValue({ ok: true }),
   };
   const config = {
@@ -47,13 +43,8 @@ describe('CopilotService', () => {
 
   it('returns an explanatory text reply when intent is unclear', async () => {
     const { service } = buildService();
-    const { sessionId } = service.createSession(user, null);
-    const view = await service.sendMessage(
-      user,
-      'corr',
-      sessionId,
-      'hola, ayuda',
-    );
+    const { sessionId } = service.createSession(user, undefined);
+    const view = await service.sendMessage(user, 'corr', sessionId, 'hola, ayuda');
     expect(view.messages).toHaveLength(2);
     expect(view.messages[1]!.role).toBe('assistant');
     expect(view.messages[1]!.content).toContain('disponibilidad');
@@ -61,7 +52,7 @@ describe('CopilotService', () => {
 
   it('auto-executes read-only tool (query_availability) and summarises result', async () => {
     const { service, router } = buildService();
-    const { sessionId } = service.createSession(user, null);
+    const { sessionId } = service.createSession(user, undefined);
     const view = await service.sendMessage(
       user,
       'corr',
@@ -76,7 +67,7 @@ describe('CopilotService', () => {
 
   it('queues a mutating tool for confirmation instead of executing it', async () => {
     const { service, router } = buildService();
-    const { sessionId } = service.createSession(user, null);
+    const { sessionId } = service.createSession(user, undefined);
     const view = await service.sendMessage(
       user,
       'corr',
@@ -92,7 +83,7 @@ describe('CopilotService', () => {
 
   it('confirmTool(approve) executes the pending tool and marks it approved', async () => {
     const { service, router } = buildService();
-    const { sessionId } = service.createSession(user, null);
+    const { sessionId } = service.createSession(user, undefined);
     const proposed = await service.sendMessage(
       user,
       'corr',
@@ -100,13 +91,7 @@ describe('CopilotService', () => {
       `haz check-in del ${RESERVATION_ID} en la habitacion ${ROOM_ID}`,
     );
     const pendingId = proposed.pendingTools[0]!.id;
-    const view = await service.confirmTool(
-      user,
-      'corr',
-      sessionId,
-      pendingId,
-      'approve',
-    );
+    const view = await service.confirmTool(user, 'corr', sessionId, pendingId, 'approve');
     expect(router.execute).toHaveBeenCalledOnce();
     expect(view.pendingTools[0]!.status).toBe('approved');
     expect(view.messages.at(-1)!.content).toContain('Ejecutado');
@@ -114,7 +99,7 @@ describe('CopilotService', () => {
 
   it('confirmTool(reject) does not execute and marks rejected', async () => {
     const { service, router } = buildService();
-    const { sessionId } = service.createSession(user, null);
+    const { sessionId } = service.createSession(user, undefined);
     const proposed = await service.sendMessage(
       user,
       'corr',
@@ -122,13 +107,7 @@ describe('CopilotService', () => {
       `asignar habitacion ${ROOM_ID} a la reserva ${RESERVATION_ID}`,
     );
     const pendingId = proposed.pendingTools[0]!.id;
-    const view = await service.confirmTool(
-      user,
-      'corr',
-      sessionId,
-      pendingId,
-      'reject',
-    );
+    const view = await service.confirmTool(user, 'corr', sessionId, pendingId, 'reject');
     expect(router.execute).not.toHaveBeenCalled();
     expect(view.pendingTools[0]!.status).toBe('rejected');
     expect(view.messages.at(-1)!.content).toContain('rechazada');
@@ -136,7 +115,7 @@ describe('CopilotService', () => {
 
   it('rejects sessions that belong to another tenant', () => {
     const { service } = buildService();
-    const { sessionId } = service.createSession(user, null);
+    const { sessionId } = service.createSession(user, undefined);
     const otherUser: AuthUser = {
       sub: USER_ID,
       tenantId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',

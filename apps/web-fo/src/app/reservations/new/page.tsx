@@ -29,14 +29,7 @@ export default async function NewReservationPage({ searchParams }: PageProps) {
     const notes = formData.get('notes')?.toString() || undefined;
     const walkIn = formData.get('walkIn') === 'on';
 
-    if (
-      !propertyId ||
-      !roomTypeId ||
-      !arrival ||
-      !departure ||
-      !firstName ||
-      !lastName
-    ) {
+    if (!propertyId || !roomTypeId || !arrival || !departure || !firstName || !lastName) {
       throw new Error('Faltan campos obligatorios');
     }
 
@@ -97,9 +90,7 @@ export default async function NewReservationPage({ searchParams }: PageProps) {
         </Section>
 
         <div>
-          <label className="block text-sm font-medium text-aubergine-700">
-            Notas
-          </label>
+          <label className="block text-sm font-medium text-aubergine-700">Notas</label>
           <textarea
             name="notes"
             rows={3}
@@ -128,13 +119,7 @@ export default async function NewReservationPage({ searchParams }: PageProps) {
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <fieldset>
       <legend className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">

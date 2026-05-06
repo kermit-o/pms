@@ -18,8 +18,7 @@ interface PageProps {
 export default async function BusinessDayPage({ searchParams }: PageProps) {
   const session = await auth();
   const propertyId = searchParams.propertyId;
-  const businessDate =
-    searchParams.businessDate ?? new Date().toISOString().slice(0, 10);
+  const businessDate = searchParams.businessDate ?? new Date().toISOString().slice(0, 10);
 
   let current: BusinessDayState | null = null;
   let history: BusinessDayState[] = [];
@@ -27,17 +26,10 @@ export default async function BusinessDayPage({ searchParams }: PageProps) {
 
   if (propertyId) {
     try {
-      current = await getBusinessDayState(
-        session?.accessToken,
-        propertyId,
-        businessDate,
-      );
+      current = await getBusinessDayState(session?.accessToken, propertyId, businessDate);
       history = await listBusinessDays(session?.accessToken, propertyId);
     } catch (err) {
-      error =
-        err instanceof ApiError
-          ? `API ${err.status}: ${err.body}`
-          : (err as Error).message;
+      error = err instanceof ApiError ? `API ${err.status}: ${err.body}` : (err as Error).message;
     }
   }
 
@@ -70,12 +62,10 @@ export default async function BusinessDayPage({ searchParams }: PageProps) {
         <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
           Aubergine · Operación
         </p>
-        <h1 className="text-3xl font-semibold text-aubergine-700">
-          Cierre de día
-        </h1>
+        <h1 className="text-3xl font-semibold text-aubergine-700">Cierre de día</h1>
         <p className="text-sm text-aubergine-700/70">
-          Bloquea mutaciones FO/folio sobre días cerrados. Los reabrir requiere
-          rol <code>tenant_admin</code> y un motivo en el audit log.
+          Bloquea mutaciones FO/folio sobre días cerrados. Los reabrir requiere rol{' '}
+          <code>tenant_admin</code> y un motivo en el audit log.
         </p>
       </header>
 
@@ -122,9 +112,7 @@ export default async function BusinessDayPage({ searchParams }: PageProps) {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-aubergine-500">
             {current.businessDate}
           </h2>
-          <p className="mt-2 text-2xl font-semibold text-aubergine-700">
-            {current.status}
-          </p>
+          <p className="mt-2 text-2xl font-semibold text-aubergine-700">{current.status}</p>
           {current.closedAt && (
             <p className="text-xs text-aubergine-700/70">
               Cerrado {current.closedAt} por {current.closedByUserId}
@@ -132,29 +120,20 @@ export default async function BusinessDayPage({ searchParams }: PageProps) {
           )}
           {current.reopenedAt && (
             <p className="text-xs text-rose-700/80">
-              Reabierto {current.reopenedAt} · motivo:{' '}
-              {current.reopenedReason}
+              Reabierto {current.reopenedAt} · motivo: {current.reopenedReason}
             </p>
           )}
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             {current.status === 'OPEN' && (
-              <form
-                action={close}
-                className="space-y-2 rounded-xl bg-aubergine-50/40 p-4"
-              >
+              <form action={close} className="space-y-2 rounded-xl bg-aubergine-50/40 p-4">
                 <input type="hidden" name="propertyId" value={propertyId} />
-                <input
-                  type="hidden"
-                  name="businessDate"
-                  value={current.businessDate}
-                />
+                <input type="hidden" name="businessDate" value={current.businessDate} />
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
                   Cerrar día
                 </h3>
                 <p className="text-xs text-aubergine-700/70">
-                  Bloqueará nuevas mutaciones de reservas/folio sobre esta
-                  fecha. Acción auditada.
+                  Bloqueará nuevas mutaciones de reservas/folio sobre esta fecha. Acción auditada.
                 </p>
                 <button
                   type="submit"
@@ -166,16 +145,9 @@ export default async function BusinessDayPage({ searchParams }: PageProps) {
             )}
 
             {current.status === 'CLOSED' && (
-              <form
-                action={reopen}
-                className="space-y-2 rounded-xl bg-rose-50 p-4"
-              >
+              <form action={reopen} className="space-y-2 rounded-xl bg-rose-50 p-4">
                 <input type="hidden" name="propertyId" value={propertyId} />
-                <input
-                  type="hidden"
-                  name="businessDate"
-                  value={current.businessDate}
-                />
+                <input type="hidden" name="businessDate" value={current.businessDate} />
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-rose-700">
                   Reabrir (admin)
                 </h3>
@@ -227,12 +199,8 @@ export default async function BusinessDayPage({ searchParams }: PageProps) {
                       {d.status.toLowerCase()}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-aubergine-700/70">
-                    {d.closedAt ?? '—'}
-                  </td>
-                  <td className="px-4 py-2 text-aubergine-700/70">
-                    {d.reopenedAt ?? '—'}
-                  </td>
+                  <td className="px-4 py-2 text-aubergine-700/70">{d.closedAt ?? '—'}</td>
+                  <td className="px-4 py-2 text-aubergine-700/70">{d.reopenedAt ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

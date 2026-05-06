@@ -12,11 +12,7 @@ export const metadata: Metadata = {
   description: 'AI-native Property Management System for boutique hotels.',
 };
 
-export default async function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
   const session = await auth();
   return (
     <html lang="es">

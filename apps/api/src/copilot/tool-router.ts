@@ -99,12 +99,9 @@ export class FoToolRouter {
       }
       case 'check_out': {
         const i = input as CheckOutInput;
-        return this.reservations.checkOut(
-          user,
-          correlationId,
-          i.reservationId,
-          { settle: i.settle },
-        );
+        return this.reservations.checkOut(user, correlationId, i.reservationId, {
+          settle: i.settle,
+        });
       }
       case 'add_folio_charge': {
         const i = input as AddFolioChargeInput;
@@ -117,12 +114,9 @@ export class FoToolRouter {
       }
       case 'assign_room': {
         const i = input as AssignRoomInput;
-        return this.reservations.assignRoom(
-          user,
-          correlationId,
-          i.reservationId,
-          { roomId: i.roomId },
-        );
+        return this.reservations.assignRoom(user, correlationId, i.reservationId, {
+          roomId: i.roomId,
+        });
       }
     }
   }

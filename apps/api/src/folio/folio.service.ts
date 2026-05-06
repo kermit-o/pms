@@ -5,10 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  FolioStatus,
-  Prisma,
-} from '@pms/db';
+import { FolioStatus, Prisma } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
@@ -38,11 +35,7 @@ export class FolioService {
     private readonly events: EventbusService,
   ) {}
 
-  async findOne(
-    user: AuthUser,
-    correlationId: string,
-    id: string,
-  ): Promise<FolioDetail> {
+  async findOne(user: AuthUser, correlationId: string, id: string): Promise<FolioDetail> {
     const ctx = tenantCtx(user, correlationId);
     const found = await this.prisma.withTenant(ctx, (tx) =>
       tx.folio.findFirst({
@@ -302,11 +295,7 @@ export class FolioService {
     };
   }
 
-  async close(
-    user: AuthUser,
-    correlationId: string,
-    folioId: string,
-  ): Promise<{ id: string }> {
+  async close(user: AuthUser, correlationId: string, folioId: string): Promise<{ id: string }> {
     const ctx = tenantCtx(user, correlationId);
 
     const result = await this.prisma.withTenant(ctx, async (tx) => {
@@ -322,14 +311,10 @@ export class FolioService {
       });
       if (!folio) throw new NotFoundException(`Folio ${folioId} not found`);
       if (folio.status !== FolioStatus.OPEN) {
-        throw new ConflictException(
-          `Folio in status ${folio.status} cannot be closed`,
-        );
+        throw new ConflictException(`Folio in status ${folio.status} cannot be closed`);
       }
       if (!new Prisma.Decimal(folio.balance).isZero()) {
-        throw new ConflictException(
-          `Folio balance must be 0 to close (current ${folio.balance})`,
-        );
+        throw new ConflictException(`Folio balance must be 0 to close (current ${folio.balance})`);
       }
       const closedAt = new Date();
       await tx.folio.update({
@@ -427,17 +412,13 @@ async function loadOpenFolio(tx: Prisma.TransactionClient, folioId: string) {
   });
   if (!folio) throw new NotFoundException(`Folio ${folioId} not found`);
   if (folio.status !== FolioStatus.OPEN) {
-    throw new ConflictException(
-      `Folio in status ${folio.status} cannot accept new entries`,
-    );
+    throw new ConflictException(`Folio in status ${folio.status} cannot accept new entries`);
   }
   return folio;
 }
 
 function isUniqueViolation(err: unknown): boolean {
-  return (
-    err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
-  );
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 }
 
 const FOLIO_DETAIL_SELECT = {

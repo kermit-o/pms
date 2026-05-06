@@ -27,10 +27,7 @@ export default async function SesPage({ searchParams }: PageProps) {
         propertyId,
       });
     } catch (err) {
-      error =
-        err instanceof ApiError
-          ? `API ${err.status}: ${err.body}`
-          : (err as Error).message;
+      error = err instanceof ApiError ? `API ${err.status}: ${err.body}` : (err as Error).message;
     }
   }
 
@@ -60,13 +57,10 @@ export default async function SesPage({ searchParams }: PageProps) {
         <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
           Aubergine · Compliance
         </p>
-        <h1 className="text-3xl font-semibold text-aubergine-700">
-          SES.HOSPEDAJES
-        </h1>
+        <h1 className="text-3xl font-semibold text-aubergine-700">SES.HOSPEDAJES</h1>
         <p className="text-sm text-aubergine-700/70">
-          Partes diarios para la Guardia Civil (RD 933/2021). Reintentos
-          exponenciales: 1m, 5m, 30m, 4h, 24h. Tras 5 fallos →
-          DEAD_LETTER + alerta al equipo.
+          Partes diarios para la Guardia Civil (RD 933/2021). Reintentos exponenciales: 1m, 5m, 30m,
+          4h, 24h. Tras 5 fallos → DEAD_LETTER + alerta al equipo.
         </p>
       </header>
 
@@ -139,10 +133,7 @@ export default async function SesPage({ searchParams }: PageProps) {
             <tbody className="divide-y divide-aubergine-100/70">
               {submissions.length === 0 && !error && (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-12 text-center text-aubergine-700/60"
-                  >
+                  <td colSpan={6} className="px-4 py-12 text-center text-aubergine-700/60">
                     Sin envíos para este property.
                   </td>
                 </tr>
@@ -153,13 +144,9 @@ export default async function SesPage({ searchParams }: PageProps) {
                   <td className="px-4 py-3">
                     <StatusBadge status={s.status} />
                   </td>
+                  <td className="px-4 py-3 text-aubergine-700/70">{s.retryCount} / 5</td>
                   <td className="px-4 py-3 text-aubergine-700/70">
-                    {s.retryCount} / 5
-                  </td>
-                  <td className="px-4 py-3 text-aubergine-700/70">
-                    {s.nextAttemptAt
-                      ? s.nextAttemptAt.slice(0, 16).replace('T', ' ')
-                      : '—'}
+                    {s.nextAttemptAt ? s.nextAttemptAt.slice(0, 16).replace('T', ' ') : '—'}
                   </td>
                   <td className="px-4 py-3 text-rose-700/80 text-xs max-w-md truncate">
                     {s.lastError ?? '—'}
@@ -175,11 +162,7 @@ export default async function SesPage({ searchParams }: PageProps) {
                       {(s.status === 'QUEUED' || s.status === 'FAILED') && (
                         <form action={sendAction} className="inline">
                           <input type="hidden" name="id" value={s.id} />
-                          <input
-                            type="hidden"
-                            name="propertyId"
-                            value={s.propertyId}
-                          />
+                          <input type="hidden" name="propertyId" value={s.propertyId} />
                           <button
                             type="submit"
                             className="rounded-lg bg-aubergine-600 px-2 py-1 text-xs font-medium text-white hover:bg-aubergine-700"

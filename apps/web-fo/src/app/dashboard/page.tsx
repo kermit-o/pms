@@ -39,10 +39,7 @@ export default async function DashboardPage() {
         <KpiCard label="Llegadas hoy" value={kpis.arrivalsToday} />
         <KpiCard label="Salidas hoy" value={kpis.departuresToday} />
         <KpiCard label="In-house" value={kpis.inHouse} />
-        <KpiCard
-          label="Ocupación"
-          value={`${Math.round(kpis.occupancyPct * 100)}%`}
-        />
+        <KpiCard label="Ocupación" value={`${Math.round(kpis.occupancyPct * 100)}%`} />
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -51,16 +48,8 @@ export default async function DashboardPage() {
         <Tile href="/guests" label="Cardex" sub="Huéspedes + GDPR" />
         <Tile href="/rooms" label="Habitaciones" sub="Estado + OOO" />
         <Tile href="/business-day" label="Cierre de día" sub="Lock operacional" />
-        <Tile
-          href="/compliance/ses"
-          label="SES.HOSPEDAJES"
-          sub="Partes Guardia Civil"
-        />
-        <Tile
-          href="/reservations/new?walkIn=1"
-          label="Walk-in"
-          sub="Check-in inmediato"
-        />
+        <Tile href="/compliance/ses" label="SES.HOSPEDAJES" sub="Partes Guardia Civil" />
+        <Tile href="/reservations/new?walkIn=1" label="Walk-in" sub="Check-in inmediato" />
       </section>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-aubergine-100">
@@ -83,9 +72,7 @@ export default async function DashboardPage() {
 function KpiCard({ label, value }: { label: string; value: string | number }) {
   return (
     <article className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100">
-      <p className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
-        {label}
-      </p>
+      <p className="text-xs font-medium uppercase tracking-wide text-aubergine-500">{label}</p>
       <p className="mt-2 text-3xl font-semibold text-aubergine-700">{value}</p>
     </article>
   );
@@ -97,9 +84,7 @@ function Tile({ href, label, sub }: { href: string; label: string; sub: string }
       href={href}
       className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100 transition hover:bg-aubergine-50"
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
-        {label}
-      </p>
+      <p className="text-xs font-medium uppercase tracking-wide text-aubergine-500">{label}</p>
       <p className="mt-1 text-base font-medium text-aubergine-700">{sub}</p>
     </Link>
   );

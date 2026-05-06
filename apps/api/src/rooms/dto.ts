@@ -1,15 +1,11 @@
 import { z } from 'zod';
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 
 export const ListRoomsQuery = z.object({
   propertyId: z.string().uuid().optional(),
   roomTypeId: z.string().uuid().optional(),
-  status: z
-    .enum(['CLEAN', 'DIRTY', 'INSPECTED', 'OUT_OF_ORDER', 'OUT_OF_SERVICE'])
-    .optional(),
+  status: z.enum(['CLEAN', 'DIRTY', 'INSPECTED', 'OUT_OF_ORDER', 'OUT_OF_SERVICE']).optional(),
   floor: z.string().max(20).optional(),
 });
 export type ListRoomsQuery = z.infer<typeof ListRoomsQuery>;
@@ -31,13 +27,7 @@ export const SearchAvailabilityQuery = z.object({
 export type SearchAvailabilityQuery = z.infer<typeof SearchAvailabilityQuery>;
 
 export const ChangeStatusDto = z.object({
-  status: z.enum([
-    'CLEAN',
-    'DIRTY',
-    'INSPECTED',
-    'OUT_OF_ORDER',
-    'OUT_OF_SERVICE',
-  ]),
+  status: z.enum(['CLEAN', 'DIRTY', 'INSPECTED', 'OUT_OF_ORDER', 'OUT_OF_SERVICE']),
   outOfOrderReason: z.string().max(500).optional(),
 });
 export type ChangeStatusDto = z.infer<typeof ChangeStatusDto>;

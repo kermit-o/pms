@@ -11,12 +11,7 @@ export const AddChargeDto = z.object({
 
 export type AddChargeDto = z.infer<typeof AddChargeDto>;
 
-const PaymentMethod = z.enum([
-  'CASH',
-  'CARD',
-  'BANK_TRANSFER',
-  'OTHER',
-]);
+const PaymentMethod = z.enum(['CASH', 'CARD', 'BANK_TRANSFER', 'OTHER']);
 
 export const AddPaymentDto = z.object({
   description: z.string().min(1).max(500),

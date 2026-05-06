@@ -7,11 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import {
-  Prisma,
-  ReservationSource,
-  ReservationStatus as PrismaReservationStatus,
-} from '@pms/db';
+import { Prisma, ReservationSource, ReservationStatus as PrismaReservationStatus } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
@@ -24,10 +20,7 @@ import {
   CreateReservationGroupDto,
   PatchReservationDto,
 } from './dto';
-import {
-  IllegalReservationTransitionError,
-  assertTransition,
-} from './reservation-status';
+import { IllegalReservationTransitionError, assertTransition } from './reservation-status';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -103,8 +96,7 @@ export class ReservationsService {
         }
       }
 
-      const guestId =
-        input.guestId ?? (await ensureAdHocGuest(tx, user.tenantId, input));
+      const guestId = input.guestId ?? (await ensureAdHocGuest(tx, user.tenantId, input));
 
       const code = generateReservationCode(property.code);
 
@@ -174,8 +166,7 @@ export class ReservationsService {
         propertyId: result.propertyId,
         code: result.code,
         roomId: '00000000-0000-0000-0000-000000000000',
-        checkedInAt:
-          result.reservation.checkedInAt?.toISOString() ?? new Date().toISOString(),
+        checkedInAt: result.reservation.checkedInAt?.toISOString() ?? new Date().toISOString(),
       });
     }
 
@@ -352,15 +343,12 @@ export class ReservationsService {
     const where: Prisma.ReservationWhereInput = { deletedAt: null };
     if (query.propertyId) where.propertyId = query.propertyId;
     if (query.status) {
-      where.status =
-        PrismaReservationStatus[query.status as keyof typeof PrismaReservationStatus];
+      where.status = PrismaReservationStatus[query.status as keyof typeof PrismaReservationStatus];
     }
     if (query.from || query.to) {
       where.AND = [];
-      if (query.from)
-        where.AND.push({ departureDate: { gt: new Date(query.from) } });
-      if (query.to)
-        where.AND.push({ arrivalDate: { lt: new Date(query.to) } });
+      if (query.from) where.AND.push({ departureDate: { gt: new Date(query.from) } });
+      if (query.to) where.AND.push({ arrivalDate: { lt: new Date(query.to) } });
     }
 
     const items = await this.prisma.withTenant(ctx, (tx) =>
@@ -377,11 +365,7 @@ export class ReservationsService {
     return { items: items.slice(0, limit).map(toListItem), nextCursor };
   }
 
-  async findOne(
-    user: AuthUser,
-    correlationId: string,
-    id: string,
-  ): Promise<ReservationDetail> {
+  async findOne(user: AuthUser, correlationId: string, id: string): Promise<ReservationDetail> {
     const ctx = tenantCtx(user, correlationId);
     const found = await this.prisma.withTenant(ctx, (tx) =>
       tx.reservation.findFirst({
@@ -495,20 +479,13 @@ export class ReservationsService {
         );
       }
 
-      const newArrival = input.arrival
-        ? new Date(input.arrival)
-        : existing.arrivalDate;
-      const newDeparture = input.departure
-        ? new Date(input.departure)
-        : existing.departureDate;
+      const newArrival = input.arrival ? new Date(input.arrival) : existing.arrivalDate;
+      const newDeparture = input.departure ? new Date(input.departure) : existing.departureDate;
       if (newDeparture <= newArrival) {
         throw new BadRequestException('departure must be after arrival');
       }
 
-      if (
-        input.roomTypeId !== undefined &&
-        input.roomTypeId !== existing.roomTypeId
-      ) {
+      if (input.roomTypeId !== undefined && input.roomTypeId !== existing.roomTypeId) {
         const rt = await tx.roomType.findFirst({
           where: {
             id: input.roomTypeId,
@@ -518,16 +495,11 @@ export class ReservationsService {
           select: { id: true },
         });
         if (!rt) {
-          throw new BadRequestException(
-            `RoomType ${input.roomTypeId} not found in property`,
-          );
+          throw new BadRequestException(`RoomType ${input.roomTypeId} not found in property`);
         }
       }
 
-      if (
-        input.ratePlanId !== undefined &&
-        input.ratePlanId !== existing.ratePlanId
-      ) {
+      if (input.ratePlanId !== undefined && input.ratePlanId !== existing.ratePlanId) {
         const rp = await tx.ratePlan.findFirst({
           where: {
             id: input.ratePlanId,
@@ -537,9 +509,7 @@ export class ReservationsService {
           select: { id: true },
         });
         if (!rp) {
-          throw new BadRequestException(
-            `RatePlan ${input.ratePlanId} not found in property`,
-          );
+          throw new BadRequestException(`RatePlan ${input.ratePlanId} not found in property`);
         }
       }
 
@@ -548,12 +518,8 @@ export class ReservationsService {
         data: {
           ...(input.arrival ? { arrivalDate: newArrival } : {}),
           ...(input.departure ? { departureDate: newDeparture } : {}),
-          ...(input.roomTypeId !== undefined
-            ? { roomTypeId: input.roomTypeId }
-            : {}),
-          ...(input.ratePlanId !== undefined
-            ? { ratePlanId: input.ratePlanId }
-            : {}),
+          ...(input.roomTypeId !== undefined ? { roomTypeId: input.roomTypeId } : {}),
+          ...(input.ratePlanId !== undefined ? { ratePlanId: input.ratePlanId } : {}),
           ...(input.occupancy
             ? {
                 adults: input.occupancy.adults,
@@ -621,9 +587,7 @@ export class ReservationsService {
 
       const targetRoomId = input.roomId ?? existing.roomId;
       if (!targetRoomId) {
-        throw new BadRequestException(
-          'roomId required: reservation has no assigned room',
-        );
+        throw new BadRequestException('roomId required: reservation has no assigned room');
       }
 
       const room = await tx.room.findFirst({
@@ -636,9 +600,7 @@ export class ReservationsService {
         select: { id: true, isOutOfOrder: true },
       });
       if (!room) {
-        throw new BadRequestException(
-          `Room ${targetRoomId} not available for this reservation`,
-        );
+        throw new BadRequestException(`Room ${targetRoomId} not available for this reservation`);
       }
       if (room.isOutOfOrder) {
         throw new ConflictException(`Room ${targetRoomId} is out of order`);
@@ -721,9 +683,7 @@ export class ReservationsService {
         select: { id: true, isOutOfOrder: true },
       });
       if (!room) {
-        throw new BadRequestException(
-          `Room ${input.roomId} not found or wrong room type`,
-        );
+        throw new BadRequestException(`Room ${input.roomId} not found or wrong room type`);
       }
       if (room.isOutOfOrder) {
         throw new ConflictException(`Room ${input.roomId} is out of order`);

@@ -1,23 +1,9 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
-import {
-  Prisma,
-  ReservationStatus,
-  RoomStatus,
-} from '@pms/db';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma, ReservationStatus, RoomStatus } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
-import {
-  AvailabilityQuery,
-  ChangeStatusDto,
-  ListRoomsQuery,
-  SearchAvailabilityQuery,
-} from './dto';
+import { AvailabilityQuery, ChangeStatusDto, ListRoomsQuery, SearchAvailabilityQuery } from './dto';
 
 @Injectable()
 export class RoomsService {
@@ -37,8 +23,7 @@ export class RoomsService {
     const where: Prisma.RoomWhereInput = { deletedAt: null };
     if (query.propertyId) where.propertyId = query.propertyId;
     if (query.roomTypeId) where.roomTypeId = query.roomTypeId;
-    if (query.status)
-      where.status = RoomStatus[query.status as keyof typeof RoomStatus];
+    if (query.status) where.status = RoomStatus[query.status as keyof typeof RoomStatus];
     if (query.floor) where.floor = query.floor;
 
     const rows = await this.prisma.withTenant(ctx, (tx) =>
@@ -110,11 +95,7 @@ export class RoomsService {
       });
 
       const days: string[] = [];
-      for (
-        let d = new Date(fromDate);
-        d < toDate;
-        d.setDate(d.getDate() + 1)
-      ) {
+      for (let d = new Date(fromDate); d < toDate; d.setDate(d.getDate() + 1)) {
         days.push(d.toISOString().slice(0, 10));
       }
 
@@ -199,13 +180,9 @@ export class RoomsService {
         },
         select: { roomId: true },
       });
-      const taken = new Set(
-        overlapping.map((r) => r.roomId).filter((id): id is string => !!id),
-      );
+      const taken = new Set(overlapping.map((r) => r.roomId).filter((id): id is string => !!id));
 
-      return candidates
-        .filter((r) => !taken.has(r.id))
-        .map(toRoomListItem);
+      return candidates.filter((r) => !taken.has(r.id)).map(toRoomListItem);
     });
   }
 
@@ -236,9 +213,7 @@ export class RoomsService {
         data: {
           status: RoomStatus[input.status as keyof typeof RoomStatus],
           isOutOfOrder,
-          outOfOrderReason: isOutOfOrder
-            ? input.outOfOrderReason ?? null
-            : null,
+          outOfOrderReason: isOutOfOrder ? (input.outOfOrderReason ?? null) : null,
         },
         select: { id: true, status: true, number: true, propertyId: true },
       });

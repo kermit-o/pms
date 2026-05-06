@@ -27,9 +27,7 @@ export const folioPaymentReceivedV1 = baseFolio.extend({
   newBalance: z.string(),
   postedAt: z.string(),
 });
-export type FolioPaymentReceivedV1Payload = z.infer<
-  typeof folioPaymentReceivedV1
->;
+export type FolioPaymentReceivedV1Payload = z.infer<typeof folioPaymentReceivedV1>;
 
 export const folioClosedV1 = baseFolio.extend({
   closedAt: z.string(),

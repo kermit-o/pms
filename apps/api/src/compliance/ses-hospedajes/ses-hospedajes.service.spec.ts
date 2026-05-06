@@ -1,13 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { SesSubmissionStatus } from '@pms/db';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../../auth';
 import { SesHospedajesService } from './ses-hospedajes.service';
 
@@ -65,12 +58,8 @@ function buildService(opts: {
 }) {
   const propertyFindFirst = vi.fn().mockResolvedValue(opts.property ?? null);
   const reservationFindMany = vi.fn().mockResolvedValue(sampleReservations);
-  const submissionFindFirst = vi
-    .fn()
-    .mockResolvedValue(opts.existingSubmission ?? null);
-  const submissionCreate = vi
-    .fn()
-    .mockResolvedValue({ id: SUBMISSION_ID });
+  const submissionFindFirst = vi.fn().mockResolvedValue(opts.existingSubmission ?? null);
+  const submissionCreate = vi.fn().mockResolvedValue({ id: SUBMISSION_ID });
   const submissionUpdate = vi.fn().mockResolvedValue({});
   const submissionFindMany = vi.fn().mockResolvedValue([]);
 
@@ -95,11 +84,7 @@ function buildService(opts: {
     }),
   };
 
-  const service = new SesHospedajesService(
-    prisma as never,
-    events as never,
-    config as never,
-  );
+  const service = new SesHospedajesService(prisma as never, events as never, config as never);
   return { service, tx, events };
 }
 
@@ -114,9 +99,7 @@ describe('SesHospedajesService.queue', () => {
     expect(out.xmlPayload).toContain('<comunicacion');
     expect(out.xmlPayload).toContain('<numeroDocumento>12345678Z</numeroDocumento>');
     expect(tx.sesHospedajesSubmission.create).toHaveBeenCalledOnce();
-    expect(events.publish.mock.calls[0]![0]).toBe(
-      'compliance.ses_submission_queued',
-    );
+    expect(events.publish.mock.calls[0]![0]).toBe('compliance.ses_submission_queued');
   });
 
   it('reuses existing FAILED submission and resets retry counter', async () => {
@@ -191,9 +174,7 @@ describe('SesHospedajesService.send', () => {
     vi.unstubAllGlobals();
   });
 
-  function existing(
-    overrides: Partial<SubmissionRow> = {},
-  ): SubmissionRow {
+  function existing(overrides: Partial<SubmissionRow> = {}): SubmissionRow {
     return {
       id: SUBMISSION_ID,
       propertyId: PROPERTY_ID,
@@ -219,9 +200,7 @@ describe('SesHospedajesService.send', () => {
     const data = tx.sesHospedajesSubmission.update.mock.calls[0]![0].data;
     expect(data.status).toBe(SesSubmissionStatus.SENT);
     expect(data.responseCode).toBe(200);
-    expect(events.publish.mock.calls[0]![0]).toBe(
-      'compliance.ses_submission_sent',
-    );
+    expect(events.publish.mock.calls[0]![0]).toBe('compliance.ses_submission_sent');
   });
 
   it('marks SENT when endpoint returns 200', async () => {
@@ -253,9 +232,7 @@ describe('SesHospedajesService.send', () => {
     const data = tx.sesHospedajesSubmission.update.mock.calls[0]![0].data;
     expect(data.retryCount).toBe(1);
     expect(data.nextAttemptAt).toBeInstanceOf(Date);
-    expect(events.publish.mock.calls[0]![0]).toBe(
-      'compliance.ses_submission_failed',
-    );
+    expect(events.publish.mock.calls[0]![0]).toBe('compliance.ses_submission_failed');
     const payload = events.publish.mock.calls[0]![2] as { deadLetter: boolean };
     expect(payload.deadLetter).toBe(false);
   });
@@ -292,8 +269,8 @@ describe('SesHospedajesService.send', () => {
     const { service } = buildService({
       existingSubmission: existing({ status: SesSubmissionStatus.DEAD_LETTER }),
     });
-    await expect(
-      service.send(user, 'corr', SUBMISSION_ID),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.send(user, 'corr', SUBMISSION_ID)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 });

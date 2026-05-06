@@ -6,8 +6,7 @@ import { ReservationStatus as PrismaReservationStatus } from '@pms/db';
  * everywhere.
  */
 export const ReservationStatus = PrismaReservationStatus;
-export type ReservationStatus =
-  (typeof ReservationStatus)[keyof typeof ReservationStatus];
+export type ReservationStatus = (typeof ReservationStatus)[keyof typeof ReservationStatus];
 
 const TRANSITIONS: Record<ReservationStatus, ReservationStatus[]> = {
   PENDING: ['CONFIRMED', 'CANCELLED', 'NO_SHOW', 'CHECKED_IN'],
@@ -18,10 +17,7 @@ const TRANSITIONS: Record<ReservationStatus, ReservationStatus[]> = {
   NO_SHOW: [],
 };
 
-export function canTransition(
-  from: ReservationStatus,
-  to: ReservationStatus,
-): boolean {
+export function canTransition(from: ReservationStatus, to: ReservationStatus): boolean {
   return TRANSITIONS[from].includes(to);
 }
 
@@ -35,10 +31,7 @@ export class IllegalReservationTransitionError extends Error {
   }
 }
 
-export function assertTransition(
-  from: ReservationStatus,
-  to: ReservationStatus,
-): void {
+export function assertTransition(from: ReservationStatus, to: ReservationStatus): void {
   if (!canTransition(from, to)) {
     throw new IllegalReservationTransitionError(from, to);
   }

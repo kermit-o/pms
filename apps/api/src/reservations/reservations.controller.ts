@@ -39,11 +39,7 @@ export class ReservationsController {
 
   @Post()
   @Roles(...FRONT_DESK_ROLES)
-  async create(
-    @CurrentUser() user: AuthUser,
-    @Req() req: FastifyRequest,
-    @Body() body: unknown,
-  ) {
+  async create(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest, @Body() body: unknown) {
     const input = CreateReservationDto.parse(body);
     return this.reservations.create(user, correlationIdOf(req), input);
   }

@@ -35,14 +35,10 @@ export default defineConfig({
         timeout: 60_000,
         reuseExistingServer: !process.env.CI,
         env: {
-          KEYCLOAK_ISSUER:
-            process.env.KEYCLOAK_ISSUER ??
-            'http://localhost:8080/realms/pms',
-          AUTH_SECRET:
-            process.env.AUTH_SECRET ?? 'e2e-only-secret-32chars-padding',
+          KEYCLOAK_ISSUER: process.env.KEYCLOAK_ISSUER ?? 'http://localhost:8080/realms/pms',
+          AUTH_SECRET: process.env.AUTH_SECRET ?? 'e2e-only-secret-32chars-padding',
           AUTH_TRUST_HOST: 'true',
-          NEXT_PUBLIC_API_URL:
-            process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000',
+          NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000',
         },
       },
 });

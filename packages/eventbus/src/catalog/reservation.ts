@@ -55,9 +55,7 @@ export const reservationRoomAssignedV1 = baseReservation.extend({
   previousRoomId: z.string().uuid().nullable(),
   assignedAt: z.string(),
 });
-export type ReservationRoomAssignedV1Payload = z.infer<
-  typeof reservationRoomAssignedV1
->;
+export type ReservationRoomAssignedV1Payload = z.infer<typeof reservationRoomAssignedV1>;
 
 export const reservationGroupCreatedV1 = z.object({
   groupId: z.string().uuid(),
@@ -66,6 +64,4 @@ export const reservationGroupCreatedV1 = z.object({
   name: z.string().min(1),
   reservationIds: z.array(z.string().uuid()).min(1),
 });
-export type ReservationGroupCreatedV1Payload = z.infer<
-  typeof reservationGroupCreatedV1
->;
+export type ReservationGroupCreatedV1Payload = z.infer<typeof reservationGroupCreatedV1>;

@@ -5,30 +5,20 @@ import type { SesSubmissionDetail } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SesSubmissionDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function SesSubmissionDetailPage({ params }: { params: { id: string } }) {
   const session = await auth();
   let detail: SesSubmissionDetail | null = null;
   let error: string | null = null;
   try {
     detail = await getSesSubmission(session?.accessToken, params.id);
   } catch (err) {
-    error =
-      err instanceof ApiError
-        ? `API ${err.status}: ${err.body}`
-        : (err as Error).message;
+    error = err instanceof ApiError ? `API ${err.status}: ${err.body}` : (err as Error).message;
   }
 
   if (error) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <Link
-          href="/compliance/ses"
-          className="text-sm text-aubergine-500 hover:underline"
-        >
+        <Link href="/compliance/ses" className="text-sm text-aubergine-500 hover:underline">
           ← Volver a envíos
         </Link>
         <div className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-100">
@@ -73,15 +63,10 @@ export default async function SesSubmissionDetailPage({
         </h2>
         <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-aubergine-900">
           <Item label="Código HTTP" value={detail.responseCode ?? '—'} />
-          <Item
-            label="Enviado"
-            value={detail.submittedAt ?? 'pendiente'}
-          />
+          <Item label="Enviado" value={detail.submittedAt ?? 'pendiente'} />
           {detail.responseBody && (
             <div className="col-span-2">
-              <dt className="text-xs uppercase tracking-wide text-aubergine-500">
-                Cuerpo
-              </dt>
+              <dt className="text-xs uppercase tracking-wide text-aubergine-500">Cuerpo</dt>
               <dd className="mt-0.5 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-aubergine-50/50 p-2 font-mono text-xs">
                 {detail.responseBody}
               </dd>
@@ -98,7 +83,7 @@ export default async function SesSubmissionDetailPage({
           SHA-256: <code className="font-mono">{detail.xmlSignature ?? '—'}</code>
         </p>
         <pre className="mt-3 max-h-[480px] overflow-auto rounded-lg bg-aubergine-50/40 p-3 font-mono text-xs leading-relaxed">
-{detail.xmlPayload ?? '(sin payload)'}
+          {detail.xmlPayload ?? '(sin payload)'}
         </pre>
       </section>
     </main>
@@ -108,9 +93,7 @@ export default async function SesSubmissionDetailPage({
 function Item({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-aubergine-500">
-        {label}
-      </dt>
+      <dt className="text-xs uppercase tracking-wide text-aubergine-500">{label}</dt>
       <dd className="mt-0.5 font-medium">{value}</dd>
     </div>
   );

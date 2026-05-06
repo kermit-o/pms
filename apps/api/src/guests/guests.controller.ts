@@ -12,12 +12,7 @@ import {
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
-import {
-  CreateGuestDto,
-  EraseGuestDto,
-  ListGuestsQuery,
-  PatchGuestDto,
-} from './dto';
+import { CreateGuestDto, EraseGuestDto, ListGuestsQuery, PatchGuestDto } from './dto';
 import { GuestsService } from './guests.service';
 
 const FRONT_DESK_ROLES = ['tenant_admin', 'front_desk'] as const;
@@ -50,11 +45,7 @@ export class GuestsController {
 
   @Post()
   @Roles(...FRONT_DESK_ROLES)
-  async create(
-    @CurrentUser() user: AuthUser,
-    @Req() req: FastifyRequest,
-    @Body() body: unknown,
-  ) {
+  async create(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest, @Body() body: unknown) {
     const input = CreateGuestDto.parse(body);
     return this.guests.create(user, correlationIdOf(req), input);
   }

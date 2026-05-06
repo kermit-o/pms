@@ -1,8 +1,6 @@
 import { z } from 'zod';
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 
 const guestDataShape = z.object({
   firstName: z.string().min(1),
@@ -53,10 +51,10 @@ export const PatchReservationDto = z
     occupancy: occupancyShape.optional(),
     notes: z.string().max(2000).optional(),
   })
-  .refine(
-    (v) => !(v.arrival && v.departure) || v.departure > v.arrival,
-    { message: 'departure must be after arrival', path: ['departure'] },
-  );
+  .refine((v) => !(v.arrival && v.departure) || v.departure > v.arrival, {
+    message: 'departure must be after arrival',
+    path: ['departure'],
+  });
 
 export type PatchReservationDto = z.infer<typeof PatchReservationDto>;
 

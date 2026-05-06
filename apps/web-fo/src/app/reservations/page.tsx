@@ -14,8 +14,7 @@ export default async function ReservationsPage() {
     const res = await listReservations(session?.accessToken, { limit: 50 });
     items = res.items;
   } catch (err) {
-    error =
-      err instanceof ApiError ? `API ${err.status}` : (err as Error).message;
+    error = err instanceof ApiError ? `API ${err.status}` : (err as Error).message;
   }
 
   return (
@@ -64,12 +63,8 @@ export default async function ReservationsPage() {
           <tbody className="divide-y divide-aubergine-100/70">
             {items.length === 0 && !error && (
               <tr>
-                <td
-                  colSpan={6}
-                  className="px-4 py-12 text-center text-aubergine-700/60"
-                >
-                  Sin reservas todavía. Crea la primera con &quot;Nueva
-                  reserva&quot;.
+                <td colSpan={6} className="px-4 py-12 text-center text-aubergine-700/60">
+                  Sin reservas todavía. Crea la primera con &quot;Nueva reserva&quot;.
                 </td>
               </tr>
             )}

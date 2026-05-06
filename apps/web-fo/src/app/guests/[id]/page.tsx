@@ -2,21 +2,12 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
-import {
-  ApiError,
-  eraseGuest,
-  getGuest,
-  patchGuest,
-} from '@/lib/api';
+import { ApiError, eraseGuest, getGuest, patchGuest } from '@/lib/api';
 import type { GuestDetail } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
-export default async function GuestDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function GuestDetailPage({ params }: { params: { id: string } }) {
   const session = await auth();
   const guestId = params.id;
 
@@ -25,10 +16,7 @@ export default async function GuestDetailPage({
   try {
     guest = await getGuest(session?.accessToken, guestId);
   } catch (err) {
-    error =
-      err instanceof ApiError
-        ? `API ${err.status}: ${err.body}`
-        : (err as Error).message;
+    error = err instanceof ApiError ? `API ${err.status}: ${err.body}` : (err as Error).message;
   }
 
   async function update(formData: FormData) {
@@ -92,9 +80,7 @@ export default async function GuestDetailPage({
       </Link>
 
       <header>
-        <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
-          Aubergine · Cardex
-        </p>
+        <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">Aubergine · Cardex</p>
         <h1 className="text-3xl font-semibold text-aubergine-700">
           {guest.lastName}, {guest.firstName}
         </h1>
@@ -122,11 +108,7 @@ export default async function GuestDetailPage({
         </Section>
 
         <Section title="Documento (cardex / SES.HOSPEDAJES)">
-          <Select
-            label="Tipo"
-            name="documentType"
-            defaultValue={guest.documentType ?? ''}
-          >
+          <Select label="Tipo" name="documentType" defaultValue={guest.documentType ?? ''}>
             <option value="">—</option>
             <option value="DNI">DNI</option>
             <option value="NIE">NIE</option>
@@ -134,25 +116,13 @@ export default async function GuestDetailPage({
             <option value="EU_ID">EU ID</option>
             <option value="OTHER">Otro</option>
           </Select>
-          <Field
-            label="Número"
-            name="documentNumber"
-            defaultValue={guest.documentNumber ?? ''}
-          />
+          <Field label="Número" name="documentNumber" defaultValue={guest.documentNumber ?? ''} />
         </Section>
 
         <Section title="Dirección">
-          <Field
-            label="Línea 1"
-            name="addressLine1"
-            defaultValue={guest.addressLine1 ?? ''}
-          />
+          <Field label="Línea 1" name="addressLine1" defaultValue={guest.addressLine1 ?? ''} />
           <Field label="Ciudad" name="city" defaultValue={guest.city ?? ''} />
-          <Field
-            label="Código postal"
-            name="postalCode"
-            defaultValue={guest.postalCode ?? ''}
-          />
+          <Field label="Código postal" name="postalCode" defaultValue={guest.postalCode ?? ''} />
           <Field
             label="País (ISO-2)"
             name="country"
@@ -162,11 +132,7 @@ export default async function GuestDetailPage({
         </Section>
 
         <Section title="Consentimientos">
-          <Checkbox
-            label="GDPR consent"
-            name="gdprConsent"
-            defaultChecked={guest.gdprConsent}
-          />
+          <Checkbox label="GDPR consent" name="gdprConsent" defaultChecked={guest.gdprConsent} />
           <Checkbox
             label="Marketing consent"
             name="marketingConsent"
@@ -175,9 +141,7 @@ export default async function GuestDetailPage({
         </Section>
 
         <div>
-          <label className="block text-sm font-medium text-aubergine-700">
-            Notas
-          </label>
+          <label className="block text-sm font-medium text-aubergine-700">Notas</label>
           <textarea
             name="notes"
             rows={3}
@@ -197,13 +161,11 @@ export default async function GuestDetailPage({
       </form>
 
       <section className="space-y-3 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-aubergine-100">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-aubergine-500">
-          GDPR
-        </h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-aubergine-500">GDPR</h2>
         <p className="text-xs text-aubergine-700/70">
-          Derechos del titular bajo el RGPD. Las acciones quedan en el audit
-          log; los registros financieros (folio) se preservan por la
-          normativa fiscal española aunque los datos personales se borren.
+          Derechos del titular bajo el RGPD. Las acciones quedan en el audit log; los registros
+          financieros (folio) se preservan por la normativa fiscal española aunque los datos
+          personales se borren.
         </p>
         <div className="flex flex-wrap gap-2">
           <a
@@ -214,14 +176,9 @@ export default async function GuestDetailPage({
           </a>
         </div>
         <form action={erase} className="space-y-2 border-t border-aubergine-100 pt-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-rose-700">
-            Borrado
-          </h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-rose-700">Borrado</h3>
           <Field label="Motivo" name="reason" required />
-          <Checkbox
-            label="Borrado duro (sólo admin, retención cumplida)"
-            name="hard"
-          />
+          <Checkbox label="Borrado duro (sólo admin, retención cumplida)" name="hard" />
           <button
             type="submit"
             className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-700"
@@ -240,13 +197,7 @@ function stringOrUndef(v: FormDataEntryValue | null): string | undefined {
   return trimmed === '' ? undefined : trimmed;
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <fieldset>
       <legend className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">

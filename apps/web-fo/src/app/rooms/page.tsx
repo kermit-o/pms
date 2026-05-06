@@ -23,8 +23,7 @@ export default async function RoomsPage({ searchParams }: PageProps) {
   try {
     rooms = await listRooms(session?.accessToken, { propertyId });
   } catch (err) {
-    error =
-      err instanceof ApiError ? `API ${err.status}` : (err as Error).message;
+    error = err instanceof ApiError ? `API ${err.status}` : (err as Error).message;
   }
 
   async function setStatus(formData: FormData) {
@@ -52,13 +51,11 @@ export default async function RoomsPage({ searchParams }: PageProps) {
         <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
           Aubergine · Habitaciones
         </p>
-        <h1 className="text-3xl font-semibold text-aubergine-700">
-          Estado de habitaciones
-        </h1>
+        <h1 className="text-3xl font-semibold text-aubergine-700">Estado de habitaciones</h1>
         <p className="text-sm text-aubergine-700/70">
           Cambios reflejan en el calendar y disparan{' '}
-          <code className="rounded bg-aubergine-50 px-1 py-0.5">room.status_changed</code>{' '}
-          al bus de eventos.
+          <code className="rounded bg-aubergine-50 px-1 py-0.5">room.status_changed</code> al bus de
+          eventos.
         </p>
       </header>
 
@@ -92,9 +89,7 @@ export default async function RoomsPage({ searchParams }: PageProps) {
                   <td className="px-4 py-3">
                     <StatusBadge status={r.status} />
                   </td>
-                  <td className="px-4 py-3 text-aubergine-700/70">
-                    {r.outOfOrderReason ?? '—'}
-                  </td>
+                  <td className="px-4 py-3 text-aubergine-700/70">{r.outOfOrderReason ?? '—'}</td>
                   <td className="px-4 py-3 text-right">
                     <form action={setStatus} className="inline-flex items-center gap-2">
                       <input type="hidden" name="roomId" value={r.id} />

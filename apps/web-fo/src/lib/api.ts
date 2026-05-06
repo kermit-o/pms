@@ -16,9 +16,7 @@ export interface DashboardKpis {
   occupancyPct: number;
 }
 
-export async function fetchDashboardKpis(
-  _accessToken: string | undefined,
-): Promise<DashboardKpis> {
+export async function fetchDashboardKpis(_accessToken: string | undefined): Promise<DashboardKpis> {
   return {
     arrivalsToday: 0,
     departuresToday: 0,
@@ -31,10 +29,7 @@ interface ApiInit extends RequestInit {
   accessToken?: string;
 }
 
-export async function apiFetch<T = unknown>(
-  path: string,
-  init: ApiInit = {},
-): Promise<T> {
+export async function apiFetch<T = unknown>(path: string, init: ApiInit = {}): Promise<T> {
   const { accessToken, headers, ...rest } = init;
   const merged: HeadersInit = {
     'content-type': 'application/json',
@@ -266,10 +261,7 @@ export async function listGuests(
   return apiFetch(`/guests${q ? `?${q}` : ''}`, { accessToken });
 }
 
-export async function getGuest(
-  accessToken: string | undefined,
-  id: string,
-): Promise<GuestDetail> {
+export async function getGuest(accessToken: string | undefined, id: string): Promise<GuestDetail> {
   return apiFetch(`/guests/${id}`, { accessToken });
 }
 
@@ -324,12 +316,7 @@ export async function eraseGuest(
 // Rooms
 // ---------------------------------------------------------------------------
 
-export type RoomStatus =
-  | 'CLEAN'
-  | 'DIRTY'
-  | 'INSPECTED'
-  | 'OUT_OF_ORDER'
-  | 'OUT_OF_SERVICE';
+export type RoomStatus = 'CLEAN' | 'DIRTY' | 'INSPECTED' | 'OUT_OF_ORDER' | 'OUT_OF_SERVICE';
 
 export interface RoomListItem {
   id: string;
@@ -462,11 +449,7 @@ export async function reopenBusinessDay(
 // SES.HOSPEDAJES
 // ---------------------------------------------------------------------------
 
-export type SesSubmissionStatus =
-  | 'QUEUED'
-  | 'SENT'
-  | 'FAILED'
-  | 'DEAD_LETTER';
+export type SesSubmissionStatus = 'QUEUED' | 'SENT' | 'FAILED' | 'DEAD_LETTER';
 
 export interface SesSubmission {
   id: string;
@@ -503,10 +486,7 @@ export async function listSesSubmissions(
   if (query.from) params.set('from', query.from);
   if (query.to) params.set('to', query.to);
   const q = params.toString();
-  return apiFetch(
-    `/compliance/ses-hospedajes/submissions${q ? `?${q}` : ''}`,
-    { accessToken },
-  );
+  return apiFetch(`/compliance/ses-hospedajes/submissions${q ? `?${q}` : ''}`, { accessToken });
 }
 
 export async function getSesSubmission(

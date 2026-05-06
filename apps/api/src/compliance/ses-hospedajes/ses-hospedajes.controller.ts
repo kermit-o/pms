@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  Query,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../../auth';
 import type { AuthUser } from '../../auth';
@@ -44,11 +35,7 @@ export class SesHospedajesController {
 
   @Post()
   @Roles(...ROLES_WRITE)
-  async queue(
-    @CurrentUser() user: AuthUser,
-    @Req() req: FastifyRequest,
-    @Body() body: unknown,
-  ) {
+  async queue(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest, @Body() body: unknown) {
     const input = QueueSubmissionDto.parse(body);
     return this.service.queue(user, correlationIdOf(req), input);
   }

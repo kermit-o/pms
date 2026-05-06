@@ -1,10 +1,6 @@
 import Link from 'next/link';
 import { auth } from '@/auth';
-import {
-  ApiError,
-  getRoomAvailability,
-  type AvailabilityMatrix,
-} from '@/lib/api';
+import { ApiError, getRoomAvailability, type AvailabilityMatrix } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,8 +32,7 @@ export default async function CalendarPage({ searchParams }: PageProps) {
         to,
       });
     } catch (err) {
-      error =
-        err instanceof ApiError ? `API ${err.status}` : (err as Error).message;
+      error = err instanceof ApiError ? `API ${err.status}` : (err as Error).message;
     }
   }
 
@@ -213,23 +208,15 @@ function Grid({ matrix }: { matrix: AvailabilityMatrix }) {
             <tr key={room.id}>
               <td className="sticky left-0 z-10 w-32 border-t border-aubergine-100 bg-white px-3 py-2 font-mono text-xs text-aubergine-700">
                 {room.number}
-                {room.floor && (
-                  <span className="ml-2 text-aubergine-700/50">P{room.floor}</span>
-                )}
+                {room.floor && <span className="ml-2 text-aubergine-700/50">P{room.floor}</span>}
               </td>
               {dayMeta.map((d) => {
                 const cell = matrix.cells[room.id]?.[d.iso];
                 if (!cell) {
-                  return (
-                    <td
-                      key={d.iso}
-                      className="h-10 border-t border-aubergine-100 px-0.5"
-                    />
-                  );
+                  return <td key={d.iso} className="h-10 border-t border-aubergine-100 px-0.5" />;
                 }
                 const cls = cellStyle(cell.state, d.isWeekend);
-                const startsHere =
-                  cell.reservation && cell.reservation.arrivalDate === d.iso;
+                const startsHere = cell.reservation && cell.reservation.arrivalDate === d.iso;
                 return (
                   <td
                     key={d.iso}

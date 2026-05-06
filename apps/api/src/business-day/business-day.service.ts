@@ -1,9 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { BusinessDayStatus, Prisma } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
@@ -41,10 +36,8 @@ export class BusinessDayService {
     };
     if (query.from || query.to) {
       where.businessDate = {};
-      if (query.from)
-        (where.businessDate as Prisma.DateTimeFilter).gte = new Date(query.from);
-      if (query.to)
-        (where.businessDate as Prisma.DateTimeFilter).lte = new Date(query.to);
+      if (query.from) (where.businessDate as Prisma.DateTimeFilter).gte = new Date(query.from);
+      if (query.to) (where.businessDate as Prisma.DateTimeFilter).lte = new Date(query.to);
     }
     const rows = await this.prisma.withTenant(ctx, (tx) =>
       tx.businessDayState.findMany({
@@ -96,9 +89,7 @@ export class BusinessDayService {
         where: { propertyId: input.propertyId, businessDate },
       });
       if (existing && existing.status === BusinessDayStatus.CLOSED) {
-        throw new ConflictException(
-          `Business day ${input.businessDate} is already closed`,
-        );
+        throw new ConflictException(`Business day ${input.businessDate} is already closed`);
       }
       if (existing) {
         await tx.businessDayState.update({
@@ -157,14 +148,10 @@ export class BusinessDayService {
         where: { propertyId: input.propertyId, businessDate },
       });
       if (!existing) {
-        throw new NotFoundException(
-          `No business-day record for ${input.businessDate}`,
-        );
+        throw new NotFoundException(`No business-day record for ${input.businessDate}`);
       }
       if (existing.status !== BusinessDayStatus.CLOSED) {
-        throw new ConflictException(
-          `Business day ${input.businessDate} is not closed`,
-        );
+        throw new ConflictException(`Business day ${input.businessDate} is not closed`);
       }
       await tx.businessDayState.update({
         where: {

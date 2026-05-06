@@ -31,11 +31,7 @@ interface ReservationDetail {
   folio: { id: string; status: string; balance: string; currency: string } | null;
 }
 
-export default async function ReservationDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function ReservationDetailPage({ params }: { params: { id: string } }) {
   const session = await auth();
 
   let detail: ReservationDetail | null = null;
@@ -45,19 +41,13 @@ export default async function ReservationDetailPage({
       accessToken: session?.accessToken,
     });
   } catch (err) {
-    error =
-      err instanceof ApiError
-        ? `API ${err.status}: ${err.body}`
-        : (err as Error).message;
+    error = err instanceof ApiError ? `API ${err.status}: ${err.body}` : (err as Error).message;
   }
 
   if (error) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <Link
-          href="/reservations"
-          className="text-sm text-aubergine-500 hover:underline"
-        >
+        <Link href="/reservations" className="text-sm text-aubergine-500 hover:underline">
           ← Volver a reservas
         </Link>
         <div className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-100">
@@ -75,9 +65,7 @@ export default async function ReservationDetailPage({
       folio = await getFolio(session?.accessToken, detail.folio.id);
     } catch (err) {
       folioError =
-        err instanceof ApiError
-          ? `API ${err.status}: ${err.body}`
-          : (err as Error).message;
+        err instanceof ApiError ? `API ${err.status}: ${err.body}` : (err as Error).message;
     }
   }
 
@@ -107,9 +95,11 @@ export default async function ReservationDetailPage({
     if (!folio) throw new Error('No folio');
     const description = formData.get('description')?.toString().trim();
     const amount = Number(formData.get('amount') ?? '0');
-    const paymentMethod = formData
-      .get('paymentMethod')
-      ?.toString() as 'CASH' | 'CARD' | 'BANK_TRANSFER' | 'OTHER';
+    const paymentMethod = formData.get('paymentMethod')?.toString() as
+      | 'CASH'
+      | 'CARD'
+      | 'BANK_TRANSFER'
+      | 'OTHER';
     const reference = formData.get('reference')?.toString().trim() || undefined;
     if (!description || !amount || !paymentMethod) {
       throw new Error('Faltan campos');
@@ -134,10 +124,7 @@ export default async function ReservationDetailPage({
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-10">
-      <Link
-        href="/reservations"
-        className="text-sm text-aubergine-500 hover:underline"
-      >
+      <Link href="/reservations" className="text-sm text-aubergine-500 hover:underline">
         ← Volver a reservas
       </Link>
 
@@ -146,12 +133,10 @@ export default async function ReservationDetailPage({
           <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
             Aubergine · Reservas
           </p>
-          <h1 className="font-mono text-3xl font-semibold text-aubergine-700">
-            {detail.code}
-          </h1>
+          <h1 className="font-mono text-3xl font-semibold text-aubergine-700">{detail.code}</h1>
           <p className="text-sm text-aubergine-700/70">
-            {detail.status.toLowerCase().replace('_', ' ')} ·{' '}
-            {detail.arrivalDate} → {detail.departureDate}
+            {detail.status.toLowerCase().replace('_', ' ')} · {detail.arrivalDate} →{' '}
+            {detail.departureDate}
           </p>
         </div>
       </header>
@@ -160,19 +145,13 @@ export default async function ReservationDetailPage({
         <Section title="Estancia">
           <Item label="Adultos" value={detail.adults} />
           <Item label="Niños" value={detail.children} />
-          <Item
-            label="Total reserva"
-            value={`${detail.totalAmount} ${detail.currency}`}
-          />
+          <Item label="Total reserva" value={`${detail.totalAmount} ${detail.currency}`} />
           {detail.notes && <Item label="Notas" value={detail.notes} />}
         </Section>
 
         {primary && (
           <Section title="Huésped principal">
-            <Item
-              label="Nombre"
-              value={`${primary.firstName} ${primary.lastName}`}
-            />
+            <Item label="Nombre" value={`${primary.firstName} ${primary.lastName}`} />
             <Item label="Email" value={primary.email ?? '—'} />
             <div className="col-span-2">
               <Link
@@ -192,7 +171,14 @@ export default async function ReservationDetailPage({
         </div>
       )}
 
-      {folio && <FolioPanel folio={folio} addCharge={addCharge} addPayment={addPayment} settleFolio={settleFolio} />}
+      {folio && (
+        <FolioPanel
+          folio={folio}
+          addCharge={addCharge}
+          addPayment={addPayment}
+          settleFolio={settleFolio}
+        />
+      )}
     </main>
   );
 }
@@ -219,15 +205,11 @@ function FolioPanel({
           <p className="text-xs text-aubergine-700/60">{folio.id}</p>
         </div>
         <div className="text-right">
-          <p className="text-xs uppercase tracking-wide text-aubergine-500">
-            Balance
-          </p>
+          <p className="text-xs uppercase tracking-wide text-aubergine-500">Balance</p>
           <p className="text-2xl font-semibold text-aubergine-700">
             {folio.balance} {folio.currency}
           </p>
-          <p className="text-xs text-aubergine-700/60">
-            Estado: {folio.status.toLowerCase()}
-          </p>
+          <p className="text-xs text-aubergine-700/60">Estado: {folio.status.toLowerCase()}</p>
         </div>
       </div>
 
@@ -277,10 +259,7 @@ function FolioPanel({
 
       {isOpen && (
         <div className="mt-6 grid gap-6 md:grid-cols-2">
-          <form
-            action={addCharge}
-            className="space-y-3 rounded-xl bg-aubergine-50/40 p-4"
-          >
+          <form action={addCharge} className="space-y-3 rounded-xl bg-aubergine-50/40 p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
               Añadir cargo
             </h3>
@@ -298,10 +277,7 @@ function FolioPanel({
             </button>
           </form>
 
-          <form
-            action={addPayment}
-            className="space-y-3 rounded-xl bg-emerald-50/50 p-4"
-          >
+          <form action={addPayment} className="space-y-3 rounded-xl bg-emerald-50/50 p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
               Registrar pago
             </h3>
@@ -339,21 +315,11 @@ function FolioPanel({
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-aubergine-100">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-aubergine-500">
-        {title}
-      </h2>
-      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-aubergine-900">
-        {children}
-      </dl>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-aubergine-500">{title}</h2>
+      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-aubergine-900">{children}</dl>
     </section>
   );
 }
@@ -361,23 +327,13 @@ function Section({
 function Item({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-aubergine-500">
-        {label}
-      </dt>
+      <dt className="text-xs uppercase tracking-wide text-aubergine-500">{label}</dt>
       <dd className="mt-0.5 font-medium">{value}</dd>
     </div>
   );
 }
 
-function FieldText({
-  name,
-  label,
-  required,
-}: {
-  name: string;
-  label: string;
-  required?: boolean;
-}) {
+function FieldText({ name, label, required }: { name: string; label: string; required?: boolean }) {
   return (
     <label className="block text-sm">
       <span className="font-medium text-aubergine-700">{label}</span>

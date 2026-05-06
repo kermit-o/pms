@@ -224,14 +224,14 @@ Salimos de Sprint 2 con un sistema **piloteable por un hotel boutique español r
 
 **MCP tools (catálogo `packages/mcp-tools/src/catalog/fo/`):**
 
-| Tool | Input schema (Zod) | Output | Side-effects |
-|------|--------------------|--------|--------------|
-| `query_availability` | `{ from, to, roomTypeId? }` | matriz disponibilidad | none (read-only) |
-| `create_reservation` | `{ guestId | guestData, arrival, departure, roomTypeId, ratePlanId, occupancy, notes? }` | `{ reservationId }` | publish `reservation.created` |
-| `check_in` | `{ reservationId, roomId? }` | `{ ok, reservationId, roomId }` | publish `reservation.checked_in` |
-| `check_out` | `{ reservationId, settle: bool }` | `{ ok, reservationId, balance }` | publish `reservation.checked_out` |
-| `add_folio_charge` | `{ folioId, description, amount, taxRate, idempotencyKey }` | `{ entryId }` | publish `folio.charge_added` |
-| `assign_room` | `{ reservationId, roomId }` | `{ ok }` | publish `reservation.room_assigned` |
+| Tool                 | Input schema (Zod)                                          | Output                                                                      | Side-effects                        |
+| -------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------- | ----------------------------- |
+| `query_availability` | `{ from, to, roomTypeId? }`                                 | matriz disponibilidad                                                       | none (read-only)                    |
+| `create_reservation` | `{ guestId                                                  | guestData, arrival, departure, roomTypeId, ratePlanId, occupancy, notes? }` | `{ reservationId }`                 | publish `reservation.created` |
+| `check_in`           | `{ reservationId, roomId? }`                                | `{ ok, reservationId, roomId }`                                             | publish `reservation.checked_in`    |
+| `check_out`          | `{ reservationId, settle: bool }`                           | `{ ok, reservationId, balance }`                                            | publish `reservation.checked_out`   |
+| `add_folio_charge`   | `{ folioId, description, amount, taxRate, idempotencyKey }` | `{ entryId }`                                                               | publish `folio.charge_added`        |
+| `assign_room`        | `{ reservationId, roomId }`                                 | `{ ok }`                                                                    | publish `reservation.room_assigned` |
 
 **Copilot endpoint:**
 
@@ -318,28 +318,28 @@ Todas con RLS, GRANTs a `pms_app`, audit triggers.
 
 > **Nota:** estimación con 1 dev humano + Claude Code, side-project. Ajustable.
 
-| Semana | Foco backend | Foco frontend | Foco compliance/IA |
-|-------|---------------|----------------|---------------------|
-| **1** | Reservations CRUD + state machine + walk-in | Scaffold web-fo + login OIDC + dashboard skeleton | — |
-| **2** | Group bookings + assign-room + reservations.* events | Calendar Mews-style + reservation form | — |
-| **3** | Folio (charges, payments, splits) + idempotencia | Reservation detail + folio UI | — |
-| **4** | Guests cardex + GDPR endpoints | Cardex UI + guests list | — |
-| **5** | Rooms availability + business-day locking | Rooms matrix + close-day UI | — |
-| **6** | — | E2E Playwright + bug bash | SES.HOSPEDAJES sender + worker + DLQ |
-| **7** | MCP FO tools + copiloto endpoint | Copilot sidebar + confirm-tool flow | UAT con hotel piloto + hotfix |
+| Semana | Foco backend                                          | Foco frontend                                     | Foco compliance/IA                   |
+| ------ | ----------------------------------------------------- | ------------------------------------------------- | ------------------------------------ |
+| **1**  | Reservations CRUD + state machine + walk-in           | Scaffold web-fo + login OIDC + dashboard skeleton | —                                    |
+| **2**  | Group bookings + assign-room + reservations.\* events | Calendar Mews-style + reservation form            | —                                    |
+| **3**  | Folio (charges, payments, splits) + idempotencia      | Reservation detail + folio UI                     | —                                    |
+| **4**  | Guests cardex + GDPR endpoints                        | Cardex UI + guests list                           | —                                    |
+| **5**  | Rooms availability + business-day locking             | Rooms matrix + close-day UI                       | —                                    |
+| **6**  | —                                                     | E2E Playwright + bug bash                         | SES.HOSPEDAJES sender + worker + DLQ |
+| **7**  | MCP FO tools + copiloto endpoint                      | Copilot sidebar + confirm-tool flow               | UAT con hotel piloto + hotfix        |
 
 ---
 
 ## 7. Riesgos y mitigaciones
 
-| Riesgo | Probabilidad | Impacto | Mitigación |
-|--------|--------------|---------|------------|
-| Spec real SES.HOSPEDAJES más compleja de lo asumido | Media | Alto | Sprint 6 reserva buffer; reunión temprana con asesor fiscal/legal ES |
-| Calendar Mews-style consume tiempo (drag, virtual scrolling) | Alta | Medio | Empezar con tabla simple en S2-W2, mejorar incremental |
-| Copiloto + tools financieras = riesgo regulatorio si auto-ejecuta | Baja (mitigada) | Alto | Confirmación humana siempre; ADR-020 fija el guardrail |
-| Validación con hoteles llega tarde y obliga a re-modelar | Media | Medio | Pre-work ya cubrió el shape canónico (ADR-018); cambios deberían ser de copy/UX |
-| Performance Calendar con 150 habs × 90 días | Media | Medio | Virtualización (TanStack Virtual) desde el primer commit del calendar |
-| Drift entre eventos publicados y catálogo Zod | Media | Medio | CI verifica que cada `publish()` usa una entry del catálogo |
+| Riesgo                                                            | Probabilidad    | Impacto | Mitigación                                                                      |
+| ----------------------------------------------------------------- | --------------- | ------- | ------------------------------------------------------------------------------- |
+| Spec real SES.HOSPEDAJES más compleja de lo asumido               | Media           | Alto    | Sprint 6 reserva buffer; reunión temprana con asesor fiscal/legal ES            |
+| Calendar Mews-style consume tiempo (drag, virtual scrolling)      | Alta            | Medio   | Empezar con tabla simple en S2-W2, mejorar incremental                          |
+| Copiloto + tools financieras = riesgo regulatorio si auto-ejecuta | Baja (mitigada) | Alto    | Confirmación humana siempre; ADR-020 fija el guardrail                          |
+| Validación con hoteles llega tarde y obliga a re-modelar          | Media           | Medio   | Pre-work ya cubrió el shape canónico (ADR-018); cambios deberían ser de copy/UX |
+| Performance Calendar con 150 habs × 90 días                       | Media           | Medio   | Virtualización (TanStack Virtual) desde el primer commit del calendar           |
+| Drift entre eventos publicados y catálogo Zod                     | Media           | Medio   | CI verifica que cada `publish()` usa una entry del catálogo                     |
 
 ---
 

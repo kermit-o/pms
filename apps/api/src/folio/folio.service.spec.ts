@@ -241,9 +241,7 @@ describe('FolioService.close', () => {
         reservation: { propertyId: PROPERTY_ID },
       },
     });
-    await expect(
-      service.close(user, 'corr', FOLIO_ID),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.close(user, 'corr', FOLIO_ID)).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('rejects close on already-closed folio', async () => {
@@ -257,9 +255,7 @@ describe('FolioService.close', () => {
         reservation: { propertyId: PROPERTY_ID },
       },
     });
-    await expect(
-      service.close(user, 'corr', FOLIO_ID),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.close(user, 'corr', FOLIO_ID)).rejects.toBeInstanceOf(ConflictException);
   });
 });
 
@@ -293,8 +289,8 @@ describe('FolioService.reopen', () => {
         reservation: { propertyId: PROPERTY_ID },
       },
     });
-    await expect(
-      service.reopen(user, 'corr', FOLIO_ID, { reason: 'x' }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.reopen(user, 'corr', FOLIO_ID, { reason: 'x' })).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 });

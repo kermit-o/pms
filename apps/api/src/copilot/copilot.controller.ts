@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
@@ -21,20 +13,14 @@ export class CopilotController {
 
   @Post()
   @Roles(...ROLES)
-  async createSession(
-    @CurrentUser() user: AuthUser,
-    @Body() body: unknown,
-  ) {
+  async createSession(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     const input = CreateSessionDto.parse(body ?? {});
     return this.copilot.createSession(user, input.propertyId);
   }
 
   @Get(':id')
   @Roles(...ROLES)
-  async getSession(
-    @CurrentUser() user: AuthUser,
-    @Param('id', new ParseUUIDPipe()) id: string,
-  ) {
+  async getSession(@CurrentUser() user: AuthUser, @Param('id', new ParseUUIDPipe()) id: string) {
     return this.copilot.getSession(user, id);
   }
 
@@ -47,12 +33,7 @@ export class CopilotController {
     @Body() body: unknown,
   ) {
     const input = SendMessageDto.parse(body);
-    return this.copilot.sendMessage(
-      user,
-      correlationIdOf(req),
-      id,
-      input.content,
-    );
+    return this.copilot.sendMessage(user, correlationIdOf(req), id, input.content);
   }
 
   @Post(':id/confirm-tool')

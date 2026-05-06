@@ -1,8 +1,6 @@
 import { z } from 'zod';
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 
 const documentType = z.enum(['DNI', 'NIE', 'PASSPORT', 'EU_ID', 'OTHER']);
 

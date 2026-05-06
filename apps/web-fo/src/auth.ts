@@ -3,9 +3,7 @@ import Keycloak from 'next-auth/providers/keycloak';
 
 const keycloakIssuer = process.env.KEYCLOAK_ISSUER;
 if (!keycloakIssuer) {
-  throw new Error(
-    'KEYCLOAK_ISSUER not set (e.g. http://localhost:8080/realms/pms)',
-  );
+  throw new Error('KEYCLOAK_ISSUER not set (e.g. http://localhost:8080/realms/pms)');
 }
 
 declare module 'next-auth' {
@@ -41,9 +39,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (typeof claims.tenant_id === 'string') {
           t.tenantId = claims.tenant_id;
         }
-        const realmAccess = claims.realm_access as
-          | { roles?: string[] }
-          | undefined;
+        const realmAccess = claims.realm_access as { roles?: string[] } | undefined;
         if (Array.isArray(realmAccess?.roles)) {
           t.roles = realmAccess.roles;
         }

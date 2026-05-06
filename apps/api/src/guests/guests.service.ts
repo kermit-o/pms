@@ -1,20 +1,10 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
-import {
-  CreateGuestDto,
-  EraseGuestDto,
-  ListGuestsQuery,
-  PatchGuestDto,
-} from './dto';
+import { CreateGuestDto, EraseGuestDto, ListGuestsQuery, PatchGuestDto } from './dto';
 
 /**
  * Guests / cardex domain service. Sprint 2 W4.
@@ -74,11 +64,7 @@ export class GuestsService {
     };
   }
 
-  async findOne(
-    user: AuthUser,
-    correlationId: string,
-    id: string,
-  ): Promise<GuestDetail> {
+  async findOne(user: AuthUser, correlationId: string, id: string): Promise<GuestDetail> {
     const ctx = tenantCtx(user, correlationId);
     const found = await this.prisma.withTenant(ctx, (tx) =>
       tx.guest.findFirst({
@@ -210,8 +196,7 @@ export class GuestsService {
       guest: {
         ...dump,
         dateOfBirth: dump.dateOfBirth?.toISOString().slice(0, 10) ?? null,
-        documentExpiryDate:
-          dump.documentExpiryDate?.toISOString().slice(0, 10) ?? null,
+        documentExpiryDate: dump.documentExpiryDate?.toISOString().slice(0, 10) ?? null,
         createdAt: dump.createdAt.toISOString(),
         updatedAt: dump.updatedAt.toISOString(),
         deletedAt: dump.deletedAt?.toISOString() ?? null,
@@ -222,9 +207,7 @@ export class GuestsService {
             code: r.reservation.code,
             status: r.reservation.status,
             arrivalDate: r.reservation.arrivalDate.toISOString().slice(0, 10),
-            departureDate: r.reservation.departureDate
-              .toISOString()
-              .slice(0, 10),
+            departureDate: r.reservation.departureDate.toISOString().slice(0, 10),
             totalAmount: r.reservation.totalAmount.toString(),
             currency: r.reservation.currency,
           },
@@ -312,10 +295,7 @@ function computeDocumentHash(input: {
     .digest('hex');
 }
 
-function toGuestCreate(
-  tenantId: string,
-  input: CreateGuestDto,
-): Prisma.GuestUncheckedCreateInput {
+function toGuestCreate(tenantId: string, input: CreateGuestDto): Prisma.GuestUncheckedCreateInput {
   return {
     tenantId,
     firstName: input.firstName,
@@ -326,9 +306,7 @@ function toGuestCreate(
     documentType: input.documentType ?? null,
     documentNumber: input.documentNumber ?? null,
     documentIssuingCountry: input.documentIssuingCountry ?? null,
-    documentExpiryDate: input.documentExpiryDate
-      ? new Date(input.documentExpiryDate)
-      : null,
+    documentExpiryDate: input.documentExpiryDate ? new Date(input.documentExpiryDate) : null,
     nationality: input.nationality ?? null,
     addressLine1: input.addressLine1 ?? null,
     addressLine2: input.addressLine2 ?? null,
@@ -423,8 +401,7 @@ function toDetail(row: GuestDetailRow): GuestDetail {
     ...toListItem(row),
     dateOfBirth: row.dateOfBirth?.toISOString().slice(0, 10) ?? null,
     documentIssuingCountry: row.documentIssuingCountry,
-    documentExpiryDate:
-      row.documentExpiryDate?.toISOString().slice(0, 10) ?? null,
+    documentExpiryDate: row.documentExpiryDate?.toISOString().slice(0, 10) ?? null,
     addressLine1: row.addressLine1,
     addressLine2: row.addressLine2,
     city: row.city,

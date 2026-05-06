@@ -1,24 +1,12 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
-import {
-  Prisma,
-  ReservationStatus,
-  SesSubmissionStatus,
-} from '@pms/db';
+import { Prisma, ReservationStatus, SesSubmissionStatus } from '@pms/db';
 import { PrismaService } from '../../db';
 import { EventbusService } from '../../eventbus';
 import type { AuthUser } from '../../auth';
 import type { Env } from '../../config/env.schema';
-import {
-  ListSubmissionsQuery,
-  QueueSubmissionDto,
-} from './dto';
+import { ListSubmissionsQuery, QueueSubmissionDto } from './dto';
 import { buildSesXml, type SesGuestRecord } from './xml-builder';
 
 const RETRY_DELAYS_MIN = [1, 5, 30, 240, 1440]; // 1m, 5m, 30m, 4h, 24h
@@ -43,14 +31,11 @@ export class SesHospedajesService {
     const where: Prisma.SesHospedajesSubmissionWhereInput = {};
     if (query.propertyId) where.propertyId = query.propertyId;
     if (query.status)
-      where.status =
-        SesSubmissionStatus[query.status as keyof typeof SesSubmissionStatus];
+      where.status = SesSubmissionStatus[query.status as keyof typeof SesSubmissionStatus];
     if (query.from || query.to) {
       where.businessDate = {};
-      if (query.from)
-        (where.businessDate as Prisma.DateTimeFilter).gte = new Date(query.from);
-      if (query.to)
-        (where.businessDate as Prisma.DateTimeFilter).lte = new Date(query.to);
+      if (query.from) (where.businessDate as Prisma.DateTimeFilter).gte = new Date(query.from);
+      if (query.to) (where.businessDate as Prisma.DateTimeFilter).lte = new Date(query.to);
     }
 
     const rows = await this.prisma.withTenant(ctx, (tx) =>
@@ -63,11 +48,7 @@ export class SesHospedajesService {
     return rows.map(toDto);
   }
 
-  async findOne(
-    user: AuthUser,
-    correlationId: string,
-    id: string,
-  ): Promise<SesSubmissionDetail> {
+  async findOne(user: AuthUser, correlationId: string, id: string): Promise<SesSubmissionDetail> {
     const ctx = tenantCtx(user, correlationId);
     const row = await this.prisma.withTenant(ctx, (tx) =>
       tx.sesHospedajesSubmission.findFirst({ where: { id } }),
@@ -99,11 +80,7 @@ export class SesHospedajesService {
         throw new NotFoundException(`Property ${input.propertyId} not found`);
       }
 
-      const guests = await loadGuestsForDate(
-        tx,
-        input.propertyId,
-        businessDate,
-      );
+      const guests = await loadGuestsForDate(tx, input.propertyId, businessDate);
 
       const xml = buildSesXml({
         businessDate: input.businessDate,
@@ -129,9 +106,7 @@ export class SesHospedajesService {
       let submissionId: string;
       if (existing) {
         if (existing.status === SesSubmissionStatus.SENT) {
-          throw new ConflictException(
-            `Submission for ${input.businessDate} is already SENT`,
-          );
+          throw new ConflictException(`Submission for ${input.businessDate} is already SENT`);
         }
         await tx.sesHospedajesSubmission.update({
           where: { id: existing.id },
@@ -204,14 +179,10 @@ export class SesHospedajesService {
       return { submissionId, status: SesSubmissionStatus.SENT };
     }
     if (submission.status === SesSubmissionStatus.DEAD_LETTER) {
-      throw new ConflictException(
-        `Submission ${submissionId} is in DEAD_LETTER`,
-      );
+      throw new ConflictException(`Submission ${submissionId} is in DEAD_LETTER`);
     }
     if (!submission.xmlPayload) {
-      throw new ConflictException(
-        `Submission ${submissionId} has no XML payload`,
-      );
+      throw new ConflictException(`Submission ${submissionId} has no XML payload`);
     }
 
     let responseCode: number | null = null;
@@ -275,9 +246,7 @@ export class SesHospedajesService {
       tx.sesHospedajesSubmission.update({
         where: { id: submissionId },
         data: {
-          status: dead
-            ? SesSubmissionStatus.DEAD_LETTER
-            : SesSubmissionStatus.FAILED,
+          status: dead ? SesSubmissionStatus.DEAD_LETTER : SesSubmissionStatus.FAILED,
           retryCount,
           lastError: error,
           responseCode,
@@ -297,9 +266,7 @@ export class SesHospedajesService {
 
     return {
       submissionId,
-      status: dead
-        ? SesSubmissionStatus.DEAD_LETTER
-        : SesSubmissionStatus.FAILED,
+      status: dead ? SesSubmissionStatus.DEAD_LETTER : SesSubmissionStatus.FAILED,
     };
   }
 }

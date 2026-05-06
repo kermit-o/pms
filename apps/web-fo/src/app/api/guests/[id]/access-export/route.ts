@@ -5,10 +5,7 @@ import { getGuestAccessExport } from '@/lib/api';
  * GDPR access-right proxy: forwards the API call with the user session token
  * and returns a JSON file download. Keeps the access token off the client.
  */
-export async function GET(
-  _req: Request,
-  ctx: { params: { id: string } },
-): Promise<Response> {
+export async function GET(_req: Request, ctx: { params: { id: string } }): Promise<Response> {
   const session = await auth();
   if (!session) {
     return new Response('Unauthorized', { status: 401 });
