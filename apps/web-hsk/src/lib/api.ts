@@ -213,3 +213,48 @@ export async function disposeLostFound(
     body: JSON.stringify({ reason }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Device pairings (login QR)
+// ---------------------------------------------------------------------------
+
+export interface MintedPairing {
+  id: string;
+  code: string;
+  tenantId: string;
+  targetUserId: string;
+  expiresAt: string;
+  qrPayload: string;
+}
+
+export interface RedeemedPairing {
+  token: string;
+  expiresAt: string;
+  user: {
+    sub: string;
+    email: string;
+    tenantId: string;
+    roles: string[];
+  };
+}
+
+export async function mintPairing(
+  accessToken: string | undefined,
+  input: { targetUserId: string; ttlSeconds?: number },
+): Promise<MintedPairing> {
+  return apiFetch(`/housekeeping/pairings`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function redeemPairing(input: {
+  tenantId: string;
+  code: string;
+}): Promise<RedeemedPairing> {
+  return apiFetch(`/housekeeping/pairings/redeem`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}

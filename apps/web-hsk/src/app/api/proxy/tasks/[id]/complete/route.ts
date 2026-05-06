@@ -1,5 +1,5 @@
-import { auth } from '@/auth';
 import { ApiError, completeTask } from '@/lib/api';
+import { getApiToken } from '@/lib/server-token';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,8 +9,8 @@ interface CompleteBody {
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const session = await auth();
-  if (!session?.accessToken) {
+  const accessToken = await getApiToken();
+  if (!accessToken) {
     return new Response('unauthenticated', { status: 401 });
   }
   let body: CompleteBody = {};
@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return new Response('invalid json', { status: 400 });
   }
   try {
-    const task = await completeTask(session.accessToken, params.id, body);
+    const task = await completeTask(accessToken, params.id, body);
     return Response.json(task);
   } catch (err) {
     if (err instanceof ApiError) {

@@ -1,5 +1,8 @@
-import { auth, signOut } from '@/auth';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { signOut } from '@/auth';
 import { ApiError, listTasks, type Task } from '@/lib/api';
+import { PAIRING_COOKIE, getApiToken } from '@/lib/server-token';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +11,7 @@ interface PageProps {
 }
 
 export default async function HomePage({ searchParams }: PageProps) {
-  const session = await auth();
+  const accessToken = await getApiToken();
   const propertyId = searchParams.propertyId;
   const today = new Date().toISOString().slice(0, 10);
 
@@ -16,7 +19,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   let error: string | null = null;
   if (propertyId) {
     try {
-      tasks = await listTasks(session?.accessToken, {
+      tasks = await listTasks(accessToken, {
         propertyId,
         from: today,
         to: today,
@@ -45,6 +48,12 @@ export default async function HomePage({ searchParams }: PageProps) {
         <form
           action={async () => {
             'use server';
+            const jar = await cookies();
+            const wasPaired = jar.has(PAIRING_COOKIE);
+            jar.delete(PAIRING_COOKIE);
+            if (wasPaired) {
+              redirect('/login/qr');
+            }
             await signOut({ redirectTo: '/login' });
           }}
         >

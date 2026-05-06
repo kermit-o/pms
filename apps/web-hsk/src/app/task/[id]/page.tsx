@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { auth } from '@/auth';
 import { ApiError, getTask } from '@/lib/api';
+import { getApiToken } from '@/lib/server-token';
 import { TaskActions } from './task-actions';
 
 export const dynamic = 'force-dynamic';
@@ -21,11 +21,11 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function TaskDetailPage({ params }: { params: { id: string } }) {
-  const session = await auth();
+  const accessToken = await getApiToken();
 
   let task;
   try {
-    task = await getTask(session?.accessToken, params.id);
+    task = await getTask(accessToken, params.id);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) notFound();
     throw err;

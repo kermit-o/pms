@@ -27,9 +27,33 @@ mergea.
 
 - W1 — scaffold + lista de tareas
 - W2 — `/task/[id]` (start/complete) + cola offline IndexedDB
-- W3 — `/lost-found` con foto base64 + `/supervisor` (panel desktop) (este commit)
-- W4 — login QR + 4 tools MCP HSK
+- W3 — `/lost-found` con foto base64 + `/supervisor` (panel desktop)
+- W4 — login QR + 4 tools MCP HSK (este commit)
 - W5 — UAT + RUNBOOK §13 + métricas Prometheus
+
+## Login QR (W4)
+
+Para móviles compartidos: el supervisor entra en `/supervisor/pair`,
+introduce el `userId` de la camarera y obtiene un código de 12 caracteres
+(TTL 2 min, configurable via `PAIRING_CODE_TTL_SECONDS`). La camarera abre
+`/login/qr` (deep-linkable con `?tenantId=X&code=Y`) y lo redime, recibiendo
+un JWT HMAC HS256 (`iss=aubergine-pairing`, TTL 12 h, configurable via
+`PAIRING_TOKEN_TTL_HOURS`) que se almacena en una cookie HttpOnly. El
+`JwtValidatorService` de la API acepta este segundo issuer en paralelo a
+Keycloak. El `getApiToken()` del backend Next prefiere la cookie cuando
+existe, así una camarera puede operar sin pasar por Keycloak.
+
+`PAIRING_SECRET` (>=32 chars) es obligatorio en producción; en dev se
+autogenera por proceso (los pairings no sobreviven a un reinicio).
+
+## MCP HSK tools (W4)
+
+`packages/mcp-tools/src/catalog/hsk.ts` define 4 tools:
+`hsk_assign_task`, `hsk_start_task`, `hsk_complete_task` (mutating, no
+financial) y `hsk_list_today` (read-only). El router está en
+`apps/api/src/housekeeping/hsk-tool-router.ts` y delega en
+`HousekeepingTasksService`. Igual que los FO tools, las mutating requieren
+confirmación humana cuando se invocan desde un copilot conversacional.
 
 ## Lost & Found (W3)
 

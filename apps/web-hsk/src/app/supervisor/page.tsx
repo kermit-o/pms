@@ -58,9 +58,17 @@ export default async function SupervisorPage({ searchParams }: PageProps) {
             Panel diario · {date}
           </p>
         </div>
-        <Link href="/" className="text-sm text-aubergine-600 hover:underline">
-          ← Vista móvil
-        </Link>
+        <div className="flex gap-3 text-sm">
+          <Link
+            href="/supervisor/pair"
+            className="rounded-lg bg-aubergine-700 px-3 py-1.5 font-medium text-white"
+          >
+            Emparejar dispositivo
+          </Link>
+          <Link href="/" className="text-aubergine-600 hover:underline">
+            ← Vista móvil
+          </Link>
+        </div>
       </div>
 
       <form

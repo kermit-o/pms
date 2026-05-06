@@ -1,17 +1,28 @@
 import { auth } from '@/auth';
 
-export default auth((req) => {
-  const isPublic =
-    req.nextUrl.pathname === '/login' ||
-    req.nextUrl.pathname.startsWith('/api/auth') ||
-    req.nextUrl.pathname.startsWith('/_next') ||
-    req.nextUrl.pathname === '/manifest.webmanifest' ||
-    req.nextUrl.pathname === '/sw.js' ||
-    req.nextUrl.pathname === '/favicon.ico';
+const PAIRING_COOKIE = 'aubergine_pairing';
 
-  if (!req.auth && !isPublic) {
+export default auth((req) => {
+  const path = req.nextUrl.pathname;
+  const isPublic =
+    path === '/login' ||
+    path === '/login/qr' ||
+    path.startsWith('/api/auth') ||
+    path.startsWith('/api/proxy/pairings/redeem') ||
+    path.startsWith('/_next') ||
+    path === '/manifest.webmanifest' ||
+    path === '/sw.js' ||
+    path === '/favicon.ico';
+
+  // Camareras con pairing cookie: tratamos como autenticadas. La cookie es
+  // HttpOnly y firmada HMAC; la API la valida en cada request — si caduca
+  // o se invalida, las paginas devolveran 401 y el usuario tendra que
+  // re-emparejar.
+  const hasPairing = req.cookies.has(PAIRING_COOKIE);
+
+  if (!req.auth && !hasPairing && !isPublic) {
     const loginUrl = new URL('/login', req.nextUrl.origin);
-    loginUrl.searchParams.set('callbackUrl', req.nextUrl.pathname);
+    loginUrl.searchParams.set('callbackUrl', path);
     return Response.redirect(loginUrl);
   }
 });

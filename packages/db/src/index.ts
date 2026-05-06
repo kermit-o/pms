@@ -40,6 +40,7 @@ export type {
   CashDrawerReconciliation,
   HousekeepingTask,
   LostFoundItem,
+  DevicePairing,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

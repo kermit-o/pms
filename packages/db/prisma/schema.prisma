@@ -48,6 +48,7 @@ model Tenant {
   cashReconciliations CashDrawerReconciliation[]
   housekeepingTasks   HousekeepingTask[]
   lostFoundItems      LostFoundItem[]
+  devicePairings      DevicePairing[]
 
   @@map("tenants")
 }
@@ -816,4 +817,27 @@ enum LostFoundStatus {
   DISPOSED
 
   @@map("lost_found_status")
+}
+
+// ----------------------------------------------------------------------------
+// Device pairings — login QR para moviles compartidos. Sprint 4 W4.
+// ----------------------------------------------------------------------------
+
+model DevicePairing {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  code             String    @db.Char(12)
+  targetUserId     String    @map("target_user_id") @db.Uuid
+  issuedByUserId   String    @map("issued_by_user_id") @db.Uuid
+  expiresAt        DateTime  @map("expires_at")
+  redeemedAt       DateTime? @map("redeemed_at")
+  redeemedTokenJti String?   @map("redeemed_token_jti") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([code])
+  @@index([tenantId, targetUserId])
+  @@index([tenantId, expiresAt])
+  @@map("device_pairings")
 }

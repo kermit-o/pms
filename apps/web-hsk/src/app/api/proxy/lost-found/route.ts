@@ -1,5 +1,5 @@
-import { auth } from '@/auth';
 import { ApiError, registerLostFound } from '@/lib/api';
+import { getApiToken } from '@/lib/server-token';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,8 +12,8 @@ interface RegisterBody {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.accessToken) {
+  const accessToken = await getApiToken();
+  if (!accessToken) {
     return new Response('unauthenticated', { status: 401 });
   }
   let body: RegisterBody;
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     return new Response('invalid json', { status: 400 });
   }
   try {
-    const item = await registerLostFound(session.accessToken, body);
+    const item = await registerLostFound(accessToken, body);
     return Response.json(item);
   } catch (err) {
     if (err instanceof ApiError) {

@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { auth } from '@/auth';
 import { ApiError, listLostFound, type LostFoundItem } from '@/lib/api';
+import { getApiToken } from '@/lib/server-token';
 import { LostFoundForm } from './lost-found-form';
 
 export const dynamic = 'force-dynamic';
@@ -16,14 +16,14 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function LostFoundPage({ searchParams }: PageProps) {
-  const session = await auth();
+  const accessToken = await getApiToken();
   const propertyId = searchParams.propertyId;
 
   let items: LostFoundItem[] = [];
   let error: string | null = null;
   if (propertyId) {
     try {
-      items = await listLostFound(session?.accessToken, { propertyId });
+      items = await listLostFound(accessToken, { propertyId });
     } catch (err) {
       error = err instanceof ApiError ? `API ${err.status}` : (err as Error).message;
     }
