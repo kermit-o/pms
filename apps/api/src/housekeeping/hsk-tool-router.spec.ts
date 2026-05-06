@@ -20,9 +20,7 @@ function makeTasksMock() {
   return {
     create: vi.fn().mockResolvedValue({ id: TASK_ID, status: HousekeepingTaskStatus.PENDING }),
     start: vi.fn().mockResolvedValue({ id: TASK_ID, status: HousekeepingTaskStatus.IN_PROGRESS }),
-    complete: vi
-      .fn()
-      .mockResolvedValue({ id: TASK_ID, status: HousekeepingTaskStatus.COMPLETED }),
+    complete: vi.fn().mockResolvedValue({ id: TASK_ID, status: HousekeepingTaskStatus.COMPLETED }),
     list: vi.fn().mockResolvedValue([]),
   };
 }
@@ -70,9 +68,7 @@ describe('HskToolRouter', () => {
 
   it('rejects an unknown tool name', async () => {
     const router = new HskToolRouter(makeTasksMock() as never);
-    await expect(
-      router.execute('unknown' as never, {}, user, 'corr'),
-    ).rejects.toThrow();
+    await expect(router.execute('unknown' as never, {}, user, 'corr')).rejects.toThrow();
   });
 
   it('re-validates input via Zod (rejects malformed UUID)', async () => {

@@ -178,8 +178,8 @@ describe('LostFoundService.dispose', () => {
     const { service } = buildService({
       existing: buildItem({ status: LostFoundStatus.DISPOSED }),
     });
-    await expect(
-      service.dispose(user, 'corr', ITEM_ID, { reason: 'x' }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.dispose(user, 'corr', ITEM_ID, { reason: 'x' })).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 });

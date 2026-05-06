@@ -332,11 +332,7 @@ export class HousekeepingTasksService {
     return toView(result);
   }
 
-  async summary(
-    user: AuthUser,
-    correlationId: string,
-    query: SummaryQuery,
-  ): Promise<TaskSummary> {
+  async summary(user: AuthUser, correlationId: string, query: SummaryQuery): Promise<TaskSummary> {
     const ctx = tenantCtx(user, correlationId);
     const businessDate = new Date(query.businessDate);
 

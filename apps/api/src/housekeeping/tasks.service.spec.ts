@@ -103,11 +103,7 @@ function buildService(
     taskDuration: { record: vi.fn() },
   };
 
-  const service = new HousekeepingTasksService(
-    prisma as never,
-    events as never,
-    metrics as never,
-  );
+  const service = new HousekeepingTasksService(prisma as never, events as never, metrics as never);
   return { service, tx, events, metrics };
 }
 

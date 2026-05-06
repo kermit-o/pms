@@ -1,12 +1,6 @@
 import Link from 'next/link';
 import { auth } from '@/auth';
-import {
-  ApiError,
-  getTaskSummary,
-  listTasks,
-  type Task,
-  type TaskSummary,
-} from '@/lib/api';
+import { ApiError, getTaskSummary, listTasks, type Task, type TaskSummary } from '@/lib/api';
 import { ReassignControl } from './reassign-control';
 
 export const dynamic = 'force-dynamic';
@@ -54,9 +48,7 @@ export default async function SupervisorPage({ searchParams }: PageProps) {
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">Aubergine</p>
           <h1 className="text-3xl font-semibold text-aubergine-700">Supervisor</h1>
-          <p className="text-sm text-aubergine-700/70">
-            Panel diario · {date}
-          </p>
+          <p className="text-sm text-aubergine-700/70">Panel diario · {date}</p>
         </div>
         <div className="flex gap-3 text-sm">
           <Link
@@ -130,10 +122,7 @@ export default async function SupervisorPage({ searchParams }: PageProps) {
               const label = row.userId ? row.userId.slice(0, 8) : 'Sin asignar';
               const pct = row.total === 0 ? 0 : Math.round((row.completed / row.total) * 100);
               return (
-                <li
-                  key={row.userId ?? 'unassigned'}
-                  className="rounded-xl bg-aubergine-50 p-3"
-                >
+                <li key={row.userId ?? 'unassigned'} className="rounded-xl bg-aubergine-50 p-3">
                   <p className="font-mono text-sm font-medium text-aubergine-700">{label}</p>
                   <p className="text-xs text-aubergine-700/70">
                     {row.completed} / {row.total} · {pct}%
@@ -161,9 +150,7 @@ export default async function SupervisorPage({ searchParams }: PageProps) {
             <tbody>
               {tasks.map((t) => (
                 <tr key={t.id} className="border-t border-aubergine-100/60">
-                  <td className="px-4 py-2 font-mono text-aubergine-700">
-                    {t.roomId.slice(0, 8)}
-                  </td>
+                  <td className="px-4 py-2 font-mono text-aubergine-700">{t.roomId.slice(0, 8)}</td>
                   <td className="px-4 py-2 text-aubergine-700">
                     {TYPE_LABEL[t.taskType] ?? t.taskType}
                   </td>
@@ -189,19 +176,9 @@ export default async function SupervisorPage({ searchParams }: PageProps) {
   );
 }
 
-function Kpi({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: number | string;
-  accent?: string;
-}) {
+function Kpi({ label, value, accent }: { label: string; value: number | string; accent?: string }) {
   return (
-    <div
-      className={`rounded-2xl p-4 shadow-sm ring-1 ring-aubergine-100 ${accent ?? 'bg-white'}`}
-    >
+    <div className={`rounded-2xl p-4 shadow-sm ring-1 ring-aubergine-100 ${accent ?? 'bg-white'}`}>
       <p className="text-xs font-medium uppercase tracking-wide text-aubergine-500">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-aubergine-700">{value}</p>
     </div>

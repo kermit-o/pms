@@ -9,8 +9,7 @@ interface MintedPairing {
   qrPayload: string;
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function PairForm() {
   const [targetUserId, setTargetUserId] = useState('');
@@ -60,9 +59,7 @@ export function PairForm() {
             className="mt-1 block w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 font-mono text-sm focus:border-aubergine-500 focus:outline-none"
           />
         </label>
-        {error && (
-          <p className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>
-        )}
+        {error && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}
         <button
           type="submit"
           disabled={busy}
@@ -75,7 +72,8 @@ export function PairForm() {
       {minted && (
         <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100">
           <p className="text-xs uppercase tracking-wide text-aubergine-500">
-            Comparte este código (válido hasta {new Date(minted.expiresAt).toLocaleTimeString('es-ES')})
+            Comparte este código (válido hasta{' '}
+            {new Date(minted.expiresAt).toLocaleTimeString('es-ES')})
           </p>
           <p className="select-all rounded-xl bg-aubergine-50 p-4 text-center font-mono text-3xl font-semibold tracking-[0.4em] text-aubergine-700">
             {minted.code.slice(0, 4)}-{minted.code.slice(4, 8)}-{minted.code.slice(8, 12)}

@@ -11,10 +11,7 @@ export const RegisterLostFoundDto = z.object({
   photoBase64: z
     .string()
     .max(MAX_PHOTO_LENGTH)
-    .refine(
-      (s) => s.startsWith('data:image/'),
-      'photoBase64 must be a data URL (data:image/...)',
-    )
+    .refine((s) => s.startsWith('data:image/'), 'photoBase64 must be a data URL (data:image/...)')
     .optional(),
   notes: z.string().max(2000).optional(),
 });

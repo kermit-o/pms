@@ -41,9 +41,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       </Link>
 
       <header className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100">
-        <p className="text-xs uppercase tracking-[0.2em] text-aubergine-500">
-          Habitación
-        </p>
+        <p className="text-xs uppercase tracking-[0.2em] text-aubergine-500">Habitación</p>
         <p className="font-mono text-3xl font-semibold text-aubergine-700">
           {task.roomId.slice(0, 8)}
         </p>
@@ -62,9 +60,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
           </div>
           <div>
             <dt className="text-xs text-aubergine-500">Fecha</dt>
-            <dd className="font-medium text-aubergine-700">
-              {task.businessDate.slice(0, 10)}
-            </dd>
+            <dd className="font-medium text-aubergine-700">{task.businessDate.slice(0, 10)}</dd>
           </div>
           {task.durationMin != null && (
             <div>

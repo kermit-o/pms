@@ -40,11 +40,7 @@ export class DevicePairingsService {
     private readonly metrics: HousekeepingMetrics,
   ) {}
 
-  async mint(
-    user: AuthUser,
-    correlationId: string,
-    input: MintPairingDto,
-  ): Promise<MintedPairing> {
+  async mint(user: AuthUser, correlationId: string, input: MintPairingDto): Promise<MintedPairing> {
     const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId };
     const defaultTtl = this.config.get('PAIRING_CODE_TTL_SECONDS', { infer: true }) ?? 120;
     const ttlSeconds = input.ttlSeconds ?? defaultTtl;

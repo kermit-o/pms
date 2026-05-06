@@ -11,11 +11,7 @@ export class DevicePairingsController {
 
   @Post()
   @Roles('tenant_admin', 'housekeeping_supervisor')
-  async mint(
-    @CurrentUser() user: AuthUser,
-    @Req() req: FastifyRequest,
-    @Body() body: unknown,
-  ) {
+  async mint(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest, @Body() body: unknown) {
     const input = MintPairingDto.parse(body);
     return this.service.mint(user, correlationIdOf(req), input);
   }

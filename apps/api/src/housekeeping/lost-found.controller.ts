@@ -46,11 +46,7 @@ export class LostFoundController {
 
   @Post()
   @Roles(...REGISTER_ROLES)
-  async register(
-    @CurrentUser() user: AuthUser,
-    @Req() req: FastifyRequest,
-    @Body() body: unknown,
-  ) {
+  async register(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest, @Body() body: unknown) {
     const input = RegisterLostFoundDto.parse(body);
     return this.service.register(user, correlationIdOf(req), input);
   }

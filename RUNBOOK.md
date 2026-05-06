@@ -407,17 +407,17 @@ curl -X POST "$API_URL/housekeeping/pairings/redeem" \
 
 Series emitidas por `HousekeepingMetrics`:
 
-| Serie | Tipo | Labels |
-|---|---|---|
-| `hsk_tasks_assigned_total` | counter | tenant, property, task_type |
-| `hsk_tasks_started_total` | counter | tenant, property |
-| `hsk_tasks_completed_total` | counter | tenant, property, resulting_room_status |
-| `hsk_tasks_cancelled_total` | counter | tenant, property |
-| `hsk_task_duration_minutes_*` | histogram | tenant, property, task_type |
-| `hsk_lost_found_registered_total` | counter | tenant, property, has_photo |
-| `hsk_lost_found_resolved_total` | counter | tenant, property, status |
-| `hsk_pairings_minted_total` | counter | tenant |
-| `hsk_pairings_redeemed_total` | counter | tenant, outcome |
+| Serie                             | Tipo      | Labels                                  |
+| --------------------------------- | --------- | --------------------------------------- |
+| `hsk_tasks_assigned_total`        | counter   | tenant, property, task_type             |
+| `hsk_tasks_started_total`         | counter   | tenant, property                        |
+| `hsk_tasks_completed_total`       | counter   | tenant, property, resulting_room_status |
+| `hsk_tasks_cancelled_total`       | counter   | tenant, property                        |
+| `hsk_task_duration_minutes_*`     | histogram | tenant, property, task_type             |
+| `hsk_lost_found_registered_total` | counter   | tenant, property, has_photo             |
+| `hsk_lost_found_resolved_total`   | counter   | tenant, property, status                |
+| `hsk_pairings_minted_total`       | counter   | tenant                                  |
+| `hsk_pairings_redeemed_total`     | counter   | tenant, outcome                         |
 
 Alertas sugeridas (Grafana / Alertmanager):
 
