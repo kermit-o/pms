@@ -3,6 +3,12 @@ import { businessDayClosedV1, businessDayReopenedV1 } from './business-day';
 import { cashReconciliationCreatedV1, cashReconciliationDiscrepancyV1 } from './cash';
 import { sesSubmissionFailedV1, sesSubmissionQueuedV1, sesSubmissionSentV1 } from './compliance';
 import {
+  housekeepingTaskAssignedV1,
+  housekeepingTaskCancelledV1,
+  housekeepingTaskCompletedV1,
+  housekeepingTaskStartedV1,
+} from './housekeeping';
+import {
   nightAuditRunCompletedV1,
   nightAuditRunStartedV1,
   nightAuditStepCompletedV1,
@@ -101,6 +107,22 @@ export const catalog = {
     schema: cashReconciliationDiscrepancyV1,
     schemaVersion: 1,
   },
+  'housekeeping.task_assigned': {
+    schema: housekeepingTaskAssignedV1,
+    schemaVersion: 1,
+  },
+  'housekeeping.task_started': {
+    schema: housekeepingTaskStartedV1,
+    schemaVersion: 1,
+  },
+  'housekeeping.task_completed': {
+    schema: housekeepingTaskCompletedV1,
+    schemaVersion: 1,
+  },
+  'housekeeping.task_cancelled': {
+    schema: housekeepingTaskCancelledV1,
+    schemaVersion: 1,
+  },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -183,3 +205,16 @@ export type {
   CashReconciliationCreatedV1Payload,
   CashReconciliationDiscrepancyV1Payload,
 } from './cash';
+
+export {
+  housekeepingTaskAssignedV1,
+  housekeepingTaskCancelledV1,
+  housekeepingTaskCompletedV1,
+  housekeepingTaskStartedV1,
+} from './housekeeping';
+export type {
+  HousekeepingTaskAssignedV1Payload,
+  HousekeepingTaskCancelledV1Payload,
+  HousekeepingTaskCompletedV1Payload,
+  HousekeepingTaskStartedV1Payload,
+} from './housekeeping';

@@ -14,6 +14,8 @@ export {
   NightAuditStep,
   NightAuditStepStatus,
   NightAuditReportType,
+  HousekeepingTaskStatus,
+  HousekeepingTaskType,
 } from '@prisma/client';
 
 export type {
@@ -35,6 +37,7 @@ export type {
   NightAuditRunStep,
   NightAuditSnapshot,
   CashDrawerReconciliation,
+  HousekeepingTask,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

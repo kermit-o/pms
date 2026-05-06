@@ -46,6 +46,7 @@ model Tenant {
   nightAuditRunSteps  NightAuditRunStep[]
   nightAuditSnapshots NightAuditSnapshot[]
   cashReconciliations CashDrawerReconciliation[]
+  housekeepingTasks   HousekeepingTask[]
 
   @@map("tenants")
 }
@@ -116,6 +117,7 @@ model Property {
   nightAuditRuns      NightAuditRun[]
   nightAuditSnapshots NightAuditSnapshot[]
   cashReconciliations CashDrawerReconciliation[]
+  housekeepingTasks   HousekeepingTask[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -208,10 +210,11 @@ model Room {
   updatedAt        DateTime   @updatedAt @map("updated_at")
   deletedAt        DateTime?  @map("deleted_at")
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  roomType     RoomType      @relation(fields: [roomTypeId], references: [id])
-  reservations Reservation[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property          Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType          RoomType           @relation(fields: [roomTypeId], references: [id])
+  reservations      Reservation[]
+  housekeepingTasks HousekeepingTask[]
 
   @@unique([tenantId, propertyId, number])
   @@index([tenantId, propertyId])
@@ -712,4 +715,58 @@ model CashDrawerReconciliation {
   @@unique([propertyId, businessDate])
   @@index([tenantId, propertyId])
   @@map("cash_drawer_reconciliations")
+}
+
+// ----------------------------------------------------------------------------
+// Housekeeping (Sprint 4) — tasks, discrepancies, lost & found.
+// ----------------------------------------------------------------------------
+
+model HousekeepingTask {
+  id                String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                 @map("tenant_id") @db.Uuid
+  propertyId        String                 @map("property_id") @db.Uuid
+  roomId            String                 @map("room_id") @db.Uuid
+  businessDate      DateTime               @map("business_date") @db.Date
+  taskType          HousekeepingTaskType   @default(CHECKOUT_CLEAN) @map("task_type")
+  status            HousekeepingTaskStatus @default(PENDING)
+  assignedToUserId  String?                @map("assigned_to_user_id") @db.Uuid
+  assignedAt        DateTime?              @map("assigned_at")
+  startedAt         DateTime?              @map("started_at")
+  completedAt       DateTime?              @map("completed_at")
+  durationMin       Int?                   @map("duration_min")
+  scheduledFor      DateTime?              @map("scheduled_for")
+  notes             String?
+  result            Json?
+  attributes        Json?
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+  deletedAt         DateTime?              @map("deleted_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  room     Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, businessDate, roomId, taskType])
+  @@index([tenantId, propertyId, status, scheduledFor])
+  @@index([tenantId, assignedToUserId])
+  @@index([tenantId, propertyId, businessDate])
+  @@map("housekeeping_tasks")
+}
+
+enum HousekeepingTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("housekeeping_task_status")
+}
+
+enum HousekeepingTaskType {
+  CHECKOUT_CLEAN
+  STAYOVER_CLEAN
+  INSPECTION
+  MAINTENANCE
+
+  @@map("housekeeping_task_type")
 }
