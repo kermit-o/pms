@@ -48,6 +48,7 @@ export default async function DashboardPage() {
         <Tile href="/guests" label="Cardex" sub="Huéspedes + GDPR" />
         <Tile href="/rooms" label="Habitaciones" sub="Estado + OOO" />
         <Tile href="/business-day" label="Cierre de día" sub="Lock operacional" />
+        <Tile href="/night-audit" label="Night Audit" sub="Cierre nocturno" />
         <Tile href="/compliance/ses" label="SES.HOSPEDAJES" sub="Partes Guardia Civil" />
         <Tile href="/reservations/new?walkIn=1" label="Walk-in" sub="Check-in inmediato" />
       </section>

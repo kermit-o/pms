@@ -604,3 +604,87 @@ export async function confirmCopilotTool(
     body: JSON.stringify({ pendingToolId, decision }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Night Audit
+// ---------------------------------------------------------------------------
+
+export type NightAuditRunStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+
+export type NightAuditStep =
+  | 'POST_ROOM_CHARGES'
+  | 'POST_TAXES'
+  | 'POST_PACKAGES'
+  | 'MARK_NO_SHOWS'
+  | 'SNAPSHOT_REPORTS'
+  | 'CLOSE_DAY';
+
+export type NightAuditStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
+
+export interface NightAuditRunSummary {
+  id: string;
+  propertyId: string;
+  businessDate: string;
+  status: NightAuditRunStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  lastFailedStep: NightAuditStep | null;
+  lastError: string | null;
+  totals: Record<string, unknown>;
+  steps: { step: NightAuditStep; status: NightAuditStepStatus }[];
+}
+
+export interface NightAuditState {
+  propertyId: string;
+  businessDate: string;
+  run: NightAuditRunSummary | null;
+}
+
+export async function getNightAuditState(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<NightAuditState> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/night-audit/state?${params.toString()}`, { accessToken });
+}
+
+export async function listNightAuditRuns(
+  accessToken: string | undefined,
+  query: {
+    propertyId?: string;
+    status?: NightAuditRunStatus;
+    from?: string;
+    to?: string;
+  } = {},
+): Promise<NightAuditRunSummary[]> {
+  const params = new URLSearchParams();
+  if (query.propertyId) params.set('propertyId', query.propertyId);
+  if (query.status) params.set('status', query.status);
+  if (query.from) params.set('from', query.from);
+  if (query.to) params.set('to', query.to);
+  const q = params.toString();
+  return apiFetch(`/night-audit/runs${q ? `?${q}` : ''}`, { accessToken });
+}
+
+export async function runNightAudit(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<NightAuditRunSummary> {
+  return apiFetch('/night-audit/run', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ propertyId, businessDate }),
+  });
+}
+
+export async function resumeNightAuditRun(
+  accessToken: string | undefined,
+  runId: string,
+): Promise<NightAuditRunSummary> {
+  return apiFetch(`/night-audit/runs/${runId}/resume`, {
+    method: 'POST',
+    accessToken,
+  });
+}

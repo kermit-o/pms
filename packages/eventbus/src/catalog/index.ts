@@ -2,6 +2,12 @@ import type { z } from 'zod';
 import { businessDayClosedV1, businessDayReopenedV1 } from './business-day';
 import { sesSubmissionFailedV1, sesSubmissionQueuedV1, sesSubmissionSentV1 } from './compliance';
 import {
+  nightAuditRunCompletedV1,
+  nightAuditRunStartedV1,
+  nightAuditStepCompletedV1,
+  nightAuditStepFailedV1,
+} from './night-audit';
+import {
   folioChargeAddedV1,
   folioClosedV1,
   folioPaymentReceivedV1,
@@ -73,6 +79,19 @@ export const catalog = {
     schema: sesSubmissionFailedV1,
     schemaVersion: 1,
   },
+  'night_audit.run_started': { schema: nightAuditRunStartedV1, schemaVersion: 1 },
+  'night_audit.step_completed': {
+    schema: nightAuditStepCompletedV1,
+    schemaVersion: 1,
+  },
+  'night_audit.step_failed': {
+    schema: nightAuditStepFailedV1,
+    schemaVersion: 1,
+  },
+  'night_audit.run_completed': {
+    schema: nightAuditRunCompletedV1,
+    schemaVersion: 1,
+  },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -136,3 +155,16 @@ export type {
   SesSubmissionQueuedV1Payload,
   SesSubmissionSentV1Payload,
 } from './compliance';
+
+export {
+  nightAuditRunCompletedV1,
+  nightAuditRunStartedV1,
+  nightAuditStepCompletedV1,
+  nightAuditStepFailedV1,
+} from './night-audit';
+export type {
+  NightAuditRunCompletedV1Payload,
+  NightAuditRunStartedV1Payload,
+  NightAuditStepCompletedV1Payload,
+  NightAuditStepFailedV1Payload,
+} from './night-audit';
