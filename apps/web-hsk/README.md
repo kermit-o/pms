@@ -25,8 +25,18 @@ mergea.
 
 ## Roadmap
 
-- W1 — scaffold + lista de tareas (este commit)
-- W2 — `/room/[number]` (start/complete) + cola offline IndexedDB
+- W1 — scaffold + lista de tareas
+- W2 — `/task/[id]` (start/complete) + cola offline IndexedDB (este commit)
 - W3 — `/lost-found` con foto base64 + `/supervisor` (panel desktop)
 - W4 — login QR + 4 tools MCP HSK
 - W5 — UAT + RUNBOOK §13 + métricas Prometheus
+
+## Cola offline (W2)
+
+Las mutaciones (`/api/proxy/tasks/<id>/start|complete`) se ejecutan online
+contra rutas internas que reenvían el Bearer del session a la API. Si
+`navigator.onLine === false`, la mutación se persiste en IndexedDB
+(`aubergine-hsk` / `mutations`) y se reintenta al volver la conexión
+(`window.online` + intervalo de 30 s). Las respuestas 2xx y 409 (idempotente:
+estado ya alcanzado) drenan la entrada; el resto incrementa `attempts` para
+trazabilidad. La UI muestra un badge "Sin conexión" + contador de pendientes.

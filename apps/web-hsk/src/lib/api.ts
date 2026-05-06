@@ -82,6 +82,13 @@ export async function listTasks(
   return apiFetch(`/housekeeping/tasks${q ? `?${q}` : ''}`, { accessToken });
 }
 
+export async function getTask(
+  accessToken: string | undefined,
+  taskId: string,
+): Promise<Task> {
+  return apiFetch(`/housekeeping/tasks/${taskId}`, { accessToken });
+}
+
 export async function startTask(accessToken: string | undefined, taskId: string): Promise<Task> {
   return apiFetch(`/housekeeping/tasks/${taskId}/start`, {
     method: 'POST',
