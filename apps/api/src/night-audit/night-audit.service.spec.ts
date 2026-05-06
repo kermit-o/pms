@@ -48,6 +48,14 @@ interface BuildOpts {
   existingDay?: { status: 'OPEN' | 'CLOSED' } | null;
   /** Force the runner to throw the given message during step execution. */
   throwOnEntryCreate?: string;
+  /** Cash reconciliation row visible to CLOSE_DAY. */
+  cashReconciliation?: {
+    discrepancy: Prisma.Decimal;
+    expectedAmount: Prisma.Decimal;
+    countedAmount: Prisma.Decimal;
+    toleranceCents: number;
+    currency: string;
+  } | null;
 }
 
 function buildService(opts: BuildOpts = {}) {
@@ -168,6 +176,19 @@ function buildService(opts: BuildOpts = {}) {
       findFirst: vi.fn().mockResolvedValue(opts.existingDay ?? null),
       create: vi.fn().mockResolvedValue({}),
       update: vi.fn().mockResolvedValue({}),
+    },
+    cashDrawerReconciliation: {
+      findFirst: vi.fn().mockResolvedValue(
+        opts.cashReconciliation === undefined
+          ? {
+              discrepancy: new Prisma.Decimal(0),
+              expectedAmount: new Prisma.Decimal(0),
+              countedAmount: new Prisma.Decimal(0),
+              toleranceCents: 0,
+              currency: 'EUR',
+            }
+          : opts.cashReconciliation,
+      ),
     },
   };
 
@@ -312,6 +333,36 @@ describe('NightAuditService.run', () => {
     const data = tx.businessDayState.create.mock.calls[0]![0].data;
     expect(data.status).toBe('CLOSED');
     expect(data.closedByUserId).toBe(USER_ID);
+  });
+
+  it('FAILS the run when CLOSE_DAY finds no cash reconciliation', async () => {
+    const { service } = buildService({ cashReconciliation: null });
+    const summary = await service.run(user, 'corr', {
+      propertyId: PROPERTY_ID,
+      businessDate: '2026-06-10',
+    });
+    expect(summary.status).toBe(NightAuditRunStatus.FAILED);
+    expect(summary.lastFailedStep).toBe(NightAuditStep.CLOSE_DAY);
+    expect(summary.lastError).toMatch(/Cash reconciliation missing/);
+  });
+
+  it('FAILS the run when discrepancy exceeds tolerance', async () => {
+    const { service } = buildService({
+      cashReconciliation: {
+        discrepancy: new Prisma.Decimal('5.00'),
+        expectedAmount: new Prisma.Decimal('100.00'),
+        countedAmount: new Prisma.Decimal('105.00'),
+        toleranceCents: 50, // 0.50 tolerance, 5.00 discrepancy → fail
+        currency: 'EUR',
+      },
+    });
+    const summary = await service.run(user, 'corr', {
+      propertyId: PROPERTY_ID,
+      businessDate: '2026-06-10',
+    });
+    expect(summary.status).toBe(NightAuditRunStatus.FAILED);
+    expect(summary.lastFailedStep).toBe(NightAuditStep.CLOSE_DAY);
+    expect(summary.lastError).toMatch(/exceeds tolerance/);
   });
 });
 

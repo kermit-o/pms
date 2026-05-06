@@ -276,11 +276,27 @@ function stubProposal(content: string): ToolProposal {
     };
   }
 
+  if (/(res[uú]me?n|report|reporte)/i.test(lower) && uuids[0] && dates[0]) {
+    const focus: 'overview' | 'revenue' | 'occupancy' | 'incidents' =
+      /ingres[oó]s|revenue|adr|revpar/i.test(lower)
+        ? 'revenue'
+        : /ocupaci[oó]n|occupancy/i.test(lower)
+          ? 'occupancy'
+          : /incidente|cancelaci[oó]n/i.test(lower)
+            ? 'incidents'
+            : 'overview';
+    return {
+      kind: 'tool',
+      tool: 'generate_report',
+      input: { propertyId: uuids[0], businessDate: dates[0], focus },
+    };
+  }
+
   return {
     kind: 'text',
     text:
-      'Puedo consultar disponibilidad, asignar habitación o iniciar un check-in. ' +
-      'Por ejemplo: "consulta disponibilidad para <propertyId> del <YYYY-MM-DD> al <YYYY-MM-DD>".',
+      'Puedo consultar disponibilidad, asignar habitación, iniciar un check-in o resumir el día. ' +
+      'Ej: "resúmeme el 2026-06-10 en <propertyId>" o "consulta disponibilidad para <propertyId> del <YYYY-MM-DD> al <YYYY-MM-DD>".',
   };
 }
 

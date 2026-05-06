@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { businessDayClosedV1, businessDayReopenedV1 } from './business-day';
+import { cashReconciliationCreatedV1, cashReconciliationDiscrepancyV1 } from './cash';
 import { sesSubmissionFailedV1, sesSubmissionQueuedV1, sesSubmissionSentV1 } from './compliance';
 import {
   nightAuditRunCompletedV1,
@@ -92,6 +93,14 @@ export const catalog = {
     schema: nightAuditRunCompletedV1,
     schemaVersion: 1,
   },
+  'cash.reconciliation_created': {
+    schema: cashReconciliationCreatedV1,
+    schemaVersion: 1,
+  },
+  'cash.reconciliation_discrepancy': {
+    schema: cashReconciliationDiscrepancyV1,
+    schemaVersion: 1,
+  },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -168,3 +177,9 @@ export type {
   NightAuditStepCompletedV1Payload,
   NightAuditStepFailedV1Payload,
 } from './night-audit';
+
+export { cashReconciliationCreatedV1, cashReconciliationDiscrepancyV1 } from './cash';
+export type {
+  CashReconciliationCreatedV1Payload,
+  CashReconciliationDiscrepancyV1Payload,
+} from './cash';

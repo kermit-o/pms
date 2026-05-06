@@ -12,10 +12,12 @@ export {
   checkOutInput,
   addFolioChargeInput,
   assignRoomInput,
+  generateReportInput,
   type QueryAvailabilityInput,
   type CreateReservationInput,
   type CheckInInput,
   type CheckOutInput,
   type AddFolioChargeInput,
   type AssignRoomInput,
+  type GenerateReportInput,
 } from './catalog/fo';

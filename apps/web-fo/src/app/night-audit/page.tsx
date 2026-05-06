@@ -2,10 +2,13 @@ import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import {
   ApiError,
+  getCashReconciliation,
   getNightAuditState,
   listNightAuditRuns,
   resumeNightAuditRun,
   runNightAudit,
+  upsertCashReconciliation,
+  type CashReconciliation,
   type NightAuditRunSummary,
   type NightAuditState,
   type NightAuditStep,
@@ -25,12 +28,16 @@ export default async function NightAuditPage({ searchParams }: PageProps) {
 
   let state: NightAuditState | null = null;
   let history: NightAuditRunSummary[] = [];
+  let cash: CashReconciliation | null = null;
   let error: string | null = null;
 
   if (propertyId) {
     try {
-      state = await getNightAuditState(session?.accessToken, propertyId, businessDate);
-      history = await listNightAuditRuns(session?.accessToken, { propertyId });
+      [state, history, cash] = await Promise.all([
+        getNightAuditState(session?.accessToken, propertyId, businessDate),
+        listNightAuditRuns(session?.accessToken, { propertyId }),
+        getCashReconciliation(session?.accessToken, propertyId, businessDate),
+      ]);
     } catch (err) {
       error = err instanceof ApiError ? `API ${err.status}: ${err.body}` : (err as Error).message;
     }
@@ -57,6 +64,25 @@ export default async function NightAuditPage({ searchParams }: PageProps) {
     revalidatePath(
       `/night-audit?propertyId=${propertyId ?? ''}&businessDate=${businessDate ?? ''}`,
     );
+  }
+
+  async function cashAction(formData: FormData) {
+    'use server';
+    const session = await auth();
+    const propertyId = formData.get('propertyId')?.toString();
+    const businessDate = formData.get('businessDate')?.toString();
+    const counted = Number(formData.get('countedAmount') ?? '0');
+    const tolerance = Number(formData.get('toleranceCents') ?? '0');
+    const notes = formData.get('notes')?.toString() || undefined;
+    if (!propertyId || !businessDate) throw new Error('Faltan campos');
+    await upsertCashReconciliation(session?.accessToken, {
+      propertyId,
+      businessDate,
+      countedAmount: counted,
+      toleranceCents: Number.isFinite(tolerance) ? tolerance : 0,
+      notes,
+    });
+    revalidatePath(`/night-audit?propertyId=${propertyId}&businessDate=${businessDate}`);
   }
 
   return (
@@ -109,6 +135,15 @@ export default async function NightAuditPage({ searchParams }: PageProps) {
         <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-100">
           {error}
         </div>
+      )}
+
+      {cash && propertyId && (
+        <CashPanel
+          cash={cash}
+          propertyId={propertyId}
+          businessDate={businessDate}
+          cashAction={cashAction}
+        />
       )}
 
       {state && propertyId && (
@@ -291,5 +326,111 @@ function StepStatusBadge({ status }: { status: NightAuditStepStatus }) {
     >
       {status.toLowerCase()}
     </span>
+  );
+}
+
+function CashPanel({
+  cash,
+  propertyId,
+  businessDate,
+  cashAction,
+}: {
+  cash: CashReconciliation;
+  propertyId: string;
+  businessDate: string;
+  cashAction: (fd: FormData) => Promise<void>;
+}) {
+  const expected = Number(cash.expectedAmount);
+  const counted = Number(cash.countedAmount);
+  const discrepancy = Number(cash.discrepancy);
+  const inTolerance = Math.abs(discrepancy * 100) <= cash.toleranceCents && cash.id !== null;
+  const ringClass = cash.id
+    ? inTolerance
+      ? 'ring-emerald-200 bg-emerald-50/40'
+      : 'ring-amber-300 bg-amber-50/60'
+    : 'ring-aubergine-100 bg-white';
+
+  return (
+    <section
+      className={`rounded-2xl p-6 shadow-sm ring-1 ${ringClass}`}
+      aria-label="Reconciliación de cajas"
+    >
+      <header className="flex items-end justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
+            Reconciliación de cajas
+          </p>
+          <h2 className="text-lg font-semibold text-aubergine-700">
+            {businessDate} · {cash.id ? (inTolerance ? 'OK' : 'Discrepancia') : 'Pendiente'}
+          </h2>
+        </div>
+      </header>
+
+      <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
+        <Item label="Esperado" value={`${expected.toFixed(2)} ${cash.currency}`} />
+        <Item label="Contado" value={`${counted.toFixed(2)} ${cash.currency}`} />
+        <Item label="Diferencia" value={`${discrepancy.toFixed(2)} ${cash.currency}`} />
+      </dl>
+
+      <form action={cashAction} className="mt-4 grid gap-3 sm:grid-cols-3">
+        <input type="hidden" name="propertyId" value={propertyId} />
+        <input type="hidden" name="businessDate" value={businessDate} />
+        <label className="text-xs font-medium uppercase tracking-wide text-aubergine-500 sm:col-span-1">
+          Cash count
+          <input
+            name="countedAmount"
+            type="number"
+            step="0.01"
+            min="0"
+            defaultValue={cash.countedAmount}
+            className="mt-1 block w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
+          />
+        </label>
+        <label className="text-xs font-medium uppercase tracking-wide text-aubergine-500 sm:col-span-1">
+          Tolerancia (centavos)
+          <input
+            name="toleranceCents"
+            type="number"
+            min="0"
+            step="1"
+            defaultValue={cash.toleranceCents}
+            className="mt-1 block w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
+          />
+        </label>
+        <label className="text-xs font-medium uppercase tracking-wide text-aubergine-500 sm:col-span-1">
+          Notas
+          <input
+            name="notes"
+            type="text"
+            defaultValue={cash.notes ?? ''}
+            placeholder="opcional"
+            className="mt-1 block w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
+          />
+        </label>
+        <div className="sm:col-span-3">
+          <button
+            type="submit"
+            className="rounded-lg bg-aubergine-700 px-4 py-2 text-sm font-medium text-white hover:bg-aubergine-900"
+          >
+            Guardar conteo
+          </button>
+        </div>
+      </form>
+
+      {!cash.id && (
+        <p className="mt-2 text-xs text-aubergine-700/70">
+          El cierre del día se bloquea hasta guardar un conteo dentro de la tolerancia.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function Item({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-white p-3 ring-1 ring-aubergine-100">
+      <dt className="text-xs uppercase tracking-wide text-aubergine-500">{label}</dt>
+      <dd className="mt-0.5 font-mono text-base font-medium text-aubergine-900">{value}</dd>
+    </div>
   );
 }

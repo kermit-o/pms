@@ -6,11 +6,13 @@ import {
   type CheckOutInput,
   type CreateReservationInput,
   type FoToolName,
+  type GenerateReportInput,
   type QueryAvailabilityInput,
   foToolCatalog,
 } from '@pms/mcp-tools';
 import type { AuthUser } from '../auth';
 import { FolioService } from '../folio';
+import { ReportsService } from '../reports';
 import { ReservationsService } from '../reservations';
 import { RoomsService } from '../rooms';
 
@@ -38,6 +40,7 @@ export class FoToolRouter {
     private readonly reservations: ReservationsService,
     private readonly rooms: RoomsService,
     private readonly folio: FolioService,
+    private readonly reports: ReportsService,
   ) {}
 
   isMutating(name: FoToolName): boolean {
@@ -118,6 +121,41 @@ export class FoToolRouter {
           roomId: i.roomId,
         });
       }
+      case 'generate_report': {
+        const i = input as GenerateReportInput;
+        const manager = await this.reports.manager(user, correlationId, {
+          propertyId: i.propertyId,
+          businessDate: i.businessDate,
+        });
+        const summary = renderNarrative(i.businessDate, i.focus, manager);
+        return { focus: i.focus, manager, summary };
+      }
     }
+  }
+}
+
+/**
+ * Tiny deterministic narrative built from the Manager Report. Real LLM
+ * narratives ship behind the same contract once the Anthropic adapter is
+ * wired in (ADR-020); the read-only nature stays the same.
+ */
+function renderNarrative(
+  businessDate: string,
+  focus: GenerateReportInput['focus'],
+  m: Awaited<ReturnType<ReportsService['manager']>>,
+): string {
+  const occ = `${Math.round(m.occupancyPct * 1000) / 10}%`;
+  const head = `Día ${businessDate}: ${m.inHouse}/${m.totalRooms} habitaciones ocupadas (${occ}).`;
+
+  switch (focus) {
+    case 'revenue':
+      return `${head} Cargos posteados: ${m.charges.count} entradas por un total de ${m.charges.totalAmount} EUR. ADR ${m.adr} EUR · RevPAR ${m.revpar} EUR.`;
+    case 'occupancy':
+      return `${head} Llegadas: ${m.arrivals}. Salidas: ${m.departures}. Cancelaciones del día: ${m.cancellationsToday}.`;
+    case 'incidents':
+      return `${head} Cancelaciones: ${m.cancellationsToday}. (Detalles operacionales en logs y audit_log.)`;
+    case 'overview':
+    default:
+      return `${head} Llegadas: ${m.arrivals}, salidas: ${m.departures}. ADR ${m.adr} EUR · RevPAR ${m.revpar} EUR.`;
   }
 }

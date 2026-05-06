@@ -803,3 +803,49 @@ export async function getArrivalsDeparturesReport(
     accessToken,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Cash drawer reconciliation
+// ---------------------------------------------------------------------------
+
+export interface CashReconciliation {
+  id: string | null;
+  propertyId: string;
+  businessDate: string;
+  currency: string;
+  expectedAmount: string;
+  countedAmount: string;
+  discrepancy: string;
+  toleranceCents: number;
+  countedByUserId: string | null;
+  notes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export async function getCashReconciliation(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<CashReconciliation> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/cash/reconciliations?${params.toString()}`, { accessToken });
+}
+
+export async function upsertCashReconciliation(
+  accessToken: string | undefined,
+  input: {
+    propertyId: string;
+    businessDate: string;
+    countedAmount: number;
+    currency?: string;
+    toleranceCents?: number;
+    notes?: string;
+  },
+): Promise<CashReconciliation> {
+  return apiFetch('/cash/reconciliations', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
