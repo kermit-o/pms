@@ -99,13 +99,13 @@ Sprint 4 cerró el último módulo crítico del MVP. El sistema es operable end-
 
 Dashboards Grafana provisionados via `infra/grafana/dashboards/*.json`:
 
-| Dashboard | Paneles clave |
-|---|---|
-| **API health** | p50/p95/p99 latency por endpoint, error rate 5xx, throughput, RLS denials |
-| **Night Audit** | Run success rate, duración por step, pasos fallidos, drift business_date |
+| Dashboard        | Paneles clave                                                                   |
+| ---------------- | ------------------------------------------------------------------------------- |
+| **API health**   | p50/p95/p99 latency por endpoint, error rate 5xx, throughput, RLS denials       |
+| **Night Audit**  | Run success rate, duración por step, pasos fallidos, drift business_date        |
 | **Housekeeping** | Las 9 series `hsk_*` de S4 W5: tasks por status, p95 duration, pairings outcome |
-| **Eventbus** | Lag de consumers, deadletters, schema validation errors |
-| **Compliance** | SES queue depth, send success rate, retry budget consumido |
+| **Eventbus**     | Lag de consumers, deadletters, schema validation errors                         |
+| **Compliance**   | SES queue depth, send success rate, retry budget consumido                      |
 
 Alertas Alertmanager → Slack:
 
@@ -223,7 +223,7 @@ Implementación V1 (sin ML; heurística interpretable):
 
 1. Lista las tareas PENDING del día sin asignar.
 2. Lista las camareras `housekeeper` activas en el property.
-3. Por cada camarera, calcula su capacidad estimada del turno (8h * 0.6 productivo = ~290 min).
+3. Por cada camarera, calcula su capacidad estimada del turno (8h \* 0.6 productivo = ~290 min).
 4. Usa la mediana histórica de `durationMin` por (`taskType`, `room.roomTypeId`) — ya tenemos los datos de S4.
 5. Asigna greedy: ordena tareas por planta → rellena la primera camarera hasta su capacidad → siguiente.
 6. Devuelve `{ suggestions: [{taskId, suggestedUserId, predictedMin}], unmatched: [...] }`.
@@ -238,10 +238,10 @@ Cada sugerencia aplicada vs ignorada se loggea en una tabla `hsk_assignment_sugg
 
 ## 6. Datos y migraciones nuevas
 
-| Migración | Tablas / cambios | Notas |
-|---|---|---|
-| `20260603_lost_found_photo_url` | `lost_found_items.photo_url` (TEXT, nullable) | Backfill via script. `photo_base64` se elimina en S5 W5 tras backfill. |
-| `20260610_hsk_suggestions` (stretch) | `hsk_assignment_suggestions` (id, run_id, task_id, suggested_user_id, applied) | RLS + audit. Solo si W5 entra. |
+| Migración                            | Tablas / cambios                                                               | Notas                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `20260603_lost_found_photo_url`      | `lost_found_items.photo_url` (TEXT, nullable)                                  | Backfill via script. `photo_base64` se elimina en S5 W5 tras backfill. |
+| `20260610_hsk_suggestions` (stretch) | `hsk_assignment_suggestions` (id, run_id, task_id, suggested_user_id, applied) | RLS + audit. Solo si W5 entra.                                         |
 
 Sin nuevas tablas críticas. La columna `photo_url` se sirve directamente de S3 con URL firmada — no se duplica en DB.
 
@@ -260,31 +260,31 @@ Sin nuevas tablas críticas. La columna `photo_url` se sirve directamente de S3 
 
 ## 8. Plan por semanas (estimación 6-8 semanas)
 
-| Semana | Producción | Onboarding | Polish | Stretch IA |
-|---|---|---|---|---|
-| **W1** | ADR-023 plataforma + setup Fly/Railway + Postgres managed | — | — | — |
-| **W2** | Secrets vault + Keycloak prod + smoke deploy | Script import-piloto.ts (rooms, guests) | QR SVG inline | — |
-| **W3** | Backups + DR drill + dashboards Grafana | SES.HOSPEDAJES live + primer envío real | Fotos lost-found a S3 | — |
-| **W4** | Alertmanager → Slack + on-call rota | Material de formación PDF + vídeo | HSK tools al Copilot | — |
-| **W5** | Performance baseline + load test | Bootstrap users del piloto + training session | Bug bash dirigido | Heurística HSK V1 |
-| **W6** | Hand-over al piloto: go-live | Soporte L1 disponible (Slack compartido) | Hotfixes prioritarios | `hsk_suggest_assignments` en `/supervisor` |
-| **W7** | Operativa real, observamos métricas | UAT extendido con datos reales | — | Telemetría adoption |
-| **W8** | Cierre del sprint: post-mortem + RUNBOOK §14/§15 | — | — | — |
+| Semana | Producción                                                | Onboarding                                    | Polish                | Stretch IA                                 |
+| ------ | --------------------------------------------------------- | --------------------------------------------- | --------------------- | ------------------------------------------ |
+| **W1** | ADR-023 plataforma + setup Fly/Railway + Postgres managed | —                                             | —                     | —                                          |
+| **W2** | Secrets vault + Keycloak prod + smoke deploy              | Script import-piloto.ts (rooms, guests)       | QR SVG inline         | —                                          |
+| **W3** | Backups + DR drill + dashboards Grafana                   | SES.HOSPEDAJES live + primer envío real       | Fotos lost-found a S3 | —                                          |
+| **W4** | Alertmanager → Slack + on-call rota                       | Material de formación PDF + vídeo             | HSK tools al Copilot  | —                                          |
+| **W5** | Performance baseline + load test                          | Bootstrap users del piloto + training session | Bug bash dirigido     | Heurística HSK V1                          |
+| **W6** | Hand-over al piloto: go-live                              | Soporte L1 disponible (Slack compartido)      | Hotfixes prioritarios | `hsk_suggest_assignments` en `/supervisor` |
+| **W7** | Operativa real, observamos métricas                       | UAT extendido con datos reales                | —                     | Telemetría adoption                        |
+| **W8** | Cierre del sprint: post-mortem + RUNBOOK §14/§15          | —                                             | —                     | —                                          |
 
 ---
 
 ## 9. Riesgos y mitigaciones
 
-| Riesgo | Probabilidad | Impacto | Mitigación |
-|---|---|---|---|
-| El hotel piloto descubre un bug de datos críticos en su primer día | Media | Alto | Carga el piloto en staging primero con sus datos reales y hace 1 día completo de paralelo (Aubergine + sistema actual) antes del go-live |
-| SES.HOSPEDAJES rechaza envíos por formato no validado en sandbox | Media | Alto | UAT en sandbox SES con 50+ partes diversos antes de cambiar al endpoint live; logs detallados en queue |
-| Cambios de rotación de `PAIRING_SECRET` invalidan sesiones de camareras a mitad del turno | Baja | Medio | Documentar ventana de rotación (4 AM, post night audit). Aceptar dual-secret durante 12h en `JwtValidatorService` (W1) |
-| Latencia inestable Postgres managed cross-region | Media | Alto | Elegir región europea (Fra/Mad) que coincida con el hotel; benchmark latencia cliente↔DB ≤ 30 ms |
-| Heurística HSK sugiere algo absurdo (camarera nueva con 50 habitaciones) | Alta | Bajo | Cap explícito por camarera (capacidad turno × 0.8); supervisor revisa, ADR-020; A/B con asignación manual durante 2 semanas |
-| Backup restore tarda > 4h | Media | Alto | DR drill mensual; alertar si volumen DB > umbral |
-| Service worker de PWA HSK queda cacheado con versión rota | Media | Medio | Versionado SW + `skipWaiting` + página `/clear-cache` que el supervisor puede invocar remotamente |
-| Onboarding train-the-trainer no cala — operadores no usan Aubergine | Alta | Alto | Sesión presencial al menos un día; canal Slack/WhatsApp directo con on-call durante las 2 primeras semanas |
+| Riesgo                                                                                    | Probabilidad | Impacto | Mitigación                                                                                                                               |
+| ----------------------------------------------------------------------------------------- | ------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| El hotel piloto descubre un bug de datos críticos en su primer día                        | Media        | Alto    | Carga el piloto en staging primero con sus datos reales y hace 1 día completo de paralelo (Aubergine + sistema actual) antes del go-live |
+| SES.HOSPEDAJES rechaza envíos por formato no validado en sandbox                          | Media        | Alto    | UAT en sandbox SES con 50+ partes diversos antes de cambiar al endpoint live; logs detallados en queue                                   |
+| Cambios de rotación de `PAIRING_SECRET` invalidan sesiones de camareras a mitad del turno | Baja         | Medio   | Documentar ventana de rotación (4 AM, post night audit). Aceptar dual-secret durante 12h en `JwtValidatorService` (W1)                   |
+| Latencia inestable Postgres managed cross-region                                          | Media        | Alto    | Elegir región europea (Fra/Mad) que coincida con el hotel; benchmark latencia cliente↔DB ≤ 30 ms                                         |
+| Heurística HSK sugiere algo absurdo (camarera nueva con 50 habitaciones)                  | Alta         | Bajo    | Cap explícito por camarera (capacidad turno × 0.8); supervisor revisa, ADR-020; A/B con asignación manual durante 2 semanas              |
+| Backup restore tarda > 4h                                                                 | Media        | Alto    | DR drill mensual; alertar si volumen DB > umbral                                                                                         |
+| Service worker de PWA HSK queda cacheado con versión rota                                 | Media        | Medio   | Versionado SW + `skipWaiting` + página `/clear-cache` que el supervisor puede invocar remotamente                                        |
+| Onboarding train-the-trainer no cala — operadores no usan Aubergine                       | Alta         | Alto    | Sesión presencial al menos un día; canal Slack/WhatsApp directo con on-call durante las 2 primeras semanas                               |
 
 ---
 
