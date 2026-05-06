@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
-import { NightAuditReportType, NightAuditStep, Prisma, ReservationStatus } from '@pms/db';
+import { NightAuditReportType, NightAuditStep, Prisma } from '@pms/db';
+import { generateManagerReport, generateRevenueReport, generateTaxReport } from '../../reports';
 import type { StepContext, StepResult, StepRunner } from '../step';
 
 const log = new Logger('SnapshotReportsStep');
@@ -7,25 +8,33 @@ const log = new Logger('SnapshotReportsStep');
 /**
  * Persists immutable snapshots of the 5 night-audit reports for the day.
  *
- * Sprint 3 W2 ships the schema + skeleton payloads (counts, totals). The
- * full report contents (occupancy %, ADR, RevPAR, tax breakdown, etc.)
- * land in W3-W4 — the snapshot row already exists, only the JSON payload
- * grows.
+ * Manager / Revenue / Tax payloads are produced by the same generator
+ * functions exposed at GET /reports/*, so a snapshot row matches what the
+ * UI shows on the same date. IN_HOUSE and ARRIVALS_DEPARTURES still ship a
+ * lightweight payload until W4 wires the detail rows.
  *
  * Idempotency: night_audit_snapshots has UNIQUE (property, date,
- * reportType) so a re-run upserts the row in place; the night-audit run
- * row itself ensures we never call this with a stale runId.
+ * reportType); we upsert each row in place on a re-run.
  */
 export class SnapshotReportsStep implements StepRunner {
   readonly step = NightAuditStep.SNAPSHOT_REPORTS;
 
   async run(ctx: StepContext): Promise<StepResult> {
-    const [inHouse, arrivals, departures, charges] = await Promise.all([
+    const reportCtx = { tx: ctx.tx, tenantId: ctx.user.tenantId };
+    const range = { from: ctx.businessDate, to: ctx.businessDate };
+
+    const [manager, revenue, tax, inHouse, arrivals, departures] = await Promise.all([
+      generateManagerReport(reportCtx, {
+        propertyId: ctx.propertyId,
+        businessDate: ctx.businessDate,
+      }),
+      generateRevenueReport(reportCtx, { propertyId: ctx.propertyId, range }),
+      generateTaxReport(reportCtx, { propertyId: ctx.propertyId, range }),
       ctx.tx.reservation.count({
         where: {
           propertyId: ctx.propertyId,
           deletedAt: null,
-          status: ReservationStatus.CHECKED_IN,
+          status: 'CHECKED_IN',
           arrivalDate: { lte: ctx.businessDateAsDate },
           departureDate: { gt: ctx.businessDateAsDate },
         },
@@ -44,56 +53,19 @@ export class SnapshotReportsStep implements StepRunner {
           departureDate: ctx.businessDateAsDate,
         },
       }),
-      ctx.tx.folioEntry.aggregate({
-        where: {
-          tenantId: ctx.user.tenantId,
-          postedAt: {
-            gte: startOfUtcDay(ctx.businessDateAsDate),
-            lt: endOfUtcDay(ctx.businessDateAsDate),
-          },
-        },
-        _sum: { amount: true },
-        _count: { _all: true },
-      }),
     ]);
 
-    const totalRooms = await ctx.tx.room.count({
-      where: { propertyId: ctx.propertyId, deletedAt: null },
-    });
-    const occupancyPct = totalRooms === 0 ? 0 : Math.round((inHouse / totalRooms) * 10000) / 10000;
-
     const generatedAt = new Date();
-
     const payloads: Record<NightAuditReportType, Prisma.InputJsonValue> = {
-      MANAGER: {
-        businessDate: ctx.businessDate,
-        inHouse,
-        arrivals,
-        departures,
-        totalRooms,
-        occupancyPct,
-        chargesPostedToday: charges._count._all,
-        chargesTotalAmount: charges._sum.amount?.toString() ?? '0',
-      },
-      IN_HOUSE: {
-        businessDate: ctx.businessDate,
-        count: inHouse,
-        // Detail rows in W4.
-      },
+      MANAGER: manager as unknown as Prisma.InputJsonValue,
+      IN_HOUSE: { businessDate: ctx.businessDate, count: inHouse },
       ARRIVALS_DEPARTURES: {
         businessDate: ctx.businessDate,
         arrivals,
         departures,
       },
-      REVENUE: {
-        businessDate: ctx.businessDate,
-        chargeCount: charges._count._all,
-        totalAmount: charges._sum.amount?.toString() ?? '0',
-      },
-      TAX: {
-        businessDate: ctx.businessDate,
-        // Detail breakdown in W3 once POST_TAXES output is stable.
-      },
+      REVENUE: revenue as unknown as Prisma.InputJsonValue,
+      TAX: tax as unknown as Prisma.InputJsonValue,
     };
 
     let written = 0;
@@ -127,22 +99,20 @@ export class SnapshotReportsStep implements StepRunner {
     log.log(`wrote ${written} snapshots for ${ctx.businessDate}`);
 
     return {
-      result: { written, occupancyPct, inHouse, arrivals, departures },
+      result: {
+        written,
+        occupancyPct: manager.occupancyPct,
+        inHouse: manager.inHouse,
+        arrivals: manager.arrivals,
+        departures: manager.departures,
+      },
       totals: {
         snapshotsWritten: written,
-        occupancyPct,
-        inHouse,
-        arrivals,
-        departures,
+        occupancyPct: manager.occupancyPct,
+        inHouse: manager.inHouse,
+        arrivals: manager.arrivals,
+        departures: manager.departures,
       },
     };
   }
-}
-
-function startOfUtcDay(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
-}
-
-function endOfUtcDay(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 0, 0, 0));
 }

@@ -144,6 +144,7 @@ function buildService(opts: BuildOpts = {}) {
         _sum: { amount: new Prisma.Decimal(0) },
         _count: { _all: 0 },
       }),
+      groupBy: vi.fn().mockResolvedValue([]),
     },
     folio: {
       update: vi.fn().mockResolvedValue({}),

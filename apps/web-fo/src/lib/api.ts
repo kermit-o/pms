@@ -688,3 +688,61 @@ export async function resumeNightAuditRun(
     accessToken,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+export interface ManagerReport {
+  businessDate: string;
+  totalRooms: number;
+  inHouse: number;
+  arrivals: number;
+  departures: number;
+  cancellationsToday: number;
+  occupancyPct: number;
+  adr: string;
+  revpar: string;
+  charges: { count: number; totalAmount: string };
+}
+
+export interface RevenueReport {
+  range: { from: string; to: string };
+  rows: Array<{ type: string; count: number; totalAmount: string }>;
+  totalAmount: string;
+}
+
+export interface TaxReport {
+  range: { from: string; to: string };
+  rows: Array<{ description: string; count: number; totalAmount: string }>;
+  totalAmount: string;
+}
+
+export async function getManagerReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<ManagerReport> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/reports/manager?${params.toString()}`, { accessToken });
+}
+
+export async function getRevenueReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  from: string,
+  to: string,
+): Promise<RevenueReport> {
+  const params = new URLSearchParams({ propertyId, from, to });
+  return apiFetch(`/reports/revenue?${params.toString()}`, { accessToken });
+}
+
+export async function getTaxReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  from: string,
+  to: string,
+): Promise<TaxReport> {
+  const params = new URLSearchParams({ propertyId, from, to });
+  return apiFetch(`/reports/tax?${params.toString()}`, { accessToken });
+}

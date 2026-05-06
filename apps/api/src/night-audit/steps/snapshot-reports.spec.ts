@@ -3,22 +3,46 @@ import { describe, expect, it, vi } from 'vitest';
 import type { StepContext } from '../step';
 import { SnapshotReportsStep } from './snapshot-reports';
 
-function buildCtx() {
-  const reservationCount = vi
-    .fn()
-    .mockResolvedValueOnce(3) // inHouse
-    .mockResolvedValueOnce(2) // arrivals
-    .mockResolvedValueOnce(1); // departures
+interface CountOverrides {
+  inHouse?: number;
+  arrivals?: number;
+  departures?: number;
+  cancellations?: number;
+  totalRooms?: number;
+}
+
+function buildCtx(overrides: CountOverrides = {}) {
+  // The snapshot step + the report generators all share ctx.tx, so
+  // reservation.count is invoked many times with different `where` clauses.
+  // Disambiguate by inspecting the where shape so the test stays stable as
+  // call order changes.
+  const reservationCount = vi.fn().mockImplementation(({ where }) => {
+    if (where?.cancelledAt) {
+      return Promise.resolve(overrides.cancellations ?? 0);
+    }
+    if (where?.status === 'CHECKED_IN') {
+      return Promise.resolve(overrides.inHouse ?? 0);
+    }
+    if (where?.arrivalDate && !where?.departureDate) {
+      return Promise.resolve(overrides.arrivals ?? 0);
+    }
+    if (where?.departureDate && !where?.arrivalDate) {
+      return Promise.resolve(overrides.departures ?? 0);
+    }
+    return Promise.resolve(0);
+  });
+
   const folioEntryAggregate = vi.fn().mockResolvedValue({
     _sum: { amount: new Prisma.Decimal('500.00') },
     _count: { _all: 7 },
   });
-  const roomCount = vi.fn().mockResolvedValue(10);
+  const folioEntryGroupBy = vi.fn().mockResolvedValue([]);
+  const roomCount = vi.fn().mockResolvedValue(overrides.totalRooms ?? 10);
   const upsert = vi.fn().mockResolvedValue({});
 
   const tx = {
     reservation: { count: reservationCount },
-    folioEntry: { aggregate: folioEntryAggregate },
+    folioEntry: { aggregate: folioEntryAggregate, groupBy: folioEntryGroupBy },
     room: { count: roomCount },
     nightAuditSnapshot: { upsert },
   } as unknown as StepContext['tx'];
@@ -43,7 +67,12 @@ function buildCtx() {
 
 describe('SnapshotReportsStep', () => {
   it('upserts one snapshot per report type and returns totals', async () => {
-    const { ctx, upsert } = buildCtx();
+    const { ctx, upsert } = buildCtx({
+      inHouse: 3,
+      arrivals: 2,
+      departures: 1,
+      totalRooms: 10,
+    });
     const out = await new SnapshotReportsStep().run(ctx);
     expect(upsert).toHaveBeenCalledTimes(5);
     const types = upsert.mock.calls.map(
