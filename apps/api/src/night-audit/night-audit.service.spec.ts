@@ -5,7 +5,6 @@ import {
   NightAuditStep,
   NightAuditStepStatus,
   Prisma,
-  ReservationStatus,
 } from '@pms/db';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../auth';
