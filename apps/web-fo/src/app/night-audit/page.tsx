@@ -67,10 +67,9 @@ export default async function NightAuditPage({ searchParams }: PageProps) {
         </p>
         <h1 className="text-3xl font-semibold text-aubergine-700">Night Audit</h1>
         <p className="text-sm text-aubergine-700/70">
-          Cierre nocturno orquestado e idempotente. Sprint 3 W1 ejecuta{' '}
-          <code className="rounded bg-aubergine-50 px-1 py-0.5">POST_ROOM_CHARGES</code> y{' '}
-          <code className="rounded bg-aubergine-50 px-1 py-0.5">CLOSE_DAY</code>; el resto de pasos
-          están como stubs hasta W2-W4.
+          Cierre nocturno orquestado e idempotente. Sprint 3 W2 ejecuta los 6 pasos de la pipeline
+          (room charges, IVA, packages, no-shows, snapshots, close-day). Reportes con detalle
+          completo y reconciliación de cajas llegan en W3-W5.
         </p>
       </header>
 

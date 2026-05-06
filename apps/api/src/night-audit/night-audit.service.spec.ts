@@ -114,18 +114,45 @@ function buildService(opts: BuildOpts = {}) {
     },
     reservation: {
       findMany: vi.fn().mockResolvedValue(opts.reservations ?? []),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      count: vi.fn().mockResolvedValue(0),
     },
     folioEntry: {
-      findFirst: vi.fn().mockResolvedValue(opts.existingEntry ?? null),
+      findFirst: vi.fn().mockImplementation(({ where, select }) => {
+        if (opts.existingEntry) {
+          return Promise.resolve(opts.existingEntry);
+        }
+        // POST_TAXES looks up the room charge by idempotencyKey to read
+        // its amount; return a plausible base entry for that lookup
+        // (only when the caller asked for `amount`).
+        if (
+          typeof where?.idempotencyKey === 'string' &&
+          where.idempotencyKey.startsWith('na:room:') &&
+          select?.amount
+        ) {
+          return Promise.resolve({ amount: new Prisma.Decimal('100.00') });
+        }
+        return Promise.resolve(null);
+      }),
       create: vi.fn().mockImplementation(() => {
         if (opts.throwOnEntryCreate) {
           throw new Error(opts.throwOnEntryCreate);
         }
         return Promise.resolve({ id: 'entry-x' });
       }),
+      aggregate: vi.fn().mockResolvedValue({
+        _sum: { amount: new Prisma.Decimal(0) },
+        _count: { _all: 0 },
+      }),
     },
     folio: {
       update: vi.fn().mockResolvedValue({}),
+    },
+    room: {
+      count: vi.fn().mockResolvedValue(0),
+    },
+    nightAuditSnapshot: {
+      upsert: vi.fn().mockResolvedValue({}),
     },
     businessDayState: {
       findFirst: vi.fn().mockResolvedValue(opts.existingDay ?? null),
@@ -166,18 +193,25 @@ describe('NightAuditService.run', () => {
 
     expect(summary.status).toBe(NightAuditRunStatus.COMPLETED);
     expect(tx.nightAuditRun.create).toHaveBeenCalledOnce();
-    expect(tx.folioEntry.create).toHaveBeenCalledOnce();
-    const charge = tx.folioEntry.create.mock.calls[0]![0].data;
-    expect(charge.idempotencyKey).toBe(`na:room:2026-06-10:${RESERVATION_ID}`);
-    expect(charge.amount.toString()).toBe('100');
+    // POST_ROOM_CHARGES creates one CHARGE; POST_TAXES creates one TAX
+    // (default 10% over the 100 EUR room charge).
+    expect(tx.folioEntry.create).toHaveBeenCalledTimes(2);
+    const roomCharge = tx.folioEntry.create.mock.calls[0]![0].data;
+    expect(roomCharge.idempotencyKey).toBe(`na:room:2026-06-10:${RESERVATION_ID}`);
+    expect(roomCharge.amount.toString()).toBe('100');
+    const taxCharge = tx.folioEntry.create.mock.calls[1]![0].data;
+    expect(taxCharge.idempotencyKey).toBe(`na:tax:2026-06-10:${RESERVATION_ID}`);
+    expect(taxCharge.type).toBe('TAX');
+    expect(taxCharge.amount.toString()).toBe('10');
+    expect(tx.nightAuditSnapshot.upsert).toHaveBeenCalledTimes(5);
     expect(tx.businessDayState.create).toHaveBeenCalledOnce();
     expect(events.publish.mock.calls.map((c) => c[0])).toEqual([
       'night_audit.run_started',
       'night_audit.step_completed', // POST_ROOM_CHARGES
-      'night_audit.step_completed', // POST_TAXES (stub)
-      'night_audit.step_completed', // POST_PACKAGES (stub)
-      'night_audit.step_completed', // MARK_NO_SHOWS (stub)
-      'night_audit.step_completed', // SNAPSHOT_REPORTS (stub)
+      'night_audit.step_completed', // POST_TAXES
+      'night_audit.step_completed', // POST_PACKAGES
+      'night_audit.step_completed', // MARK_NO_SHOWS
+      'night_audit.step_completed', // SNAPSHOT_REPORTS
       'night_audit.step_completed', // CLOSE_DAY
       'night_audit.run_completed',
     ]);

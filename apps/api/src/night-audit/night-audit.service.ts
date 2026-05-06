@@ -6,13 +6,11 @@ import type { AuthUser } from '../auth';
 import { ListRunsQuery, RunNightAuditDto } from './dto';
 import type { StepContext, StepRunner } from './step';
 import { CloseDayStep } from './steps/close-day';
+import { MarkNoShowsStep } from './steps/mark-no-shows';
+import { PostPackagesStep } from './steps/post-packages';
 import { PostRoomChargesStep } from './steps/post-room-charges';
-import {
-  MarkNoShowsStep,
-  PostPackagesStep,
-  PostTaxesStep,
-  SnapshotReportsStep,
-} from './steps/stub-steps';
+import { PostTaxesStep } from './steps/post-taxes';
+import { SnapshotReportsStep } from './steps/snapshot-reports';
 
 /**
  * Night audit orchestrator. Sprint 3 W1.
@@ -45,10 +43,10 @@ export class NightAuditService {
 
   private readonly pipeline: StepRunner[] = [
     new PostRoomChargesStep(),
-    PostTaxesStep,
-    PostPackagesStep,
-    MarkNoShowsStep,
-    SnapshotReportsStep,
+    new PostTaxesStep(),
+    new PostPackagesStep(),
+    new MarkNoShowsStep(),
+    new SnapshotReportsStep(),
     new CloseDayStep(),
   ];
 
