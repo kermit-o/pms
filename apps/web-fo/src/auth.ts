@@ -1,10 +1,11 @@
 import NextAuth, { type DefaultSession } from 'next-auth';
 import Keycloak from 'next-auth/providers/keycloak';
 
-const keycloakIssuer = process.env.KEYCLOAK_ISSUER;
-if (!keycloakIssuer) {
-  throw new Error('KEYCLOAK_ISSUER not set (e.g. http://localhost:8080/realms/pms)');
-}
+// Read at module init but don't crash the bundle when missing — Next collects
+// page data at build time with no env, so a hard throw here breaks `next build`.
+// The runtime guard inside the provider config handles a misconfigured
+// environment (NextAuth surfaces a clear error on first request).
+const keycloakIssuer = process.env.KEYCLOAK_ISSUER ?? 'http://localhost:8080/realms/pms';
 
 declare module 'next-auth' {
   interface Session {
