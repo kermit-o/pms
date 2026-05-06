@@ -26,6 +26,26 @@ test.describe('routing and middleware', () => {
     await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fcompliance%2Fses$/);
   });
 
+  test('unauthenticated /night-audit redirects to /login', async ({ page }) => {
+    await page.goto('/night-audit');
+    await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fnight-audit$/);
+  });
+
+  test('unauthenticated /reports redirects to /login', async ({ page }) => {
+    await page.goto('/reports');
+    await expect(page).toHaveURL(/\/login\?callbackUrl=%2Freports$/);
+  });
+
+  test('unauthenticated /reports/manager redirects to /login', async ({ page }) => {
+    await page.goto('/reports/manager');
+    await expect(page).toHaveURL(/\/login\?callbackUrl=%2Freports%2Fmanager$/);
+  });
+
+  test('unauthenticated /reports/in-house redirects to /login', async ({ page }) => {
+    await page.goto('/reports/in-house');
+    await expect(page).toHaveURL(/\/login\?callbackUrl=%2Freports%2Fin-house$/);
+  });
+
   test('root redirects to /login when no session', async ({ page }) => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/login(\?|$)/);
