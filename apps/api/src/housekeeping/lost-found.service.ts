@@ -9,6 +9,7 @@ import {
   ListLostFoundQuery,
   RegisterLostFoundDto,
 } from './lost-found.dto';
+import { HousekeepingMetrics } from './metrics';
 
 /**
  * Lost & Found service. Sprint 4 W3.
@@ -28,6 +29,7 @@ export class LostFoundService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventbusService,
+    private readonly metrics: HousekeepingMetrics,
   ) {}
 
   async register(
@@ -70,6 +72,11 @@ export class LostFoundService {
       foundByUserId: row.foundByUserId,
       foundAt: row.foundAt.toISOString(),
       hasPhoto: row.photoBase64 != null,
+    });
+    this.metrics.lostFoundRegistered.add(1, {
+      tenant: user.tenantId,
+      property: row.propertyId,
+      has_photo: String(row.photoBase64 != null),
     });
 
     return toView(row);
@@ -144,6 +151,11 @@ export class LostFoundService {
       claimedByUserId: user.sub,
       claimedAt: row.claimedAt!.toISOString(),
     });
+    this.metrics.lostFoundResolved.add(1, {
+      tenant: user.tenantId,
+      property: row.propertyId,
+      status: 'CLAIMED',
+    });
 
     return toView(row);
   }
@@ -179,6 +191,11 @@ export class LostFoundService {
       disposedByUserId: user.sub,
       disposedAt: row.disposedAt!.toISOString(),
       reason: input.reason,
+    });
+    this.metrics.lostFoundResolved.add(1, {
+      tenant: user.tenantId,
+      property: row.propertyId,
+      status: 'DISPOSED',
     });
 
     return toView(row);

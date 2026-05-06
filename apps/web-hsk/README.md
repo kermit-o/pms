@@ -28,8 +28,19 @@ mergea.
 - W1 — scaffold + lista de tareas
 - W2 — `/task/[id]` (start/complete) + cola offline IndexedDB
 - W3 — `/lost-found` con foto base64 + `/supervisor` (panel desktop)
-- W4 — login QR + 4 tools MCP HSK (este commit)
-- W5 — UAT + RUNBOOK §13 + métricas Prometheus
+- W4 — login QR + 4 tools MCP HSK
+- W5 — UAT + RUNBOOK §13 + métricas Prometheus (este commit)
+
+## Métricas Prometheus (W5)
+
+`HousekeepingMetrics` (`apps/api/src/housekeeping/metrics.ts`) emite via OTel.
+El `PrometheusExporter` ya configurado las publica en `:9464/metrics`. Series:
+`hsk_tasks_assigned_total`, `hsk_tasks_started_total`,
+`hsk_tasks_completed_total`, `hsk_tasks_cancelled_total`,
+`hsk_task_duration_minutes_*`, `hsk_lost_found_registered_total`,
+`hsk_lost_found_resolved_total`, `hsk_pairings_minted_total`,
+`hsk_pairings_redeemed_total`. Detalle (labels + alertas sugeridas) en
+RUNBOOK §13.6. UAT en `docs/SPRINT-4-UAT.md`.
 
 ## Login QR (W4)
 

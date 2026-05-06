@@ -92,9 +92,13 @@ function buildService(
     withTenant: vi.fn(async (_ctx, fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
+  const metrics = {
+    lostFoundRegistered: { add: vi.fn() },
+    lostFoundResolved: { add: vi.fn() },
+  };
 
-  const service = new LostFoundService(prisma as never, events as never);
-  return { service, tx, events };
+  const service = new LostFoundService(prisma as never, events as never, metrics as never);
+  return { service, tx, events, metrics };
 }
 
 describe('LostFoundService.register', () => {

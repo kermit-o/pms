@@ -306,3 +306,133 @@ curl -X POST "$API_URL/business-day/reopen" \
   -H "content-type: application/json" \
   -d '{"propertyId":"'$PROPERTY_ID'","businessDate":"2026-06-10","reason":"corrección tardía"}'
 ```
+
+## 13. Operativa diaria de Housekeeping (HSK)
+
+> Guion para supervisoras y camareras. La PWA HSK (`apps/web-hsk`, puerto 3002) está separada del FO; mismo realm Keycloak `pms`, cliente distinto (`pms-hsk`).
+
+### 13.1 Pre-requisitos
+
+- API arriba con `PAIRING_SECRET` >= 32 caracteres en producción (en dev la API se autogenera una clave por proceso).
+- Migraciones aplicadas (`pnpm --filter @pms/db migrate:deploy`). Las tablas relevantes: `housekeeping_tasks`, `lost_found_items`, `device_pairings`.
+- Roles Keycloak: `housekeeping_supervisor` para supervisoras, `housekeeper` para camareras. `tenant_admin` puede hacer todo.
+
+### 13.2 Asignación de tareas (supervisora)
+
+UI: `/supervisor?propertyId=<UUID>&date=<YYYY-MM-DD>`. Muestra KPIs (total, en curso, completadas, duración media), agregaciones por camarera y la tabla con reasignación inline.
+
+CLI:
+
+```bash
+# Crear (idempotente sobre property+businessDate+room+taskType):
+curl -X POST "$API_URL/housekeeping/tasks" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+    "propertyId":"'$PROPERTY_ID'",
+    "roomId":"'$ROOM_ID'",
+    "businessDate":"2026-06-10",
+    "taskType":"CHECKOUT_CLEAN",
+    "assignedToUserId":"'$CAMARERA_ID'"
+  }'
+
+# Reasignar (también vale para des-asignar con assignedToUserId=null):
+curl -X POST "$API_URL/housekeeping/tasks/$TASK_ID/reassign" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"assignedToUserId":"'$OTRA_CAMARERA_ID'"}'
+
+# KPIs del día:
+curl "$API_URL/housekeeping/tasks/summary?propertyId=$PROPERTY_ID&businessDate=2026-06-10" \
+  -H "authorization: Bearer $TOKEN"
+```
+
+### 13.3 Camarera: limpiar habitación
+
+UI: lista en `/?propertyId=<UUID>` agrupada por status. Tap en una tarea → `/task/<id>`. Botón "Empezar limpieza" (PENDING → IN_PROGRESS), formulario "Finalizar" con selector de room status (CLEAN/INSPECTED/DIRTY/OUT_OF_ORDER) y notas opcionales. Una vez COMPLETED, queda `durationMin` calculada.
+
+Si `navigator.onLine === false`, las mutaciones se persisten en IndexedDB (`aubergine-hsk` / `mutations`) y se reintentan al volver la conexión (event `online` + intervalo de 30 s). 2xx y 409 (idempotente) drenan la entrada; el resto incrementa `attempts`. La UI muestra badge "Sin conexión" + contador de pendientes.
+
+### 13.4 Lost & Found
+
+UI: `/lost-found?propertyId=<UUID>`. Form con descripción, room opcional y captura de foto (`<input capture="environment">` redimensionada en canvas a 1280 px / JPEG 0.7 → payload <500 kB). Lista los recientes con su estado (FOUND / CLAIMED / DISPOSED).
+
+CLI:
+
+```bash
+# Registrar (foto omitible):
+curl -X POST "$API_URL/housekeeping/lost-found" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"propertyId":"'$PROPERTY_ID'","description":"Cargador iPhone blanco","roomId":"'$ROOM_ID'"}'
+
+# Entregar (claim):
+curl -X POST "$API_URL/housekeeping/lost-found/$ITEM_ID/claim" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"guestId":"'$GUEST_ID'","notes":"DNI verificado"}'
+
+# Descartar tras ventana legal:
+curl -X POST "$API_URL/housekeeping/lost-found/$ITEM_ID/dispose" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"reason":"90d sin reclamar"}'
+```
+
+### 13.5 Login QR (dispositivo móvil compartido)
+
+1. Supervisora autenticada en `/supervisor/pair` introduce el `userId` de la camarera y pulsa "Generar código". Sale un código de 12 caracteres (TTL 2 min, `PAIRING_CODE_TTL_SECONDS` en env).
+2. Camarera abre la PWA en el móvil compartido en `/login/qr` y teclea el código (acepta el formato `ABCD-EFGH-JKLM`). Alternativamente, si el supervisor le manda el deep-link `/login/qr?tenantId=...&code=...`, se rellena solo.
+3. La API redime el código y mintea un JWT HMAC HS256 (`iss=aubergine-pairing`, TTL 12 h, `PAIRING_TOKEN_TTL_HOURS`). El front lo guarda en cookie HttpOnly `aubergine_pairing`.
+4. La camarera puede operar (home, task detail, lost-found) sin pasar por Keycloak. Salir → la cookie se borra y se redirige a `/login/qr`.
+
+CLI:
+
+```bash
+# Mint:
+curl -X POST "$API_URL/housekeeping/pairings" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"targetUserId":"'$CAMARERA_ID'"}'
+# → { "code": "ABCDEFGHJKLM", "expiresAt": "...", "qrPayload": "aubergine-pairing:v1?..." }
+
+# Redeem (público, sin Bearer):
+curl -X POST "$API_URL/housekeeping/pairings/redeem" \
+  -H "content-type: application/json" \
+  -d '{"tenantId":"'$TENANT_ID'","code":"ABCDEFGHJKLM"}'
+# → { "token": "<JWT HS256>", "expiresAt": "...", "user": { ... } }
+```
+
+### 13.6 Métricas Prometheus (`:9464/metrics`)
+
+Series emitidas por `HousekeepingMetrics`:
+
+| Serie | Tipo | Labels |
+|---|---|---|
+| `hsk_tasks_assigned_total` | counter | tenant, property, task_type |
+| `hsk_tasks_started_total` | counter | tenant, property |
+| `hsk_tasks_completed_total` | counter | tenant, property, resulting_room_status |
+| `hsk_tasks_cancelled_total` | counter | tenant, property |
+| `hsk_task_duration_minutes_*` | histogram | tenant, property, task_type |
+| `hsk_lost_found_registered_total` | counter | tenant, property, has_photo |
+| `hsk_lost_found_resolved_total` | counter | tenant, property, status |
+| `hsk_pairings_minted_total` | counter | tenant |
+| `hsk_pairings_redeemed_total` | counter | tenant, outcome |
+
+Alertas sugeridas (Grafana / Alertmanager):
+
+- `rate(hsk_pairings_redeemed_total{outcome="not_found"}[5m]) > 0.5` → posible enumeration attack o usuario tecleando códigos al azar.
+- `histogram_quantile(0.95, sum(rate(hsk_task_duration_minutes_bucket[1h])) by (le, property)) > 90` → tareas que se alargan más de 1.5 h en p95: revisar fotos del checklist.
+- Sin `hsk_tasks_completed_total` durante el horario de turno: nadie está reportando — problema de pairing o conectividad.
+
+### 13.7 Cosas que pueden ir mal
+
+- **"Pairing code expired"** — el código vivió más de `PAIRING_CODE_TTL_SECONDS`. Pedir a la supervisora que mintee otro.
+- **"Pairing code already redeemed"** — alguien ya canjeó ese código (mismo dispositivo refresca, o un código compartido). Mintear uno nuevo.
+- **"Task in status COMPLETED cannot be cancelled"** — la state machine bloquea transiciones desde estados terminales. Si fue por error, la única vía es crear una nueva tarea (no se reabre).
+- **Cola offline crece sin drenarse** — `navigator.onLine` mintió (evento de OS no disparado). Soluciones: refresh de la pestaña, o llamar manualmente al endpoint desde DevTools (`flush()` en `src/lib/offline-queue.ts`).
+- **Foto rechazada con 413/422** — la imagen excede ~5 MB base64 tras el resize. Subir `JPEG_QUALITY` o bajar `TARGET_MAX_DIM` en `lost-found-form.tsx`.
+
+### 13.8 UAT
+
+Antes de cada release, ejecutar la checklist de `docs/SPRINT-4-UAT.md` contra staging. Cubre los 9 escenarios principales (crear/start/complete, cancel, idempotencia, lost-found con/sin foto, pairing happy path + 4 fallos, reasignación, métricas).

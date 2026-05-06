@@ -95,9 +95,20 @@ function buildService(
     withTenant: vi.fn(async (_ctx, fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
+  const metrics = {
+    tasksAssigned: { add: vi.fn() },
+    tasksStarted: { add: vi.fn() },
+    tasksCompleted: { add: vi.fn() },
+    tasksCancelled: { add: vi.fn() },
+    taskDuration: { record: vi.fn() },
+  };
 
-  const service = new HousekeepingTasksService(prisma as never, events as never);
-  return { service, tx, events };
+  const service = new HousekeepingTasksService(
+    prisma as never,
+    events as never,
+    metrics as never,
+  );
+  return { service, tx, events, metrics };
 }
 
 describe('HousekeepingTasksService.create', () => {
@@ -176,9 +187,9 @@ describe('HousekeepingTasksService.start', () => {
 });
 
 describe('HousekeepingTasksService.complete', () => {
-  it('moves IN_PROGRESS -> COMPLETED, sets durationMin, transitions room', async () => {
+  it('moves IN_PROGRESS -> COMPLETED, sets durationMin, transitions room, records metrics', async () => {
     const startedAt = new Date(Date.now() - 30 * 60 * 1000);
-    const { service, tx, events } = buildService({
+    const { service, tx, events, metrics } = buildService({
       existingTask: buildExistingTask({
         status: HousekeepingTaskStatus.IN_PROGRESS,
         startedAt,
@@ -191,6 +202,8 @@ describe('HousekeepingTasksService.complete', () => {
     expect(out.durationMin).toBeGreaterThanOrEqual(29);
     expect(tx.room.update).toHaveBeenCalledOnce();
     expect(events.publish.mock.calls[0]![0]).toBe('housekeeping.task_completed');
+    expect(metrics.tasksCompleted.add).toHaveBeenCalledOnce();
+    expect(metrics.taskDuration.record).toHaveBeenCalledOnce();
   });
 
   it('rejects complete on PENDING task', async () => {

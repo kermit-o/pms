@@ -79,8 +79,18 @@ function buildService(opts: BuildOpts = {}) {
     },
   };
 
-  const service = new DevicePairingsService(prisma as never, jwt as never, config as never);
-  return { service, tx };
+  const metrics = {
+    pairingsMinted: { add: vi.fn() },
+    pairingsRedeemed: { add: vi.fn() },
+  };
+
+  const service = new DevicePairingsService(
+    prisma as never,
+    jwt as never,
+    config as never,
+    metrics as never,
+  );
+  return { service, tx, metrics };
 }
 
 describe('DevicePairingsService.mint', () => {
@@ -117,8 +127,8 @@ describe('DevicePairingsService.redeem', () => {
     };
   }
 
-  it('returns a HMAC JWT with iss=aubergine-pairing, marks the row redeemed', async () => {
-    const { service, tx } = buildService({ existing: existingPairing() });
+  it('returns a HMAC JWT with iss=aubergine-pairing, marks the row redeemed, records success', async () => {
+    const { service, tx, metrics } = buildService({ existing: existingPairing() });
     const out = await service.redeem('corr', {
       tenantId: TENANT_ID,
       code: 'ABCDEFGHJKLM',
@@ -129,6 +139,10 @@ describe('DevicePairingsService.redeem', () => {
     expect(payload.tenant_id).toBe(TENANT_ID);
     expect(payload.roles).toEqual(['housekeeper']);
     expect(tx.devicePairing.update).toHaveBeenCalledOnce();
+    expect(metrics.pairingsRedeemed.add).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ outcome: 'success' }),
+    );
   });
 
   it('rejects an already-redeemed code', async () => {

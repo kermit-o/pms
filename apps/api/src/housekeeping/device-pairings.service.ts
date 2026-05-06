@@ -13,6 +13,7 @@ import { JwtValidatorService, PAIRING_TOKEN_ISSUER } from '../auth/jwt-validator
 import type { Env } from '../config/env.schema';
 import { PrismaService } from '../db';
 import type { MintPairingDto, RedeemPairingDto } from './device-pairings.dto';
+import { HousekeepingMetrics } from './metrics';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin 0/O/1/I — facil de leer en QR.
 const CODE_LENGTH = 12;
@@ -36,6 +37,7 @@ export class DevicePairingsService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtValidatorService,
     private readonly config: ConfigService<Env, true>,
+    private readonly metrics: HousekeepingMetrics,
   ) {}
 
   async mint(
@@ -80,6 +82,8 @@ export class DevicePairingsService {
       throw new Error('Unreachable: pairing code retries exhausted');
     });
 
+    this.metrics.pairingsMinted.add(1, { tenant: row.tenantId });
+
     return {
       id: row.id,
       code: row.code,
@@ -97,11 +101,25 @@ export class DevicePairingsService {
       const row = await tx.devicePairing.findFirst({
         where: { code: input.code, tenantId: input.tenantId },
       });
-      if (!row) throw new NotFoundException('Pairing code not found');
+      if (!row) {
+        this.metrics.pairingsRedeemed.add(1, {
+          tenant: input.tenantId,
+          outcome: 'not_found',
+        });
+        throw new NotFoundException('Pairing code not found');
+      }
       if (row.redeemedAt) {
+        this.metrics.pairingsRedeemed.add(1, {
+          tenant: input.tenantId,
+          outcome: 'already',
+        });
         throw new ConflictException('Pairing code already redeemed');
       }
       if (row.expiresAt.getTime() < Date.now()) {
+        this.metrics.pairingsRedeemed.add(1, {
+          tenant: input.tenantId,
+          outcome: 'expired',
+        });
         throw new UnauthorizedException('Pairing code expired');
       }
       const target = await tx.user.findFirst({
@@ -132,6 +150,11 @@ export class DevicePairingsService {
       .setJti(result.jti)
       .setExpirationTime(expSeconds)
       .sign(this.jwt.getPairingSecret());
+
+    this.metrics.pairingsRedeemed.add(1, {
+      tenant: input.tenantId,
+      outcome: 'success',
+    });
 
     return {
       token,

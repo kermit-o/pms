@@ -11,6 +11,7 @@ import {
   ReassignTaskDto,
   SummaryQuery,
 } from './dto';
+import { HousekeepingMetrics } from './metrics';
 
 /**
  * Housekeeping tasks service. Sprint 4 W1.
@@ -34,7 +35,12 @@ export class HousekeepingTasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventbusService,
+    private readonly metrics: HousekeepingMetrics,
   ) {}
+
+  private labels(tenantId: string, propertyId: string) {
+    return { tenant: tenantId, property: propertyId };
+  }
 
   async create(user: AuthUser, correlationId: string, input: CreateTaskDto): Promise<TaskView> {
     const ctx = tenantCtx(user, correlationId);
@@ -89,6 +95,10 @@ export class HousekeepingTasksService {
         taskType: result.row.taskType,
         assignedToUserId: result.row.assignedToUserId,
         assignedAt: result.row.assignedAt?.toISOString() ?? new Date().toISOString(),
+      });
+      this.metrics.tasksAssigned.add(1, {
+        ...this.labels(user.tenantId, result.row.propertyId),
+        task_type: result.row.taskType,
       });
     }
 
@@ -159,6 +169,7 @@ export class HousekeepingTasksService {
       startedByUserId: user.sub,
       startedAt: result.startedAt!.toISOString(),
     });
+    this.metrics.tasksStarted.add(1, this.labels(user.tenantId, result.propertyId));
 
     return toView(result);
   }
@@ -222,6 +233,16 @@ export class HousekeepingTasksService {
       durationMin: result.durationMin ?? 0,
       resultingRoomStatus: input.resultingRoomStatus ?? null,
     });
+    this.metrics.tasksCompleted.add(1, {
+      ...this.labels(user.tenantId, result.propertyId),
+      resulting_room_status: input.resultingRoomStatus ?? 'none',
+    });
+    if (result.durationMin != null) {
+      this.metrics.taskDuration.record(result.durationMin, {
+        ...this.labels(user.tenantId, result.propertyId),
+        task_type: result.taskType,
+      });
+    }
 
     return toView(result);
   }
@@ -263,6 +284,7 @@ export class HousekeepingTasksService {
       cancelledAt: new Date().toISOString(),
       reason: input.reason,
     });
+    this.metrics.tasksCancelled.add(1, this.labels(user.tenantId, result.propertyId));
 
     return toView(result);
   }
