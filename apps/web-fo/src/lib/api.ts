@@ -539,3 +539,88 @@ export async function sendSesSubmission(
     accessToken,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Copilot
+// ---------------------------------------------------------------------------
+
+export type FoToolName =
+  | 'query_availability'
+  | 'create_reservation'
+  | 'check_in'
+  | 'check_out'
+  | 'add_folio_charge'
+  | 'assign_room';
+
+export interface CopilotMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  pendingToolId?: string;
+  pendingTool?: {
+    name: FoToolName;
+    input: unknown;
+    financial: boolean;
+  };
+  createdAt: string;
+}
+
+export interface CopilotPendingTool {
+  id: string;
+  tool: FoToolName;
+  input: unknown;
+  financial: boolean;
+  status: 'pending' | 'approved' | 'rejected' | 'failed';
+  createdAt: string;
+}
+
+export interface CopilotSession {
+  sessionId: string;
+  propertyId: string | null;
+  createdAt: string;
+  messages: CopilotMessage[];
+  pendingTools: CopilotPendingTool[];
+}
+
+export async function createCopilotSession(
+  accessToken: string | undefined,
+  propertyId?: string,
+): Promise<{ sessionId: string }> {
+  return apiFetch('/copilot/sessions', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(propertyId ? { propertyId } : {}),
+  });
+}
+
+export async function getCopilotSession(
+  accessToken: string | undefined,
+  sessionId: string,
+): Promise<CopilotSession> {
+  return apiFetch(`/copilot/sessions/${sessionId}`, { accessToken });
+}
+
+export async function sendCopilotMessage(
+  accessToken: string | undefined,
+  sessionId: string,
+  content: string,
+): Promise<CopilotSession> {
+  return apiFetch(`/copilot/sessions/${sessionId}/messages`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function confirmCopilotTool(
+  accessToken: string | undefined,
+  sessionId: string,
+  pendingToolId: string,
+  decision: 'approve' | 'reject',
+): Promise<CopilotSession> {
+  return apiFetch(`/copilot/sessions/${sessionId}/confirm-tool`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ pendingToolId, decision }),
+  });
+}
