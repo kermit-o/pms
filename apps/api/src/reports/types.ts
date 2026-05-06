@@ -59,3 +59,38 @@ export interface TaxReportPayload {
   }>;
   totalAmount: string;
 }
+
+export interface InHouseRow {
+  reservationId: string;
+  code: string;
+  arrivalDate: string;
+  departureDate: string;
+  roomNumber: string | null;
+  primaryGuest: string | null;
+  adults: number;
+  children: number;
+  balance: string;
+  currency: string;
+}
+
+export interface InHouseReportPayload {
+  businessDate: string;
+  count: number;
+  rows: InHouseRow[];
+}
+
+export interface ArrivalsDeparturesRow {
+  reservationId: string;
+  code: string;
+  status: string;
+  arrivalDate: string;
+  departureDate: string;
+  roomNumber: string | null;
+  primaryGuest: string | null;
+}
+
+export interface ArrivalsDeparturesReportPayload {
+  businessDate: string;
+  arrivals: ArrivalsDeparturesRow[];
+  departures: ArrivalsDeparturesRow[];
+}

@@ -68,7 +68,12 @@ export default async function ManagerReportPage({ searchParams }: PageProps) {
             </p>
           </section>
 
-          <p className="text-xs text-aubergine-700/60">Exportación CSV / PDF: W4.</p>
+          <a
+            href={`/api/reports/manager?propertyId=${propertyId}&businessDate=${businessDate}`}
+            className="inline-block rounded-lg bg-white px-3 py-2 text-sm font-medium text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-50"
+          >
+            Descargar CSV
+          </a>
         </>
       )}
     </main>

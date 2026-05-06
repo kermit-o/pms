@@ -40,8 +40,10 @@ function buildCtx(overrides: CountOverrides = {}) {
   const roomCount = vi.fn().mockResolvedValue(overrides.totalRooms ?? 10);
   const upsert = vi.fn().mockResolvedValue({});
 
+  const reservationFindMany = vi.fn().mockResolvedValue([]);
+
   const tx = {
-    reservation: { count: reservationCount },
+    reservation: { count: reservationCount, findMany: reservationFindMany },
     folioEntry: { aggregate: folioEntryAggregate, groupBy: folioEntryGroupBy },
     room: { count: roomCount },
     nightAuditSnapshot: { upsert },

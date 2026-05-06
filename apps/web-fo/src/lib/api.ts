@@ -746,3 +746,60 @@ export async function getTaxReport(
   const params = new URLSearchParams({ propertyId, from, to });
   return apiFetch(`/reports/tax?${params.toString()}`, { accessToken });
 }
+
+// W4 — In-house + Arrivals/Departures
+
+export interface InHouseRow {
+  reservationId: string;
+  code: string;
+  arrivalDate: string;
+  departureDate: string;
+  roomNumber: string | null;
+  primaryGuest: string | null;
+  adults: number;
+  children: number;
+  balance: string;
+  currency: string;
+}
+
+export interface InHouseReport {
+  businessDate: string;
+  count: number;
+  rows: InHouseRow[];
+}
+
+export interface ArrivalsDeparturesRow {
+  reservationId: string;
+  code: string;
+  status: string;
+  arrivalDate: string;
+  departureDate: string;
+  roomNumber: string | null;
+  primaryGuest: string | null;
+}
+
+export interface ArrivalsDeparturesReport {
+  businessDate: string;
+  arrivals: ArrivalsDeparturesRow[];
+  departures: ArrivalsDeparturesRow[];
+}
+
+export async function getInHouseReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<InHouseReport> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/reports/in-house?${params.toString()}`, { accessToken });
+}
+
+export async function getArrivalsDeparturesReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  businessDate: string,
+): Promise<ArrivalsDeparturesReport> {
+  const params = new URLSearchParams({ propertyId, businessDate });
+  return apiFetch(`/reports/arrivals-departures?${params.toString()}`, {
+    accessToken,
+  });
+}

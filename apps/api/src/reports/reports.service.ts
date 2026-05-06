@@ -1,16 +1,24 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../db';
 import type { AuthUser } from '../auth';
+import { generateArrivalsDeparturesReport } from './generators/arrivals-departures-report';
+import { generateInHouseReport } from './generators/in-house-report';
 import { generateManagerReport } from './generators/manager-report';
 import { generateRevenueReport } from './generators/revenue-report';
 import { generateTaxReport } from './generators/tax-report';
-import type { ManagerReportPayload, RevenueReportPayload, TaxReportPayload } from './types';
+import type {
+  ArrivalsDeparturesReportPayload,
+  InHouseReportPayload,
+  ManagerReportPayload,
+  RevenueReportPayload,
+  TaxReportPayload,
+} from './types';
 
 /**
  * Reports service. Delegates to pure generator functions in `generators/`,
  * each wrapped in a tenant-scoped transaction so RLS applies.
  *
- * Each generator is also reused by the night-audit SNAPSHOT_REPORTS step,
+ * The same generators are reused by the night-audit SNAPSHOT_REPORTS step
  * so on-demand reads and snapshots stay numerically identical.
  */
 @Injectable()
@@ -58,6 +66,26 @@ export class ReportsService {
         { tx, tenantId: user.tenantId },
         { propertyId: args.propertyId, range: { from: args.from, to: args.to } },
       ),
+    );
+  }
+
+  inHouse(
+    user: AuthUser,
+    correlationId: string,
+    args: { propertyId: string; businessDate: string },
+  ): Promise<InHouseReportPayload> {
+    return this.prisma.withTenant(tenantCtx(user, correlationId), (tx) =>
+      generateInHouseReport({ tx, tenantId: user.tenantId }, args),
+    );
+  }
+
+  arrivalsDepartures(
+    user: AuthUser,
+    correlationId: string,
+    args: { propertyId: string; businessDate: string },
+  ): Promise<ArrivalsDeparturesReportPayload> {
+    return this.prisma.withTenant(tenantCtx(user, correlationId), (tx) =>
+      generateArrivalsDeparturesReport({ tx, tenantId: user.tenantId }, args),
     );
   }
 }

@@ -113,7 +113,16 @@ function buildService(opts: BuildOpts = {}) {
       }),
     },
     reservation: {
-      findMany: vi.fn().mockResolvedValue(opts.reservations ?? []),
+      // POST_* steps use findMany with the {roomType, ratePlan, folio}
+      // select shape; the In-house / Arrivals-Departures generators ask
+      // for {room, guests, folio}. Disambiguate so the mock doesn't
+      // return the W1/W2 fixtures with relation gaps.
+      findMany: vi.fn().mockImplementation(({ select }) => {
+        if (select?.guests) {
+          return Promise.resolve([]);
+        }
+        return Promise.resolve(opts.reservations ?? []);
+      }),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       count: vi.fn().mockResolvedValue(0),
     },

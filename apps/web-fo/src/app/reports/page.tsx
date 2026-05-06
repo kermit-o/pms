@@ -76,8 +76,18 @@ export default function ReportsPage({ searchParams }: PageProps) {
           title="Tax"
           subtitle="IVA recaudado"
         />
-        <DisabledTile title="In-house" subtitle="Detalle por habitación · W4" />
-        <DisabledTile title="Arrivals / Departures" subtitle="Listado · W4" />
+        <ReportTile
+          href={`/reports/in-house?propertyId=${propertyId}&businessDate=${date}`}
+          enabled={!!propertyId}
+          title="In-house"
+          subtitle="Detalle por habitación"
+        />
+        <ReportTile
+          href={`/reports/arrivals-departures?propertyId=${propertyId}&businessDate=${date}`}
+          enabled={!!propertyId}
+          title="Arrivals / Departures"
+          subtitle="Llegadas y salidas del día"
+        />
       </section>
 
       {!propertyId && (

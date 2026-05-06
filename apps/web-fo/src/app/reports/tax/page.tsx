@@ -74,6 +74,14 @@ export default async function TaxReportPage({ searchParams }: PageProps) {
         >
           Aplicar
         </button>
+        {propertyId && (
+          <a
+            href={`/api/reports/tax?propertyId=${propertyId}&from=${from}&to=${to}`}
+            className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-50"
+          >
+            Descargar CSV
+          </a>
+        )}
       </form>
 
       {error && (
