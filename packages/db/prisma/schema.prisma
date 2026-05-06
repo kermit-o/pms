@@ -29,16 +29,19 @@ model Tenant {
   updatedAt DateTime     @updatedAt @map("updated_at")
   deletedAt DateTime?    @map("deleted_at")
 
-  users             User[]
-  properties        Property[]
-  roomTypes         RoomType[]
-  rooms             Room[]
-  guests            Guest[]
-  reservations      Reservation[]
-  reservationGuests ReservationGuest[]
-  ratePlans         RatePlan[]
-  folios            Folio[]
-  folioEntries      FolioEntry[]
+  users              User[]
+  properties         Property[]
+  roomTypes          RoomType[]
+  rooms              Room[]
+  guests             Guest[]
+  reservations       Reservation[]
+  reservationGroups  ReservationGroup[]
+  reservationGuests  ReservationGuest[]
+  ratePlans          RatePlan[]
+  folios             Folio[]
+  folioEntries       FolioEntry[]
+  businessDays       BusinessDayState[]
+  sesSubmissions     SesHospedajesSubmission[]
 
   @@map("tenants")
 }
@@ -98,11 +101,14 @@ model Property {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  roomTypes    RoomType[]
-  rooms        Room[]
-  reservations Reservation[]
-  ratePlans    RatePlan[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roomTypes         RoomType[]
+  rooms             Room[]
+  reservations      Reservation[]
+  reservationGroups ReservationGroup[]
+  ratePlans         RatePlan[]
+  businessDays      BusinessDayState[]
+  sesSubmissions    SesHospedajesSubmission[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -306,6 +312,33 @@ model RatePlan {
 // roomId es opcional: la asignacion ocurre en check-in.
 // ----------------------------------------------------------------------------
 
+// Bloque de reservas para grupos (boda, congreso, equipo deportivo).
+// Las reservas hijas comparten organizador, fechas y politicas; cada una
+// mantiene su propio folio y huesped principal.
+model ReservationGroup {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  propertyId   String    @map("property_id") @db.Uuid
+  code         String // "GRP-WEDDING01"
+  name         String
+  organizerName  String? @map("organizer_name")
+  organizerEmail String? @map("organizer_email")
+  organizerPhone String? @map("organizer_phone")
+  notes        String?
+  attributes   Json?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, propertyId])
+  @@map("reservation_groups")
+}
+
 model Reservation {
   id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId           String            @map("tenant_id") @db.Uuid
@@ -313,6 +346,8 @@ model Reservation {
   // Codigo legible humano ("BCN-A1B2C3")
   code               String
   status             ReservationStatus @default(PENDING)
+  // Grupo opcional (Sprint 2 W2)
+  groupId            String?           @map("group_id") @db.Uuid
   // Estancia
   arrivalDate        DateTime          @map("arrival_date") @db.Date
   departureDate      DateTime          @map("departure_date") @db.Date
@@ -345,6 +380,7 @@ model Reservation {
   roomType RoomType           @relation(fields: [roomTypeId], references: [id])
   room     Room?              @relation(fields: [roomId], references: [id])
   ratePlan RatePlan?          @relation(fields: [ratePlanId], references: [id])
+  group    ReservationGroup?  @relation(fields: [groupId], references: [id])
   guests   ReservationGuest[]
   folio    Folio?
 
@@ -353,6 +389,7 @@ model Reservation {
   @@index([tenantId, propertyId, departureDate])
   @@index([tenantId, propertyId, status])
   @@index([tenantId, roomId])
+  @@index([tenantId, groupId])
   @@map("reservations")
 }
 
@@ -429,20 +466,22 @@ enum FolioStatus {
 }
 
 model FolioEntry {
-  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String         @map("tenant_id") @db.Uuid
-  folioId     String         @map("folio_id") @db.Uuid
-  type        FolioEntryType
-  description String
-  amount      Decimal        @db.Decimal(12, 2)
-  currency    String         @default("EUR") @db.Char(3)
-  postedAt    DateTime       @default(now()) @map("posted_at")
-  postedBy    String?        @map("posted_by") @db.Uuid
-  attributes  Json?
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String         @map("tenant_id") @db.Uuid
+  folioId        String         @map("folio_id") @db.Uuid
+  type           FolioEntryType
+  description    String
+  amount         Decimal        @db.Decimal(12, 2)
+  currency       String         @default("EUR") @db.Char(3)
+  postedAt       DateTime       @default(now()) @map("posted_at")
+  postedBy       String?        @map("posted_by") @db.Uuid
+  idempotencyKey String?        @map("idempotency_key")
+  attributes     Json?
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   folio  Folio  @relation(fields: [folioId], references: [id], onDelete: Cascade)
 
+  @@unique([folioId, idempotencyKey], map: "folio_entries_folio_id_idempotency_key_key")
   @@index([tenantId, folioId])
   @@index([tenantId, postedAt])
   @@map("folio_entries")
@@ -456,4 +495,74 @@ enum FolioEntryType {
   ADJUSTMENT
 
   @@map("folio_entry_type")
+}
+
+// ----------------------------------------------------------------------------
+// Business-day state — locking de operaciones FO sobre dias cerrados.
+// ----------------------------------------------------------------------------
+
+model BusinessDayState {
+  tenantId        String            @map("tenant_id") @db.Uuid
+  propertyId      String            @map("property_id") @db.Uuid
+  businessDate    DateTime          @map("business_date") @db.Date
+  status          BusinessDayStatus @default(OPEN)
+  closedAt        DateTime?         @map("closed_at")
+  closedByUserId  String?           @map("closed_by_user_id") @db.Uuid
+  reopenedAt      DateTime?         @map("reopened_at")
+  reopenedReason  String?           @map("reopened_reason")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@id([propertyId, businessDate])
+  @@index([tenantId, propertyId])
+  @@map("business_day_states")
+}
+
+enum BusinessDayStatus {
+  OPEN
+  CLOSED
+
+  @@map("business_day_status")
+}
+
+// ----------------------------------------------------------------------------
+// SES.HOSPEDAJES — partes diarios para la Guardia Civil (RD 933/2021).
+// ----------------------------------------------------------------------------
+
+model SesHospedajesSubmission {
+  id            String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String              @map("tenant_id") @db.Uuid
+  propertyId    String              @map("property_id") @db.Uuid
+  businessDate  DateTime            @map("business_date") @db.Date
+  status        SesSubmissionStatus @default(QUEUED)
+  xmlPayload    String?             @map("xml_payload")
+  xmlSignature  String?             @map("xml_signature")
+  submittedAt   DateTime?           @map("submitted_at")
+  responseCode  Int?                @map("response_code")
+  responseBody  String?             @map("response_body")
+  retryCount    Int                 @default(0) @map("retry_count")
+  lastError     String?             @map("last_error")
+  nextAttemptAt DateTime?           @map("next_attempt_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, businessDate])
+  @@index([tenantId, propertyId])
+  @@index([status, nextAttemptAt])
+  @@map("ses_hospedajes_submissions")
+}
+
+enum SesSubmissionStatus {
+  QUEUED
+  SENT
+  FAILED
+  DEAD_LETTER
+
+  @@map("ses_submission_status")
 }

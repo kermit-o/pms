@@ -17,6 +17,12 @@ export const envSchema = z.object({
 
   ANTHROPIC_API_KEY: z.string().optional(),
 
+  // SES.HOSPEDAJES (Guardia Civil). En staging apunta a sandbox; en prod
+  // al endpoint real. Si no se configura, los envios se quedan en QUEUED
+  // y el envio real es no-op (util en tests/dev).
+  SES_HOSPEDAJES_ENDPOINT: z.string().url().optional(),
+  SES_HOSPEDAJES_API_KEY: z.string().optional(),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])

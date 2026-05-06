@@ -1,4 +1,7 @@
-# PMS SaaS — Documento Maestro del Proyecto
+# Aubergine — PMS SaaS · Documento Maestro del Proyecto
+
+> **Producto:** Aubergine — AI-native PMS para hoteles boutique en España (30-150 habs).
+> **Repo:** `kermit-o/pms` (el codename interno se mantiene; la marca pública es Aubergine).
 
 > **Este documento es la fuente única de verdad del proyecto.**
 > Antes de iniciar cualquier sesión de trabajo, leerlo.
@@ -9,23 +12,20 @@
 
 ## 0. Estado actual
 
-- **Sprint 1 (Foundation) ✅ mergeado a `main` (PR #2).** 6 tareas: NestJS API + Prisma RLS + Keycloak/JWT + NATS eventbus + MCP server + OpenTelemetry. Plan en [`docs/SPRINT-1-PLAN.md`](./docs/SPRINT-1-PLAN.md).
+- **Sprint 1 (Foundation) ✅ mergeado a `main` (PR #2).** NestJS API + Prisma RLS + Keycloak/JWT + NATS eventbus + MCP server + OpenTelemetry. Plan en [`docs/SPRINT-1-PLAN.md`](./docs/SPRINT-1-PLAN.md).
 - **Sprint 1.5 (Polish) ✅ mergeado a `main` (PR #2).** CI verde, lockfile, RUNBOOK, discovery doc. Plan en [`docs/SPRINT-1.5-PLAN.md`](./docs/SPRINT-1.5-PLAN.md).
-- **Fase actual: Sprint 2 pre-work — modelo de datos canónico de Front Office.** Plan en [`docs/SPRINT-2-PREP.md`](./docs/SPRINT-2-PREP.md).
-  - ✅ Schema extendido: `RoomType`, `Room`, `Guest` (compliance ES), `RatePlan`, `Reservation`, `ReservationGuest`, `Folio`, `FolioEntry`.
-  - ✅ Migración con RLS `FORCE` + audit triggers + GRANTs en cada tabla nueva.
-  - ✅ Seed extendido con datos demo (2 room types, 6 rooms, 1 rate plan).
-  - ⏳ Hablar con 2-3 hoteles boutique antes de cerrar el alcance funcional (Sprint 2 features).
-  - ⏳ (Opcional) Deploy a staging.
-- **Próximo: Sprint 2 funcional — workflows FO** (reservas CRUD, check-in/out, folio operations, cardex, SES.HOSPEDAJES). Arranca tras feedback de hoteles.
-- **Branch de desarrollo actual:** `claude/sprint-2-pre-fo` (pre-work, sin features de negocio).
+- **Sprint 2 pre-work ✅ mergeado a `main` (PR #3).** Modelo de datos canónico FO: `RoomType`, `Room`, `Guest`, `RatePlan`, `Reservation`, `ReservationGuest`, `Folio`, `FolioEntry`, con RLS + audit triggers + seed. Plan en [`docs/SPRINT-2-PREP.md`](./docs/SPRINT-2-PREP.md).
+- **Sprint 1.5 staging ✅ mergeado a `main` (PR #4).** Dockerfile multi-stage + Railway compatibility (`process.env.PORT`, role idempotente, binaryTargets musl, copy de workspace completo). Validado end-to-end en Railway: Keycloak → JWT con `tenant_id` → API → `withTenant` → RLS.
+- **Sprint 1.5 RUNBOOK Railway 🟡 PR #5 abierto.** Sección 12 con 7 lecciones aprendidas del despliegue.
+- **Fase actual: Sprint 2 — MVP FO completo (sin recortes).** Producto: **Aubergine**. Alcance per §4.1 íntegro (reservas CRUD, walk-in, group bookings, check-in/out, folio con cargos/pagos/splits, cardex GDPR, SES.HOSPEDAJES, locking) + UI FO Next.js 15 desde día 1 + copiloto conversacional FO básico. Plan en [`docs/SPRINT-2-PLAN.md`](./docs/SPRINT-2-PLAN.md).
+- **Branch de desarrollo actual:** `claude/plan-hotel-saas-rWaWw` (planning + scaffolding de Sprint 2).
 - **Última actualización:** 2026-05-05
 
 ---
 
 ## 1. Visión
 
-Construir un **PMS (Property Management System) SaaS AI-native** para hoteles, que compita con Opera Cloud, Mews, Cloudbeds y Apaleo en los flancos donde son débiles: **UX, precio, API-first y agentes de IA integrados**.
+Construir **Aubergine** — un **PMS (Property Management System) SaaS AI-native** para hoteles, que compita con Opera Cloud, Mews, Cloudbeds y Apaleo en los flancos donde son débiles: **UX, precio, API-first y agentes de IA integrados**.
 
 **Tagline interno:** _"AI-native PMS"_ — no es un PMS con IA pegada encima, sino un PMS diseñado alrededor de la IA desde el día uno.
 
@@ -365,6 +365,28 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 - **Razón:** OTel es el estándar de facto para observabilidad multi-vendor. Auto-instrumentations cubren todo lo que usamos sin código manual. Pino + Prometheus son los formatos que cualquier ecosistema (Grafana, Datadog, Honeycomb) acepta sin adaptación. Nada de vendor lock-in.
 - **Alternativas descartadas:** Datadog APM (lock-in + caro), instrumentación manual (mantenimiento), `pino-opentelemetry-transport` (la auto-instrumentation ya hace lo mismo y sin overhead extra).
 - **Pendiente (Sprint 2+):** añadir Jaeger/Tempo a `docker-compose.yml` cuando empecemos a depurar latencia; alertas Prometheus; sampling configurable; spans manuales en operaciones de dominio críticas (Night Audit, asignación HSK).
+
+### ADR-019 — 2026-05-05 — Nombre de producto: **Aubergine**
+
+- **Decisión:** El producto público se llama **Aubergine**. El repo (`kermit-o/pms`), los packages (`@pms/api`, `@pms/db`, `@pms/eventbus`, `@pms/mcp-tools`) y el codename interno conservan `pms` para no propagar un rename invasivo en este momento. La marca aparece en UI, README público, copy comercial, dominio, emails transaccionales y documentación de cara a hoteles.
+- **Razón:** Nombre corto, memorable, no descriptivo (no constriñe el roadmap a "PMS"), pronunciable en ES y EN, sin colisiones con incumbentes (Mews, Cloudbeds, Apaleo, Opera). El descriptor "PMS for boutique hotels" acompaña en la wordmark.
+- **Implicaciones inmediatas:** título y subtítulo de UI FO ("Aubergine"), `<title>` de la app web, `package.json` `description`, README público. **No** se renombra el repo ni los packages internos.
+- **Alternativas descartadas:** rename total a `@aubergine/*` ahora (re-trabajo de imports + lockfile + Docker COPY paths sin valor de producto inmediato; se hará en una pasada de marca cuando haya cliente firmado).
+
+### ADR-020 — 2026-05-05 — Sprint 2 = MVP FO **completo** (sin recortes), UI desde día 1
+
+- **Decisión:** Sprint 2 entrega el alcance íntegro de §4.1 — Reservas (CRUD + walk-in + group bookings), check-in / check-out, asignación y cambio de habitación, folio (cargos manuales + pagos parciales + splits), tarjeta de registro + **SES.HOSPEDAJES sender**, cardex GDPR, locking de operaciones críticas — **más** UI FO Next.js 15 desde el primer día y **más** copiloto conversacional FO básico (subset MCP de FO consumible por Claude). No hay "minimum viable" del subset; las piezas que se posponen están explícitamente en §4.4 (Channel Manager, Revenue, POS, Booking engine, Loyalty), no dentro de §4.1.
+- **Razón:** Un hotel boutique no firma con un PMS que no ve y no opera punta-a-punta. La validación de mercado exige una UI usable y los flujos FO completos. Cortar el alcance dentro de §4.1 reabre el _ticking debt_ de "lo terminamos en V2" que mata adoption en SaaS B2B operacional.
+- **Lo que esto implica:**
+  - **UI desde día 1** (`apps/web-fo` Next.js 15 + Tailwind + shadcn/ui), con login Keycloak (OIDC), dashboard, calendar Mews-style, formulario de reserva, cardex, folio, ajustes. Mobile-friendly aunque la primary surface es desktop.
+  - **Catálogo de eventos FO** (≥8 tipos: `reservation.created/updated/cancelled`, `reservation.checked_in/out`, `folio.charge_added`, `folio.payment_received`, `room.assigned`, `cardex.synced`).
+  - **Catálogo MCP FO** (≥6 tools: `create_reservation`, `check_in`, `check_out`, `add_folio_charge`, `assign_room`, `query_availability`).
+  - **Compliance ES**: SES.HOSPEDAJES XML sender (idempotente, retriable, con DLQ), cardex GDPR.
+  - **Locking**: estado `closed` en folios, día de operación cerrado bloquea mutaciones, idempotencia en pagos.
+  - **Copiloto FO**: agente Claude con acceso a las tools MCP de FO en una superficie conversacional de la UI (sidebar). En MVP traduce intención en confirmaciones de tools (no auto-ejecuta acciones financieras sin confirmación humana).
+- **Lo que NO se mete en Sprint 2:** NA, HSK, multi-property, Channel Manager, integraciones POS/contabilidad, booking engine — todo esto sigue en §4.4 / §10.
+- **Riesgo asumido:** ventana de Sprint 2 más larga (estimación 6-7 semanas en lugar de 4) pero el resultado es _piloteable_ por un hotel real, no un demo.
+- **Alternativas descartadas:** "MVP del MVP" (ya rechazado por el sponsor — el SaaS no se vende sin UI ni sin compliance ES), entregar UI en Sprint 3 (riesgo de _backend que nadie valida_), posponer SES.HOSPEDAJES a piloto (es ilegal operar en España sin él).
 
 ### ADR-016 — 2026-05-05 — Eventbus: NATS JetStream + envelope estándar + catálogo Zod versionado
 
