@@ -21,3 +21,16 @@ export {
   type AssignRoomInput,
   type GenerateReportInput,
 } from './catalog/fo';
+export {
+  hskToolCatalog,
+  type HskToolMeta,
+  type HskToolName,
+  hskAssignTaskInput,
+  hskStartTaskInput,
+  hskCompleteTaskInput,
+  hskListTodayInput,
+  type HskAssignTaskInput,
+  type HskStartTaskInput,
+  type HskCompleteTaskInput,
+  type HskListTodayInput,
+} from './catalog/hsk';

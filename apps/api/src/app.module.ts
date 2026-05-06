@@ -15,6 +15,7 @@ import { BusinessDayModule } from './business-day';
 import { SesHospedajesModule } from './compliance/ses-hospedajes';
 import { CashModule } from './cash';
 import { CopilotModule } from './copilot';
+import { HousekeepingModule } from './housekeeping';
 import { NightAuditModule } from './night-audit';
 import { ReportsModule } from './reports';
 
@@ -38,6 +39,7 @@ import { ReportsModule } from './reports';
     NightAuditModule,
     ReportsModule,
     CashModule,
+    HousekeepingModule,
   ],
 })
 export class AppModule {}

@@ -18,8 +18,9 @@
 - **Sprint 1.5 staging ✅ mergeado a `main` (PR #4).** Dockerfile multi-stage + Railway compatibility. Validado end-to-end en Railway: Keycloak → JWT con `tenant_id` → API → `withTenant` → RLS.
 - **Sprint 1.5 RUNBOOK Railway ✅ mergeado a `main` (PR #5).** Sección 12 con 7 lecciones aprendidas del despliegue.
 - **Sprint 2 (MVP FO completo) ✅ mergeado a `main` (PR #6).** Producto: **Aubergine**. Alcance per §4.1 íntegro: reservas CRUD/walk-in/group bookings, check-in/out, folio con cargos/pagos/close + idempotencia, cardex GDPR, rooms availability matrix, business-day locking, SES.HOSPEDAJES sender con retries + DLQ. UI Next.js 15 con 19 rutas (login OIDC, dashboard, calendar, reservations, guests, rooms, business-day, compliance/ses) + copiloto conversacional con MCP tools y confirmación humana (ADR-020). 89/89 unit tests + 5 Playwright smoke specs. Plan en [`docs/SPRINT-2-PLAN.md`](./docs/SPRINT-2-PLAN.md).
-- **Fase actual: Sprint 3 — MVP Night Audit (sin recortes).** Alcance per §4.2 íntegro: cierre diario con post de room charges + taxes + packages, roll-over de fecha de negocio, no-shows automáticos, reportes (Manager / In-house / Arrivals-Departures / Revenue / Tax), reconciliación de cajas, locking inmutable del día cerrado. Plan en [`docs/SPRINT-3-PLAN.md`](./docs/SPRINT-3-PLAN.md).
-- **Branch de desarrollo actual:** `claude/sprint-3-night-audit`.
+- **Sprint 3 (MVP Night Audit) ✅ mergeado a `main` (PR #7).** Cierre nocturno orquestado e idempotente con 6 steps (`POST_ROOM_CHARGES → POST_TAXES → POST_PACKAGES → MARK_NO_SHOWS → SNAPSHOT_REPORTS → CLOSE_DAY`), 5 reportes core (Manager / Revenue / Tax / In-house / Arrivals-Departures) con generators reusables + snapshot inmutable + export CSV, reconciliación de cajas que gates el cierre, `generate_report` MCP tool, RUNBOOK §12 con playbook del auditor. 128/128 unit tests, 9 e2e smoke specs, 3 migraciones nuevas. Plan en [`docs/SPRINT-3-PLAN.md`](./docs/SPRINT-3-PLAN.md).
+- **Fase actual: Sprint 4 — MVP Housekeeping (sin recortes).** Alcance per §4.3 íntegro: estados de habitación (Clean / Dirty / Inspected / OOO / OOS), asignación de tareas a camareras, discrepancies (sleep / skip / sleeper), Lost & Found, **PWA mobile-first** en `apps/web-hsk` (camareras usan móvil de gama media). Plan en [`docs/SPRINT-4-PLAN.md`](./docs/SPRINT-4-PLAN.md).
+- **Branch de desarrollo actual:** `claude/sprint-4-housekeeping`.
 - **Última actualización:** 2026-05-06
 
 ---
@@ -402,6 +403,30 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 - **Lo que NO se mete en Sprint 3:** HSK PWA (Sprint 4), forecasting/anomaly detection (post-MVP), auto-reconciliación bancaria (necesita integración bancaria real), reportes BI complejos (RevPAR/ADR trends multi-mes).
 - **Riesgo asumido:** ventana de Sprint 3 estimada 5-6 semanas. El paso más complejo es la reconciliación de cajas — depende de cómo el hotel piloto cuente efectivo (papel vs digital). Validar con UAT antes de cerrar la UI.
 - **Alternativas descartadas:** transaction-style rollback (incompatible con append-only de Sprint 2; los cargos posteados son legalmente inmutables), cierre manual sin batch (rompe idempotencia y compliance), reportes solo on-demand (un día auditado tiene que ser un snapshot inmutable o el director no puede confiar en los números).
+
+### ADR-022 — 2026-05-06 — Sprint 4 = MVP Housekeeping **completo** (sin recortes), PWA mobile-first separada
+
+- **Decisión:** Sprint 4 entrega §4.3 íntegro: estados de habitación (Clean / Dirty / Inspected / Out-of-Order / Out-of-Service), asignación de tareas a camareras, discrepancies (sleep / skip / sleeper), Lost & Found, todo en una **PWA separada** (`apps/web-hsk`) optimizada para móvil de gama media. UI desktop (web-fo) para supervisores; PWA para camareras de planta.
+- **Por qué PWA separada (no extender web-fo):**
+  - **Audiencia distinta**: las camareras no son usuarias de PC. La instalación nativa-like (manifest + service worker) y el chrome reducido importan más que en FO.
+  - **Surface distinta**: 5-7 acciones rápidas (entrar habitación, marcar Clean/Dirty, foto de incidencia, registrar Lost & Found) en lugar de la docena larga de FO.
+  - **Auth simplificada**: scan QR del room number o login PIN en vez del flujo OIDC completo de desktop. Mantiene el mismo Keycloak realm pero con un `pms-hsk` client distinto.
+  - **Offline-tolerant**: una camarera que entra a un sótano sin cobertura debe poder marcar la habitación Clean y que se sincronice al volver. La cola offline encaja mucho mejor en una app dedicada que en una mezcla con FO.
+- **Datos nuevos:**
+  - `housekeeping_tasks` (room, status, assignedToUserId, scheduledFor, startedAt, completedAt, durationMin, notes, attributes JSONB) — append-only en `result` JSONB para fotos / notas.
+  - `housekeeping_discrepancies` (taskId, type: SLEEP / SKIP / SLEEPER, expectedRoomStatus, actualRoomStatus, reservationId nullable, notes).
+  - `lost_found_items` (room, foundByUserId, foundAt, description, photoUrl, status: HELD / CLAIMED / DISPOSED, claimedBy, claimedAt).
+  - `room.status` + `room.isOutOfOrder` (Sprint 2) ya existen → se reutilizan, las HSK transitions las llaman vía service.
+- **Eventos publicados:** `housekeeping.task_assigned`, `task_started`, `task_completed`, `discrepancy_reported`, `lost_found.item_held`, `item_claimed`, `item_disposed` — todos v1, mismo envelope.
+- **MCP tools (Sprint 5+ extiende, esta sprint registra el catálogo):**
+  - `assign_housekeeping_task` (mutating)
+  - `mark_room_status` (mutating, ya existe alias en RoomsService)
+  - `report_discrepancy` (mutating)
+  - `query_room_status` (read-only)
+- **IA (sin auto-ejecución, mantenemos ADR-020):** asignación óptima de tareas (sugerencia, el supervisor confirma) en Sprint 5; tiempo predicho de limpieza por habitación a partir del histórico de `durationMin`. En Sprint 4 sólo el dato — el modelo viene después.
+- **Lo que NO se mete en Sprint 4:** Visión por computadora para inspección post-limpieza (V2 IA), Mantenimiento predictivo (V2), Voice-first end-to-end (Sprint 5+), integración con sistemas legacy de HSK (Optii / Hotelkit) — son post-MVP.
+- **Riesgo asumido:** ventana de Sprint 4 estimada 4-5 semanas. El riesgo principal es la calidad del PWA en móvil real con ancho de banda inestable; la cola offline de Tanstack Query / IndexedDB necesita validación con un dispositivo de test antes de cerrar UAT.
+- **Alternativas descartadas:** extender web-fo con responsive (desafío de UX por las dos audiencias mezcladas en el mismo bundle), app nativa iOS/Android (no escala para boutique 30-150 habs y bloquea iteración), no-PWA con web móvil (sin instalación + sin offline = friction inmensa para camareras).
 
 ### ADR-016 — 2026-05-05 — Eventbus: NATS JetStream + envelope estándar + catálogo Zod versionado
 

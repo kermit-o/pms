@@ -46,6 +46,9 @@ model Tenant {
   nightAuditRunSteps  NightAuditRunStep[]
   nightAuditSnapshots NightAuditSnapshot[]
   cashReconciliations CashDrawerReconciliation[]
+  housekeepingTasks   HousekeepingTask[]
+  lostFoundItems      LostFoundItem[]
+  devicePairings      DevicePairing[]
 
   @@map("tenants")
 }
@@ -116,6 +119,8 @@ model Property {
   nightAuditRuns      NightAuditRun[]
   nightAuditSnapshots NightAuditSnapshot[]
   cashReconciliations CashDrawerReconciliation[]
+  housekeepingTasks   HousekeepingTask[]
+  lostFoundItems      LostFoundItem[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -208,10 +213,12 @@ model Room {
   updatedAt        DateTime   @updatedAt @map("updated_at")
   deletedAt        DateTime?  @map("deleted_at")
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  roomType     RoomType      @relation(fields: [roomTypeId], references: [id])
-  reservations Reservation[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property          Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType          RoomType           @relation(fields: [roomTypeId], references: [id])
+  reservations      Reservation[]
+  housekeepingTasks HousekeepingTask[]
+  lostFoundItems    LostFoundItem[]
 
   @@unique([tenantId, propertyId, number])
   @@index([tenantId, propertyId])
@@ -266,8 +273,9 @@ model Guest {
   updatedAt              DateTime      @updatedAt @map("updated_at")
   deletedAt              DateTime?     @map("deleted_at")
 
-  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  reservations ReservationGuest[]
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reservations   ReservationGuest[]
+  lostFoundItems LostFoundItem[]
 
   @@index([tenantId])
   @@index([tenantId, email])
@@ -712,4 +720,124 @@ model CashDrawerReconciliation {
   @@unique([propertyId, businessDate])
   @@index([tenantId, propertyId])
   @@map("cash_drawer_reconciliations")
+}
+
+// ----------------------------------------------------------------------------
+// Housekeeping (Sprint 4) — tasks, discrepancies, lost & found.
+// ----------------------------------------------------------------------------
+
+model HousekeepingTask {
+  id                String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                 @map("tenant_id") @db.Uuid
+  propertyId        String                 @map("property_id") @db.Uuid
+  roomId            String                 @map("room_id") @db.Uuid
+  businessDate      DateTime               @map("business_date") @db.Date
+  taskType          HousekeepingTaskType   @default(CHECKOUT_CLEAN) @map("task_type")
+  status            HousekeepingTaskStatus @default(PENDING)
+  assignedToUserId  String?                @map("assigned_to_user_id") @db.Uuid
+  assignedAt        DateTime?              @map("assigned_at")
+  startedAt         DateTime?              @map("started_at")
+  completedAt       DateTime?              @map("completed_at")
+  durationMin       Int?                   @map("duration_min")
+  scheduledFor      DateTime?              @map("scheduled_for")
+  notes             String?
+  result            Json?
+  attributes        Json?
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+  deletedAt         DateTime?              @map("deleted_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  room     Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, businessDate, roomId, taskType])
+  @@index([tenantId, propertyId, status, scheduledFor])
+  @@index([tenantId, assignedToUserId])
+  @@index([tenantId, propertyId, businessDate])
+  @@map("housekeeping_tasks")
+}
+
+enum HousekeepingTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("housekeeping_task_status")
+}
+
+enum HousekeepingTaskType {
+  CHECKOUT_CLEAN
+  STAYOVER_CLEAN
+  INSPECTION
+  MAINTENANCE
+
+  @@map("housekeeping_task_type")
+}
+
+// ----------------------------------------------------------------------------
+// Lost & Found — objetos olvidados por huespedes. Sprint 4 W3.
+// ----------------------------------------------------------------------------
+
+model LostFoundItem {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String          @map("tenant_id") @db.Uuid
+  propertyId         String          @map("property_id") @db.Uuid
+  roomId             String?         @map("room_id") @db.Uuid
+  foundByUserId      String          @map("found_by_user_id") @db.Uuid
+  foundAt            DateTime        @default(now()) @map("found_at")
+  description        String
+  photoBase64        String?         @map("photo_base64")
+  status             LostFoundStatus @default(FOUND)
+  claimedByGuestId   String?         @map("claimed_by_guest_id") @db.Uuid
+  claimedAt          DateTime?       @map("claimed_at")
+  claimedNotes       String?         @map("claimed_notes")
+  disposedAt         DateTime?       @map("disposed_at")
+  disposedNotes      String?         @map("disposed_notes")
+  notes              String?
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  deletedAt          DateTime?       @map("deleted_at")
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property       Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  room           Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  claimedByGuest Guest?   @relation(fields: [claimedByGuestId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, propertyId, status])
+  @@index([tenantId, propertyId, foundAt])
+  @@index([tenantId, roomId])
+  @@map("lost_found_items")
+}
+
+enum LostFoundStatus {
+  FOUND
+  CLAIMED
+  DISPOSED
+
+  @@map("lost_found_status")
+}
+
+// ----------------------------------------------------------------------------
+// Device pairings — login QR para moviles compartidos. Sprint 4 W4.
+// ----------------------------------------------------------------------------
+
+model DevicePairing {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  code             String    @db.Char(12)
+  targetUserId     String    @map("target_user_id") @db.Uuid
+  issuedByUserId   String    @map("issued_by_user_id") @db.Uuid
+  expiresAt        DateTime  @map("expires_at")
+  redeemedAt       DateTime? @map("redeemed_at")
+  redeemedTokenJti String?   @map("redeemed_token_jti") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([code])
+  @@index([tenantId, targetUserId])
+  @@index([tenantId, expiresAt])
+  @@map("device_pairings")
 }

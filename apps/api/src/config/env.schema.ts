@@ -15,6 +15,13 @@ export const envSchema = z.object({
   KEYCLOAK_REALM: z.string().min(1),
   KEYCLOAK_CLIENT_ID: z.string().min(1),
 
+  // Secret HMAC para pairing tokens (login QR HSK). Si no se setea, en dev
+  // se autogenera (proceso) y en prod la API se niega a arrancar — los
+  // tokens emitidos por una replica no serian validos en otra.
+  PAIRING_SECRET: z.string().min(32).optional(),
+  PAIRING_TOKEN_TTL_HOURS: z.coerce.number().int().min(1).max(72).default(12),
+  PAIRING_CODE_TTL_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
+
   ANTHROPIC_API_KEY: z.string().optional(),
 
   // SES.HOSPEDAJES (Guardia Civil). En staging apunta a sandbox; en prod
