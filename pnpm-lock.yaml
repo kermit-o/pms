@@ -14,6 +14,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4
         version: 1.29.0(zod@3.25.76)
+      '@pms/db':
+        specifier: workspace:*
+        version: link:packages/db
       '@types/node':
         specifier: ^20.16.10
         version: 20.19.39
@@ -41,6 +44,9 @@ importers:
       typescript-eslint:
         specifier: ^8.8.1
         version: 8.59.2(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
 
   apps/api:
     dependencies:

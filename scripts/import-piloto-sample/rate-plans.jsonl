@@ -1,0 +1,3 @@
+{ "code": "BAR", "name": "Best Available Rate", "currency": "EUR" }
+{ "code": "REF", "name": "Reembolsable", "description": "Cancelacion gratuita hasta 48h antes", "currency": "EUR" }
+{ "code": "NRF", "name": "No Reembolsable", "description": "Tarifa con descuento, no reembolsable", "currency": "EUR" }
