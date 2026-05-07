@@ -1,13 +1,23 @@
+import QRCode from 'qrcode';
 import { ApiError, mintPairing } from '@/lib/api';
 import { getApiToken } from '@/lib/server-token';
 
 export const dynamic = 'force-dynamic';
+// QRCode usa Buffer (Node) — fuera del runtime Edge.
+export const runtime = 'nodejs';
 
 interface MintBody {
   targetUserId: string;
   ttlSeconds?: number;
 }
 
+/**
+ * Mintea un pairing y devuelve, ademas del codigo, el deep-link HTTPS y un
+ * QR ya renderizado en SVG. La camara nativa del telefono reconoce URLs
+ * http(s) — el scheme custom `aubergine-pairing:` no — asi que el QR
+ * codifica el deep-link del propio frontend, que al abrirse autoredime y
+ * setea la cookie HttpOnly.
+ */
 export async function POST(req: Request) {
   const accessToken = await getApiToken();
   if (!accessToken) {
@@ -21,7 +31,15 @@ export async function POST(req: Request) {
   }
   try {
     const pairing = await mintPairing(accessToken, body);
-    return Response.json(pairing);
+    const origin = new URL(req.url).origin;
+    const deepLink = `${origin}/login/qr?tenantId=${pairing.tenantId}&code=${pairing.code}`;
+    const qrSvg = await QRCode.toString(deepLink, {
+      type: 'svg',
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      color: { dark: '#5C2A4D', light: '#FFFFFF' },
+    });
+    return Response.json({ ...pairing, deepLink, qrSvg });
   } catch (err) {
     if (err instanceof ApiError) {
       return new Response(err.body, { status: err.status });
