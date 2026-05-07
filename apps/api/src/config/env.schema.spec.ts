@@ -32,4 +32,22 @@ describe('validateEnv', () => {
   it('throws on invalid URL', () => {
     expect(() => validateEnv({ ...validBase, DATABASE_URL: 'not-a-url' })).toThrow(/DATABASE_URL/);
   });
+
+  it('defaults photo storage driver to inline', () => {
+    const env = validateEnv(validBase);
+    expect(env.PHOTO_STORAGE_DRIVER).toBe('inline');
+    expect(env.PHOTO_STORAGE_SIGNED_URL_TTL_SECONDS).toBe(3600);
+  });
+
+  it('accepts photo storage driver=s3 with bucket + creds', () => {
+    const env = validateEnv({
+      ...validBase,
+      PHOTO_STORAGE_DRIVER: 's3',
+      PHOTO_STORAGE_BUCKET: 'aubergine-prod-photos',
+      PHOTO_STORAGE_ACCESS_KEY_ID: 'key',
+      PHOTO_STORAGE_SECRET_ACCESS_KEY: 'secret',
+    });
+    expect(env.PHOTO_STORAGE_DRIVER).toBe('s3');
+    expect(env.PHOTO_STORAGE_BUCKET).toBe('aubergine-prod-photos');
+  });
 });

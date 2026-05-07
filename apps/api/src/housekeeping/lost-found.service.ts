@@ -10,17 +10,20 @@ import {
   RegisterLostFoundDto,
 } from './lost-found.dto';
 import { HousekeepingMetrics } from './metrics';
+import { PhotoStorageService } from './photo-storage.service';
 
 /**
- * Lost & Found service. Sprint 4 W3.
+ * Lost & Found service. Sprint 4 W3 + Sprint 5 W4 (photos a S3).
  *
  * State machine:
  *   FOUND -> CLAIMED   (entregado a un huesped)
  *   FOUND -> DISPOSED  (descarte tras ventana legal)
  * CLAIMED y DISPOSED son terminales.
  *
- * El campo photoBase64 se almacena inline (data URL). En V2 migrara a S3 con
- * URLs firmadas; el resto del contrato no cambia.
+ * Almacenamiento de fotos via PhotoStorageService — driver 'inline' guarda
+ * data URL en photoBase64; driver 's3' sube al bucket y guarda la URL en
+ * photoUrl. La columna que NO se use queda null. Los consumers leen las dos
+ * y eligen — el frontend prefiere photoUrl cuando esta disponible.
  */
 @Injectable()
 export class LostFoundService {
@@ -30,6 +33,7 @@ export class LostFoundService {
     private readonly prisma: PrismaService,
     private readonly events: EventbusService,
     private readonly metrics: HousekeepingMetrics,
+    private readonly photoStorage: PhotoStorageService,
   ) {}
 
   async register(
@@ -38,6 +42,13 @@ export class LostFoundService {
     input: RegisterLostFoundDto,
   ): Promise<LostFoundView> {
     const ctx = tenantCtx(user, correlationId);
+
+    // Pre-asigno el id del item para que el path en S3 coincida con el row
+    // que vamos a insertar. Asi sirve de id estable + idempotente.
+    const itemId = this.photoStorage.newItemId();
+    const photo = input.photoBase64
+      ? await this.photoStorage.store(user.tenantId, itemId, input.photoBase64)
+      : { photoUrl: null, photoBase64: null };
 
     const row = await this.prisma.withTenant(ctx, async (tx) => {
       if (input.roomId) {
@@ -54,29 +65,32 @@ export class LostFoundService {
 
       return tx.lostFoundItem.create({
         data: {
+          id: itemId,
           tenantId: user.tenantId,
           propertyId: input.propertyId,
           roomId: input.roomId ?? null,
           foundByUserId: user.sub,
           description: input.description,
-          photoBase64: input.photoBase64 ?? null,
+          photoBase64: photo.photoBase64,
+          photoUrl: photo.photoUrl,
           notes: input.notes ?? null,
         },
       });
     });
 
+    const hasPhoto = row.photoBase64 != null || row.photoUrl != null;
     await this.events.publish('lost_found.item_registered', ctx, {
       itemId: row.id,
       propertyId: row.propertyId,
       roomId: row.roomId,
       foundByUserId: row.foundByUserId,
       foundAt: row.foundAt.toISOString(),
-      hasPhoto: row.photoBase64 != null,
+      hasPhoto,
     });
     this.metrics.lostFoundRegistered.add(1, {
       tenant: user.tenantId,
       property: row.propertyId,
-      has_photo: String(row.photoBase64 != null),
+      has_photo: String(hasPhoto),
     });
 
     return toView(row);
@@ -216,6 +230,12 @@ export interface LostFoundView {
   foundAt: string;
   description: string;
   hasPhoto: boolean;
+  /**
+   * URL publica o firmada del bucket si la foto vive en S3 (driver=s3).
+   * Null si la foto se sirve inline desde photoBase64 o si no hay foto.
+   * El frontend prefiere photoUrl cuando esta disponible.
+   */
+  photoUrl: string | null;
   status: LostFoundStatus;
   claimedByGuestId: string | null;
   claimedAt: string | null;
@@ -231,12 +251,14 @@ function toView(row: {
   foundAt: Date;
   description: string;
   photoBase64: string | null;
+  photoUrl: string | null;
   status: LostFoundStatus;
   claimedByGuestId: string | null;
   claimedAt: Date | null;
   disposedAt: Date | null;
   notes: string | null;
 }): LostFoundView {
+  const hasPhoto = row.photoBase64 != null || row.photoUrl != null;
   return {
     id: row.id,
     propertyId: row.propertyId,
@@ -244,7 +266,8 @@ function toView(row: {
     foundByUserId: row.foundByUserId,
     foundAt: row.foundAt.toISOString(),
     description: row.description,
-    hasPhoto: row.photoBase64 != null,
+    hasPhoto,
+    photoUrl: row.photoUrl,
     status: row.status,
     claimedByGuestId: row.claimedByGuestId,
     claimedAt: row.claimedAt?.toISOString() ?? null,

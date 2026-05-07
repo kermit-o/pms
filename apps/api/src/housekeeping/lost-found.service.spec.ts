@@ -32,6 +32,7 @@ function buildItem(opts: ItemOpts = {}) {
     foundAt: new Date('2026-06-10T08:00:00Z'),
     description: 'Anillo de plata',
     photoBase64: null as string | null,
+    photoUrl: null as string | null,
     status: opts.status ?? LostFoundStatus.FOUND,
     claimedByGuestId: null as string | null,
     claimedAt: null as Date | null,
@@ -50,6 +51,7 @@ function buildService(
     room?: { id: string } | null;
     existing?: ReturnType<typeof buildItem> | null;
     guest?: { id: string } | null;
+    photoDriver?: 'inline' | 's3';
   } = {},
 ) {
   let stored = opts.existing ?? null;
@@ -97,8 +99,28 @@ function buildService(
     lostFoundResolved: { add: vi.fn() },
   };
 
-  const service = new LostFoundService(prisma as never, events as never, metrics as never);
-  return { service, tx, events, metrics };
+  const driver = opts.photoDriver ?? 'inline';
+  const photoStorage = {
+    newItemId: vi.fn().mockReturnValue(ITEM_ID),
+    getDriver: () => driver,
+    store: vi.fn().mockImplementation((_tenantId: string, _itemId: string, dataUrl: string) => {
+      if (driver === 's3') {
+        return Promise.resolve({
+          photoUrl: `https://photos.aubergine.es/${TENANT_ID}/lost-found/${ITEM_ID}.jpg`,
+          photoBase64: null,
+        });
+      }
+      return Promise.resolve({ photoUrl: null, photoBase64: dataUrl });
+    }),
+  };
+
+  const service = new LostFoundService(
+    prisma as never,
+    events as never,
+    metrics as never,
+    photoStorage as never,
+  );
+  return { service, tx, events, metrics, photoStorage };
 }
 
 describe('LostFoundService.register', () => {
@@ -126,7 +148,7 @@ describe('LostFoundService.register', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('emits hasPhoto:true when a data URL is provided', async () => {
+  it('emits hasPhoto:true when a data URL is provided (driver=inline)', async () => {
     const { service, events } = buildService();
     await service.register(user, 'corr', {
       propertyId: PROPERTY_ID,
@@ -134,6 +156,18 @@ describe('LostFoundService.register', () => {
       photoBase64: 'data:image/jpeg;base64,AAAA',
     });
     expect(events.publish.mock.calls[0]![2]).toMatchObject({ hasPhoto: true });
+  });
+
+  it('uploads to S3 and stores photoUrl when driver=s3', async () => {
+    const { service, photoStorage } = buildService({ photoDriver: 's3' });
+    const out = await service.register(user, 'corr', {
+      propertyId: PROPERTY_ID,
+      description: 'gafas',
+      photoBase64: 'data:image/jpeg;base64,AAAA',
+    });
+    expect(photoStorage.store).toHaveBeenCalledOnce();
+    expect(out.hasPhoto).toBe(true);
+    expect(out.photoUrl).toMatch(/^https:\/\/photos\.aubergine\.es\//);
   });
 });
 

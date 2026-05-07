@@ -22,6 +22,25 @@ export const envSchema = z.object({
   PAIRING_TOKEN_TTL_HOURS: z.coerce.number().int().min(1).max(72).default(12),
   PAIRING_CODE_TTL_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
 
+  // Object storage para fotos de Lost & Found. Driver 'inline' (default)
+  // mantiene base64 en DB — comodo en dev y cuando no hay S3 configurado.
+  // Driver 's3' sube a un bucket S3-compatible (Backblaze B2, Cloudflare R2,
+  // MinIO) y guarda la URL firmada. Las URLs caducan tras
+  // PHOTO_STORAGE_SIGNED_URL_TTL_SECONDS.
+  PHOTO_STORAGE_DRIVER: z.enum(['inline', 's3']).default('inline'),
+  PHOTO_STORAGE_BUCKET: z.string().optional(),
+  PHOTO_STORAGE_REGION: z.string().default('eu-central-003'),
+  PHOTO_STORAGE_ENDPOINT: z.string().url().optional(),
+  PHOTO_STORAGE_ACCESS_KEY_ID: z.string().optional(),
+  PHOTO_STORAGE_SECRET_ACCESS_KEY: z.string().optional(),
+  PHOTO_STORAGE_PUBLIC_URL_PREFIX: z.string().url().optional(),
+  PHOTO_STORAGE_SIGNED_URL_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(7 * 24 * 3600)
+    .default(3600),
+
   ANTHROPIC_API_KEY: z.string().optional(),
 
   // SES.HOSPEDAJES (Guardia Civil). En staging apunta a sandbox; en prod

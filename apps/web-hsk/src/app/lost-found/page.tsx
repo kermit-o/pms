@@ -107,10 +107,19 @@ export default async function LostFoundPage({ searchParams }: PageProps) {
                     {STATUS_LABEL[it.status] ?? it.status}
                   </span>
                 </div>
-                {it.hasPhoto && (
-                  <p className="mt-2 text-[10px] uppercase tracking-wide text-aubergine-500">
-                    📷 con foto
-                  </p>
+                {it.photoUrl ? (
+                  <img
+                    src={it.photoUrl}
+                    alt={it.description}
+                    loading="lazy"
+                    className="mt-2 max-h-32 rounded-lg ring-1 ring-aubergine-100"
+                  />
+                ) : (
+                  it.hasPhoto && (
+                    <p className="mt-2 text-[10px] uppercase tracking-wide text-aubergine-500">
+                      📷 con foto
+                    </p>
+                  )
                 )}
               </li>
             ))}
