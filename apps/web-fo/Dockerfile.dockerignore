@@ -1,0 +1,48 @@
+# Dockerignore para apps/web-fo/Dockerfile.
+
+.git
+.github
+.husky
+
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/build
+**/.turbo
+**/.nest
+**/coverage
+**/*.tsbuildinfo
+
+# Otras apps no entran en la imagen del web-fo.
+apps/api
+apps/web-hsk
+
+# Tooling local
+.vscode
+.idea
+.devcontainer
+docker-compose.yml
+
+# Env
+.env
+.env.*
+!.env.example
+yarn.lock
+package-lock.json
+
+# Docs
+*.md
+!README.md
+docs
+RUNBOOK.md
+
+# Tests
+**/*.spec.ts
+**/*.e2e-spec.ts
+**/test
+**/tests
+
+# Misc
+*.log
+.DS_Store
