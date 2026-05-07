@@ -1,0 +1,73 @@
+# Alertmanager routing para Aubergine. Sprint 5 W3.
+#
+# Slack canal #aubergine-oncall para todo, escalado a PagerDuty para
+# severity=page (ApiErrorRateHigh, NightAuditRunFailed,
+# HskPairingsNotFoundBurst).
+#
+# Secrets — NO commitear, set via env o vault:
+#   SLACK_WEBHOOK_URL
+#   PAGERDUTY_ROUTING_KEY
+#
+# En Grafana Cloud el routing se configura desde la UI Alerting y este
+# archivo sirve de referencia de la decision. En Prometheus Alertmanager
+# self-hosted se monta directo.
+
+global:
+  resolve_timeout: 5m
+  slack_api_url: ${SLACK_WEBHOOK_URL}
+
+route:
+  receiver: slack-default
+  group_by: [alertname, service, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = page
+      receiver: pagerduty-oncall
+      continue: true # tambien postear en Slack
+    - matchers:
+        - severity = page
+      receiver: slack-oncall
+
+receivers:
+  - name: slack-default
+    slack_configs:
+      - channel: '#aubergine-oncall'
+        send_resolved: true
+        title: '{{ if eq .Status "firing" }}🔥{{ else }}✅{{ end }} {{ .GroupLabels.alertname }} ({{ .GroupLabels.service }})'
+        text: |
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          {{ if .Annotations.runbook_url }}<{{ .Annotations.runbook_url }}|RUNBOOK>{{ end }}
+          {{ end }}
+
+  - name: slack-oncall
+    slack_configs:
+      - channel: '#aubergine-oncall'
+        send_resolved: true
+        title: '🚨 PAGE: {{ .GroupLabels.alertname }} ({{ .GroupLabels.service }})'
+        text: |
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          @oncall — investigar ahora.
+          {{ end }}
+
+  - name: pagerduty-oncall
+    pagerduty_configs:
+      - routing_key: ${PAGERDUTY_ROUTING_KEY}
+        severity: '{{ if eq .CommonLabels.severity "page" }}critical{{ else }}warning{{ end }}'
+        description: '{{ .GroupLabels.alertname }} ({{ .GroupLabels.service }})'
+
+inhibit_rules:
+  # Si la API esta caida (5xx > 1%), suprimir las alertas derivadas
+  # (NA, HSK, SES) para evitar paging redundante.
+  - source_matchers:
+      - alertname = ApiErrorRateHigh
+    target_matchers:
+      - service = pms-api
+      - alertname != ApiErrorRateHigh
+    equal: [service]

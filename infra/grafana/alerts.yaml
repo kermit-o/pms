@@ -1,0 +1,162 @@
+# Prometheus alerting rules para Aubergine. Sprint 5 W3.
+#
+# Lista derivada de SPRINT-5-PLAN.md §2.3 + RUNBOOK §13.6.
+# Cargable como ConfigMap en Prometheus self-hosted o como
+# `Grafana Alerting → Alert rules → Import` (Grafana 10+ entiende este
+# formato directamente).
+#
+# Routing (canal Slack #aubergine-oncall, escalado PagerDuty) en
+# alertmanager.yaml de esta misma carpeta.
+
+groups:
+  # ---------------------------------------------------------------------------
+  # Workload SLOs — burn rate sobre p95 latencia + error rate.
+  # ---------------------------------------------------------------------------
+  - name: aubergine-api-slo
+    interval: 30s
+    rules:
+      - alert: ApiErrorRateHigh
+        expr: |
+          sum(rate(http_server_request_duration_seconds_count{job="pms-api",http_response_status_code=~"5.."}[5m]))
+            /
+          sum(rate(http_server_request_duration_seconds_count{job="pms-api"}[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: page
+          service: pms-api
+        annotations:
+          summary: 'pms-api error rate > 1% durante 5 min'
+          description: |
+            5xx ratio = {{ printf "%.2f" $value }} (umbral 0.01).
+            Ver dashboard "Aubergine — API health" + flyctl logs -a pms-api.
+          runbook_url: 'https://github.com/kermit-o/pms/blob/main/RUNBOOK.md#9-troubleshooting'
+
+      - alert: ApiP95LatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_server_request_duration_seconds_bucket{job="pms-api"}[5m])) by (le)
+          ) > 0.8
+        for: 10m
+        labels:
+          severity: ticket
+          service: pms-api
+        annotations:
+          summary: 'pms-api p95 latency > 800 ms durante 10 min'
+          description: |
+            p95 actual = {{ printf "%.2fs" $value }} (SLO 0.4 s, umbral alerta 0.8 s).
+            Investigar rutas top en el panel "Top 10 rutas más lentas".
+
+  # ---------------------------------------------------------------------------
+  # Night audit — un fallo durante la ventana nocturna es page on-call.
+  # Necesita los counters night_audit_run_failed_total (PR aparte).
+  # ---------------------------------------------------------------------------
+  - name: aubergine-night-audit
+    interval: 60s
+    rules:
+      - alert: NightAuditRunFailed
+        expr: |
+          increase(night_audit_run_failed_total{job="pms-api"}[30m]) > 0
+        for: 5m
+        labels:
+          severity: page
+          service: pms-api
+        annotations:
+          summary: 'Night audit run FAILED — revisar antes del rollover'
+          description: |
+            Un run de cierre nocturno fallo en los ultimos 30 min. Reanudar
+            con POST /night-audit/runs/<id>/resume tras corregir el step
+            que fallo (ver RUNBOOK §12.5).
+
+  # ---------------------------------------------------------------------------
+  # Compliance — SES.HOSPEDAJES rechazos sostenidos = riesgo legal.
+  # Necesita counters ses_submission_* (PR aparte).
+  # ---------------------------------------------------------------------------
+  - name: aubergine-compliance
+    interval: 60s
+    rules:
+      - alert: SesSubmissionFailing
+        expr: |
+          sum(rate(ses_submission_failed_total{job="pms-api"}[1h])) > (1 / 3600)
+        for: 1h
+        labels:
+          severity: ticket
+          service: pms-api
+        annotations:
+          summary: 'SES.HOSPEDAJES rate de fallo > 1/h durante 1h'
+          description: |
+            Verificar credenciales SES + Guardia Civil endpoint up.
+            La queue se sigue llenando — riesgo de incumplir el plazo
+            legal de 24h para reportar huespedes.
+
+  # ---------------------------------------------------------------------------
+  # Housekeeping — tareas que se alargan + intentos de pairing fantasma.
+  # Series hsk_* ya existen (S4 W5).
+  # ---------------------------------------------------------------------------
+  - name: aubergine-housekeeping
+    interval: 60s
+    rules:
+      - alert: HskTaskDurationP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(hsk_task_duration_minutes_bucket[1h])) by (le, property)
+          ) > 90
+        for: 30m
+        labels:
+          severity: ticket
+          service: pms-api
+        annotations:
+          summary: 'p95 duración tareas HSK > 90 min en {{ $labels.property }}'
+          description: |
+            Tareas que se alargan mas de 1.5h. Posibles causas: checklist
+            que crece sin documentar, camareras mal asignadas, habitaciones
+            con incidencias no reportadas. Revisar /supervisor.
+
+      - alert: HskPairingsNotFoundBurst
+        expr: |
+          rate(hsk_pairings_redeemed_total{outcome="not_found"}[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: page
+          service: pms-api
+        annotations:
+          summary: 'Burst de pairings not_found — posible enumeration'
+          description: |
+            Mas de 30 intentos/min de redimir pairing codes inexistentes.
+            Posible ataque de enumeracion del codigo de 12 chars. Revisar
+            IPs de origen y considerar rate-limit en /housekeeping/pairings/redeem.
+
+      - alert: HskNoCompletedDuringShift
+        expr: |
+          sum(increase(hsk_tasks_completed_total[2h])) == 0
+            and on() (hour() >= 8 and hour() < 18)
+        for: 2h
+        labels:
+          severity: ticket
+          service: pms-api
+        annotations:
+          summary: 'Sin tareas HSK completadas durante turno (08-18h)'
+          description: |
+            Cero completadas en 2h durante el turno operativo. Posible
+            outage de connectivity para las camareras o problemas con el
+            pairing flow. Revisar dashboard Housekeeping.
+
+  # ---------------------------------------------------------------------------
+  # Eventbus NATS — backlog grande indica consumer atascado.
+  # Requiere prometheus-nats-exporter scrapeando :8222 (PR aparte).
+  # ---------------------------------------------------------------------------
+  - name: aubergine-eventbus
+    interval: 60s
+    rules:
+      - alert: NatsConsumerBacklog
+        expr: |
+          nats_consumer_num_pending > 10000
+        for: 15m
+        labels:
+          severity: ticket
+          service: pms-nats
+        annotations:
+          summary: 'Consumer NATS con backlog > 10k mensajes'
+          description: |
+            Algun consumer del stream pms-events va a mas de 10k mensajes
+            sin entregar. Revisar el subscriber correspondiente — puede
+            estar caido o procesando muy lento.
