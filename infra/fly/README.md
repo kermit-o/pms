@@ -88,9 +88,10 @@ anterior sigue sirviendo.
 
 ## NATS, Redis, Object Storage, Keycloak
 
-**NATS JetStream**: una Fly Machine en `mad` con el imagen oficial `nats:latest`
-y un Volume persistente (`pms_nats_data`, 5 GB). Configuración en
-`infra/fly/nats/` (PR aparte). Stream `pms-events` con retention 7 días.
+**NATS JetStream**: Fly Machine en `mad` con `nats:2.10-alpine` y volumen
+persistente `pms_nats_data` (5 GB). Stream `pms-events` con retention 7d
+y dedup de 2min (envelope ADR-016). Detalle en
+[`infra/fly/nats/`](./nats/).
 
 **Redis**: managed por Upstash (EU region). No vive en Fly. La URL se inyecta
 como `REDIS_URL` secret.

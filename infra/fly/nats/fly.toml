@@ -1,0 +1,67 @@
+# fly.toml — pms-nats en Fly.io (region primaria mad, ADR-023).
+#
+# Single Fly Machine + Volume persistente para JetStream. La API la
+# alcanza via 6PN: NATS_URL=nats://pms-nats.internal:4222
+#
+# Deploy desde la raiz del monorepo:
+#   flyctl deploy -c infra/fly/nats/fly.toml --build-context infra/fly/nats
+#
+# Setup primera vez (ver README.md de esta carpeta):
+#   flyctl apps create pms-nats --org aubergine
+#   flyctl volumes create pms_nats_data --region mad --size 5 -a pms-nats
+#   flyctl deploy -c infra/fly/nats/fly.toml --build-context infra/fly/nats
+#
+# Despues, crear el stream del catalogo de eventos:
+#   nats stream add pms-events \
+#     --subjects 'pms.events.>' --storage file --retention limits \
+#     --max-age=7d --max-msgs=-1 --max-bytes=2GB --replicas=1
+
+app = "pms-nats"
+primary_region = "mad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# JetStream NO debe parar — auto_stop = false. El stream pms-events guarda
+# 7 dias de eventos; reiniciarlo en frio causa lag visible al consumer.
+[[services]]
+  internal_port = 4222
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = true
+
+  [[services.ports]]
+    port = 4222
+
+# HTTP monitoring para healthcheck + scrape Prometheus. Solo via 6PN.
+[[services]]
+  internal_port = 8222
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = true
+
+  [[services.ports]]
+    port = 8222
+
+  [[services.tcp_checks]]
+    grace_period = "10s"
+    interval = "15s"
+    timeout = "5s"
+
+[mounts]
+  source = "pms_nats_data"
+  destination = "/data"
+
+# 512 MB es holgado para el load del piloto. JetStream cachea streams hot
+# en RAM; con max_memory_store=256MB y max_file_store=5GB no swapea.
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"
+
+[deploy]
+  # Single instance + volumen → no hay rolling sin downtime. Asumimos
+  # ~10s de unavailability cuando hagamos un redeploy de la config.
+  strategy = "immediate"
