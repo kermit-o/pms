@@ -7,31 +7,31 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import { type FoToolName, foToolCatalog } from '@pms/mcp-tools';
 import type { AuthUser } from '../auth';
 import type { Env } from '../config/env.schema';
-import { FoToolRouter } from './tool-router';
+import { type AnyToolName, ToolResolver } from './tool-resolver';
 
 /**
- * Conversational copilot for FO. Sprint 2 W7.
+ * Conversational copilot. Sprint 2 W7 (FO) + Sprint 5 W5 (HSK cross-domain).
  *
  * Sessions live in memory keyed by sessionId. Production deployments back
- * this with Redis + a persistent store; for the MVP we keep it in-process
- * and accept the trade-off (sessions reset on API restart).
+ * this with Redis + a persistent store; para el MVP lo mantenemos in-process
+ * y aceptamos el trade-off (sesiones se resetean al reiniciar la API).
  *
  * Flow:
- *  1. The operator opens a session.
- *  2. Each user message is appended to the session and sent to the LLM
- *     adapter (real Anthropic when ANTHROPIC_API_KEY is set; a deterministic
- *     stub otherwise — tests use the stub, dev defaults to it).
- *  3. The adapter may emit either an assistant text reply or a "tool_use"
- *     intent. Read-only tools auto-execute and a follow-up assistant turn
- *     summarises the result. Mutating tools land in `pendingTools` and the
- *     UI surfaces a confirmation dialog.
- *  4. confirmTool() executes the pending tool when the operator approves
- *     (defence in depth: the router still re-validates Zod input, RLS still
- *     applies via tenant context, and financial tools refuse to execute
- *     without an explicit "approve" decision).
+ *  1. El operador abre una sesion.
+ *  2. Cada mensaje del usuario se acumula en la sesion y va al adapter LLM
+ *     (Anthropic real cuando ANTHROPIC_API_KEY esta seteado; stub
+ *     deterministico si no — tests usan stub).
+ *  3. El adapter emite (a) texto asistente, (b) intent de tool con dominio
+ *     FO o HSK. Read-only auto-ejecuta; mutating va a `pendingTools` y la
+ *     UI surface confirmacion (ADR-020).
+ *  4. confirmTool() ejecuta el tool pendiente con la decision del operador.
+ *     El resolver re-valida Zod input, RLS via tenant context, financial
+ *     no se ejecuta sin "approve" explicito.
+ *
+ * El cross-domain (Sprint 5) viene de delegar en `ToolResolver` que enruta
+ * a `FoToolRouter` o `HskToolRouter` segun prefijo (`hsk_*` -> HSK).
  */
 @Injectable()
 export class CopilotService {
@@ -40,7 +40,7 @@ export class CopilotService {
   private readonly anthropicApiKey: string | undefined;
 
   constructor(
-    private readonly router: FoToolRouter,
+    private readonly resolver: ToolResolver,
     private readonly config: ConfigService<Env, true>,
   ) {
     this.anthropicApiKey = this.config.get('ANTHROPIC_API_KEY', { infer: true });
@@ -93,11 +93,11 @@ export class CopilotService {
     }
 
     // Tool intent.
-    const meta = foToolCatalog[proposal.tool];
+    const meta = this.resolver.getMeta(proposal.tool);
     if (!meta.mutating) {
       // Auto-execute read-only.
       try {
-        const result = await this.router.execute(
+        const result = await this.resolver.execute(
           proposal.tool,
           proposal.input,
           user,
@@ -177,7 +177,7 @@ export class CopilotService {
     }
 
     try {
-      const result = await this.router.execute(pending.tool, pending.input, user, correlationId);
+      const result = await this.resolver.execute(pending.tool, pending.input, user, correlationId);
       pending.status = 'approved';
       session.messages.push({
         id: randomUUID(),
@@ -205,10 +205,10 @@ export class CopilotService {
   // -------------------------------------------------------------------------
 
   /**
-   * Asks the underlying model what to do next. With ANTHROPIC_API_KEY set,
-   * this would call the real Anthropic Messages API with the FO tool catalog
-   * exposed via tool_use. Without it, we fall back to a deterministic stub
-   * that recognises a few intents — enough for tests and demos.
+   * Pregunta al modelo que hacer. Con ANTHROPIC_API_KEY haria la llamada
+   * real a Anthropic Messages exponiendo TODO el catalogo (FO + HSK) via
+   * tool_use. Sin la key cae al stub deterministico — suficiente para
+   * tests y demos.
    */
   private async proposeReply(_session: Session, content: string): Promise<ToolProposal> {
     if (!this.anthropicApiKey) {
@@ -237,16 +237,78 @@ const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\
 const ISO_DATE_RE = /\b\d{4}-\d{2}-\d{2}\b/;
 
 /**
- * Tiny deterministic intent recogniser. It is intentionally narrow: it picks
- * up a couple of phrasings that map cleanly to read-only / mutating tools and
- * surfaces a hint when arguments are missing, rather than guessing. The real
- * model will replace this without changing the contract above it.
+ * Reconocedor deterministico de intents. Intencionalmente estrecho: pilla
+ * unas pocas frases que mapean limpiamente a tools read-only / mutating
+ * y surface un hint cuando faltan args en lugar de adivinar. El modelo
+ * real reemplaza esto sin tocar el contrato.
  */
-function stubProposal(content: string): ToolProposal {
+export function stubProposal(content: string): ToolProposal {
   const lower = content.toLowerCase();
   const uuids = content.match(new RegExp(UUID_RE, 'gi')) ?? [];
   const dates = content.match(new RegExp(ISO_DATE_RE, 'g')) ?? [];
 
+  // -------- HSK ---------------------------------------------------------
+  if (
+    /(sugiere|sugerencia|sugerencias).*(asignaci[oó]n|tareas|limpieza)/i.test(lower) &&
+    uuids[0]
+  ) {
+    return {
+      kind: 'tool',
+      tool: 'hsk_suggest_assignments',
+      input: { propertyId: uuids[0], businessDate: dates[0] },
+    };
+  }
+
+  if (
+    /(qu[eé] tareas|tareas (de )?hoy|listar tareas|tareas (asignadas )?(tiene|de))/i.test(lower) &&
+    uuids[0]
+  ) {
+    return {
+      kind: 'tool',
+      tool: 'hsk_list_today',
+      input: {
+        propertyId: uuids[0],
+        businessDate: dates[0],
+        assignedToUserId: uuids[1],
+      },
+    };
+  }
+
+  if (/(empezar|iniciar) (la |una )?(tarea|limpieza)/i.test(lower) && uuids[0]) {
+    return {
+      kind: 'tool',
+      tool: 'hsk_start_task',
+      input: { taskId: uuids[0] },
+    };
+  }
+
+  if (/(completar|finalizar|terminar) (la |una )?(tarea|limpieza)/i.test(lower) && uuids[0]) {
+    return {
+      kind: 'tool',
+      tool: 'hsk_complete_task',
+      input: { taskId: uuids[0] },
+    };
+  }
+
+  if (
+    /(asign[ao]r? (limpieza|tarea|housekeeping)|crear tarea (de limpieza|hsk))/i.test(lower) &&
+    uuids[0] &&
+    uuids[1] &&
+    dates[0]
+  ) {
+    return {
+      kind: 'tool',
+      tool: 'hsk_assign_task',
+      input: {
+        propertyId: uuids[0],
+        roomId: uuids[1],
+        businessDate: dates[0],
+        assignedToUserId: uuids[2],
+      },
+    };
+  }
+
+  // -------- FO ----------------------------------------------------------
   if (
     /(disponibilidad|availability|libres?|huecos?)/i.test(lower) &&
     uuids[0] &&
@@ -295,8 +357,10 @@ function stubProposal(content: string): ToolProposal {
   return {
     kind: 'text',
     text:
-      'Puedo consultar disponibilidad, asignar habitación, iniciar un check-in o resumir el día. ' +
-      'Ej: "resúmeme el 2026-06-10 en <propertyId>" o "consulta disponibilidad para <propertyId> del <YYYY-MM-DD> al <YYYY-MM-DD>".',
+      'Puedo ayudarte con FO (disponibilidad, check-in, asignar habitación, resúmenes) ' +
+      'o HSK (asignar / iniciar / completar tareas, listar tareas del día, sugerir ' +
+      'asignaciones). Ej: "qué tareas tiene <userId> hoy en <propertyId>" o ' +
+      '"sugiere asignaciones para <propertyId> el <YYYY-MM-DD>".',
   };
 }
 
@@ -325,7 +389,7 @@ interface SessionMessage {
   content: string;
   pendingToolId?: string;
   pendingTool?: {
-    name: FoToolName;
+    name: AnyToolName;
     input: unknown;
     financial: boolean;
   };
@@ -334,16 +398,16 @@ interface SessionMessage {
 
 interface PendingTool {
   id: string;
-  tool: FoToolName;
+  tool: AnyToolName;
   input: unknown;
   financial: boolean;
   status: 'pending' | 'approved' | 'rejected' | 'failed';
   createdAt: Date;
 }
 
-type ToolProposal =
+export type ToolProposal =
   | { kind: 'text'; text: string }
-  | { kind: 'tool'; tool: FoToolName; input: unknown };
+  | { kind: 'tool'; tool: AnyToolName; input: unknown };
 
 export interface SessionView {
   sessionId: string;
@@ -355,7 +419,7 @@ export interface SessionView {
     content: string;
     pendingToolId?: string;
     pendingTool?: {
-      name: FoToolName;
+      name: AnyToolName;
       input: unknown;
       financial: boolean;
     };
@@ -363,7 +427,7 @@ export interface SessionView {
   }>;
   pendingTools: Array<{
     id: string;
-    tool: FoToolName;
+    tool: AnyToolName;
     input: unknown;
     financial: boolean;
     status: 'pending' | 'approved' | 'rejected' | 'failed';
