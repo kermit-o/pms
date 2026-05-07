@@ -1,0 +1,54 @@
+# fly.toml — pms-web-fo en Fly.io (region primaria mad, ADR-023).
+#
+# Deploy desde la raiz del monorepo:
+#   flyctl deploy -c apps/web-fo/fly.toml --build-context .
+#
+# Primera vez:
+#   flyctl apps create pms-web-fo --org aubergine
+#   flyctl secrets set -c apps/web-fo/fly.toml \
+#     NEXTAUTH_SECRET=$(openssl rand -hex 32) \
+#     KEYCLOAK_CLIENT_SECRET=...
+#
+# NEXTAUTH_URL y KEYCLOAK_ISSUER se setean como env (publicos).
+# La API se alcanza via la red privada 6PN: NEXT_PUBLIC_API_URL=http://pms-api.internal:3000
+
+app = "pms-web-fo"
+primary_region = "mad"
+kill_signal = "SIGTERM"
+kill_timeout = "15s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3001"
+  NEXT_TELEMETRY_DISABLED = "1"
+  NEXTAUTH_URL = "https://app.aubergine.es"
+  KEYCLOAK_ISSUER = "https://auth.aubergine.es/realms/pms"
+  KEYCLOAK_CLIENT_ID = "pms-web"
+  NEXT_PUBLIC_API_URL = "http://pms-api.internal:3000"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/health"
+    protocol = "http"
+    timeout = "5s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"
+
+[deploy]
+  strategy = "rolling"

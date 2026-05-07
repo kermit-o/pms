@@ -1,0 +1,68 @@
+# fly.toml — pms-api en Fly.io (region primaria mad, ADR-023).
+#
+# Deploy desde la raiz del monorepo:
+#   flyctl deploy -c apps/api/fly.toml --build-context .
+#
+# La primera vez:
+#   flyctl apps create pms-api --org aubergine
+#   flyctl secrets set -c apps/api/fly.toml \
+#     DATABASE_URL=...   DIRECT_URL=...   REDIS_URL=...   NATS_URL=... \
+#     KEYCLOAK_URL=...   KEYCLOAK_REALM=pms   KEYCLOAK_CLIENT_ID=pms-api \
+#     PAIRING_SECRET=$(openssl rand -hex 32)
+#   flyctl volumes create pms_api_data --region mad --size 1 -c apps/api/fly.toml  # solo si almacenamos algo en disco
+#
+# Consume secrets desde Fly Secrets (ver RUNBOOK §15). Nunca commitear nada
+# secret aqui.
+
+app = "pms-api"
+primary_region = "mad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  APP_HOST = "0.0.0.0"
+  APP_PORT = "3000"
+  OTEL_METRICS_PORT = "9464"
+  OTEL_ENABLED = "true"
+  LOG_LEVEL = "info"
+  PAIRING_TOKEN_TTL_HOURS = "12"
+  PAIRING_CODE_TTL_SECONDS = "120"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "15s"
+    method = "GET"
+    path = "/health/ready"
+    protocol = "http"
+    timeout = "5s"
+
+# Puerto interno separado para Prometheus scraping. Grafana Cloud lo
+# alcanza via la red privada de Fly (6PN) — no se expone publico.
+[[services]]
+  internal_port = 9464
+  protocol = "tcp"
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 9464
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "1gb"
+
+[deploy]
+  release_command = "pnpm --filter @pms/db exec prisma migrate deploy"
+  strategy = "rolling"
