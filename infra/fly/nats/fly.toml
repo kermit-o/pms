@@ -1,4 +1,4 @@
-# fly.toml — pms-nats en Fly.io (region primaria mad, ADR-023).
+# fly.toml — pms-nats en Fly.io (region primaria cdg, ADR-023).
 #
 # Single Fly Machine + Volume persistente para JetStream. La API la
 # alcanza via 6PN: NATS_URL=nats://pms-nats.internal:4222
@@ -8,7 +8,7 @@
 #
 # Setup primera vez (ver README.md de esta carpeta):
 #   flyctl apps create pms-nats --org aubergine
-#   flyctl volumes create pms_nats_data --region mad --size 5 -a pms-nats
+#   flyctl volumes create pms_nats_data --region cdg --size 5 -a pms-nats
 #   flyctl deploy -c infra/fly/nats/fly.toml --build-context infra/fly/nats
 #
 # Despues, crear el stream del catalogo de eventos:
@@ -17,7 +17,7 @@
 #     --max-age=7d --max-msgs=-1 --max-bytes=2GB --replicas=1
 
 app = "pms-nats"
-primary_region = "mad"
+primary_region = "cdg"
 kill_signal = "SIGTERM"
 kill_timeout = "30s"
 

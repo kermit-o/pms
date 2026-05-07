@@ -7,7 +7,7 @@
 
 | Pieza       | Detalle                                                                                                                                             |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| App Fly     | `pms-keycloak` en `mad`                                                                                                                             |
+| App Fly     | `pms-keycloak` en `cdg`                                                                                                                             |
 | Imagen      | `quay.io/keycloak/keycloak:25.0` con `kc.sh build` aplicado                                                                                         |
 | Postgres    | App separada `pms-keycloak-db` (Fly Postgres). **No** comparte cluster con `pms-postgres` (la DB de la API) — aislar el blast radius si una se cae. |
 | Volume      | Ninguno. Toda la persistencia vive en el Postgres dedicado. Realm import se aplica via `scripts/keycloak-bootstrap.ts` post-deploy.                 |
@@ -25,7 +25,7 @@ flyctl apps create pms-keycloak --org aubergine
 flyctl postgres create \
   --name pms-keycloak-db \
   --org aubergine \
-  --region mad \
+  --region cdg \
   --vm-size shared-cpu-1x \
   --volume-size 3
 flyctl postgres attach pms-keycloak-db -a pms-keycloak \

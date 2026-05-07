@@ -1,4 +1,4 @@
-# fly.toml — pms-api en Fly.io (region primaria mad, ADR-023).
+# fly.toml — pms-api en Fly.io (region primaria cdg, ADR-023).
 #
 # Deploy desde la raiz del monorepo:
 #   flyctl deploy -c apps/api/fly.toml --build-context .
@@ -9,13 +9,13 @@
 #     DATABASE_URL=...   DIRECT_URL=...   REDIS_URL=...   NATS_URL=... \
 #     KEYCLOAK_URL=...   KEYCLOAK_REALM=pms   KEYCLOAK_CLIENT_ID=pms-api \
 #     PAIRING_SECRET=$(openssl rand -hex 32)
-#   flyctl volumes create pms_api_data --region mad --size 1 -c apps/api/fly.toml  # solo si almacenamos algo en disco
+#   flyctl volumes create pms_api_data --region cdg --size 1 -c apps/api/fly.toml  # solo si almacenamos algo en disco
 #
 # Consume secrets desde Fly Secrets (ver RUNBOOK §15). Nunca commitear nada
 # secret aqui.
 
 app = "pms-api"
-primary_region = "mad"
+primary_region = "cdg"
 kill_signal = "SIGTERM"
 kill_timeout = "30s"
 

@@ -1,7 +1,7 @@
 # Aubergine en Fly.io — playbook
 
 > Plataforma elegida en [ADR-023](../../PROJECT.md#adr-023). Región primaria
-> `mad` (Madrid) por residencia ES + GDPR. Réplica Postgres en `fra` para DR.
+> `cdg` (París) por residencia ES + GDPR. Réplica Postgres en `fra` para DR.
 
 Esta carpeta es el **playbook**: el `fly.toml` por app vive con su código en
 `apps/<name>/fly.toml` y los Dockerfiles en `apps/<name>/Dockerfile`. Aquí
@@ -30,11 +30,11 @@ flyctl apps create pms-web-fo   --org aubergine
 flyctl apps create pms-web-hsk  --org aubergine
 flyctl apps create pms-keycloak --org aubergine    # ver §3 abajo
 
-# 2. Postgres managed por Fly. Primary mad + replica fra para DR.
+# 2. Postgres managed por Fly. Primary cdg + replica fra para DR.
 flyctl postgres create \
   --name pms-postgres \
   --org aubergine \
-  --region mad \
+  --region cdg \
   --vm-size shared-cpu-2x \
   --volume-size 10
 flyctl postgres attach pms-postgres -a pms-api
@@ -88,7 +88,7 @@ anterior sigue sirviendo.
 
 ## NATS, Redis, Object Storage, Keycloak
 
-**NATS JetStream**: Fly Machine en `mad` con `nats:2.10-alpine` y volumen
+**NATS JetStream**: Fly Machine en `cdg` con `nats:2.10-alpine` y volumen
 persistente `pms_nats_data` (5 GB). Stream `pms-events` con retention 7d
 y dedup de 2min (envelope ADR-016). Detalle en
 [`infra/fly/nats/`](./nats/).

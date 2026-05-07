@@ -1,4 +1,4 @@
-# fly.toml — pms-keycloak en Fly.io (region primaria mad, ADR-023).
+# fly.toml — pms-keycloak en Fly.io (region primaria cdg, ADR-023).
 #
 # Deploy desde la raiz del monorepo:
 #   flyctl deploy -c infra/fly/keycloak/fly.toml --build-context infra/fly/keycloak
@@ -7,7 +7,7 @@
 # completo + bootstrap del realm via scripts/keycloak-bootstrap.ts).
 
 app = "pms-keycloak"
-primary_region = "mad"
+primary_region = "cdg"
 kill_signal = "SIGTERM"
 kill_timeout = "30s"
 

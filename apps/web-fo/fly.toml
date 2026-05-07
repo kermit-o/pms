@@ -1,4 +1,4 @@
-# fly.toml — pms-web-fo en Fly.io (region primaria mad, ADR-023).
+# fly.toml — pms-web-fo en Fly.io (region primaria cdg, ADR-023).
 #
 # Deploy desde la raiz del monorepo:
 #   flyctl deploy -c apps/web-fo/fly.toml --build-context .
@@ -13,7 +13,7 @@
 # La API se alcanza via la red privada 6PN: NEXT_PUBLIC_API_URL=http://pms-api.internal:3000
 
 app = "pms-web-fo"
-primary_region = "mad"
+primary_region = "cdg"
 kill_signal = "SIGTERM"
 kill_timeout = "15s"
 
