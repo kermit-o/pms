@@ -284,6 +284,151 @@ describe('HousekeepingTasksService.summary', () => {
   });
 });
 
+describe('HousekeepingTasksService.suggestAssignments', () => {
+  const PROP = PROPERTY_ID;
+  const DATE = '2026-06-10';
+  const ROOM_TYPE_STD = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const ROOM_TYPE_DLX = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const USER_A = '99999999-9999-9999-9999-999999999991';
+  const USER_B = '99999999-9999-9999-9999-999999999992';
+
+  function pendingTask(
+    id: string,
+    roomNumber: string,
+    floor: string | null,
+    roomTypeId: string,
+    taskType: HousekeepingTaskType = HousekeepingTaskType.CHECKOUT_CLEAN,
+    assignedToUserId: string | null = null,
+  ) {
+    return {
+      id,
+      taskType,
+      assignedToUserId,
+      room: {
+        id: `room-${roomNumber}`,
+        number: roomNumber,
+        floor,
+        roomTypeId,
+      },
+    };
+  }
+
+  function historicTask(taskType: HousekeepingTaskType, roomTypeId: string, durationMin: number) {
+    return { taskType, durationMin, room: { roomTypeId } };
+  }
+
+  it('greedy assigns PENDING tasks balanceando carga, ordenadas por planta+numero', async () => {
+    const { service, tx } = buildService({});
+    // Llamada 1: PENDING tasks
+    tx.housekeepingTask.findMany.mockResolvedValueOnce([
+      pendingTask('t-201', '201', '2', ROOM_TYPE_STD),
+      pendingTask('t-101', '101', '1', ROOM_TYPE_STD),
+      pendingTask('t-102', '102', '1', ROOM_TYPE_DLX),
+    ] as never);
+    // Llamada 2: histórico (mediana 30 min para STD, 50 min para DLX).
+    tx.housekeepingTask.findMany.mockResolvedValueOnce([
+      historicTask(HousekeepingTaskType.CHECKOUT_CLEAN, ROOM_TYPE_STD, 30),
+      historicTask(HousekeepingTaskType.CHECKOUT_CLEAN, ROOM_TYPE_STD, 30),
+      historicTask(HousekeepingTaskType.CHECKOUT_CLEAN, ROOM_TYPE_DLX, 50),
+    ] as never);
+
+    const out = await service.suggestAssignments(user, 'corr', {
+      propertyId: PROP,
+      businessDate: DATE,
+      candidateUserIds: [USER_A, USER_B],
+      shiftCapacityMin: 290,
+      lookbackDays: 30,
+    });
+
+    expect(out.suggestions).toHaveLength(3);
+    // Orden por planta + numero: 101, 102, 201.
+    expect(out.suggestions.map((s) => s.roomNumber)).toEqual(['101', '102', '201']);
+    // Greedy: 101 (30 min) → A; 102 (50 min) → B (carga 0 vs A 30); 201 (30) → A (60 vs 50).
+    expect(out.suggestions[0]!.suggestedUserId).toBe(USER_A);
+    expect(out.suggestions[1]!.suggestedUserId).toBe(USER_B);
+    expect(out.suggestions[2]!.suggestedUserId).toBe(USER_A);
+    // Predicted min usa medianas calculadas.
+    expect(out.suggestions[1]!.predictedMin).toBe(50);
+    // No hay unmatched.
+    expect(out.unmatched).toHaveLength(0);
+  });
+
+  it('marca como unmatched cuando se agota la capacidad', async () => {
+    const { service, tx } = buildService({});
+    // 5 tareas pesadas (60 min cada una) y solo 1 camarera con capacidad 120 min.
+    tx.housekeepingTask.findMany.mockResolvedValueOnce([
+      pendingTask('t1', '101', '1', ROOM_TYPE_STD),
+      pendingTask('t2', '102', '1', ROOM_TYPE_STD),
+      pendingTask('t3', '103', '1', ROOM_TYPE_STD),
+      pendingTask('t4', '104', '1', ROOM_TYPE_STD),
+      pendingTask('t5', '105', '1', ROOM_TYPE_STD),
+    ] as never);
+    tx.housekeepingTask.findMany.mockResolvedValueOnce([
+      historicTask(HousekeepingTaskType.CHECKOUT_CLEAN, ROOM_TYPE_STD, 60),
+    ] as never);
+
+    const out = await service.suggestAssignments(user, 'corr', {
+      propertyId: PROP,
+      businessDate: DATE,
+      candidateUserIds: [USER_A],
+      shiftCapacityMin: 120,
+      lookbackDays: 30,
+    });
+
+    expect(out.suggestions).toHaveLength(2); // 2x60 = 120 min, cabe.
+    expect(out.unmatched).toHaveLength(3);
+    expect(out.unmatched[0]!.reason).toBe('capacity_exhausted');
+  });
+
+  it('todas unmatched con reason=no_candidates si no hay camareras', async () => {
+    const { service, tx } = buildService({});
+    tx.housekeepingTask.findMany.mockResolvedValueOnce([
+      pendingTask('t1', '101', '1', ROOM_TYPE_STD),
+    ] as never);
+    // Llamada 2 (deriva candidatas del dia) → vacio.
+    tx.housekeepingTask.findMany.mockResolvedValueOnce([] as never);
+    // Llamada 3 (historico) → vacio.
+    tx.housekeepingTask.findMany.mockResolvedValueOnce([] as never);
+
+    const out = await service.suggestAssignments(user, 'corr', {
+      propertyId: PROP,
+      businessDate: DATE,
+      shiftCapacityMin: 290,
+      lookbackDays: 30,
+    });
+
+    expect(out.suggestions).toHaveLength(0);
+    expect(out.unmatched).toHaveLength(1);
+    expect(out.unmatched[0]!.reason).toBe('no_candidates');
+    // Sin historico cae al fallback de 30 min.
+    expect(out.unmatched[0]!.predictedMin).toBe(30);
+  });
+
+  it('usa el fallback de 30 min cuando no hay historico para (taskType, roomType)', async () => {
+    const { service, tx } = buildService({});
+    tx.housekeepingTask.findMany.mockResolvedValueOnce([
+      pendingTask(
+        't1',
+        '101',
+        '1',
+        ROOM_TYPE_STD,
+        HousekeepingTaskType.MAINTENANCE, // sin historico
+      ),
+    ] as never);
+    tx.housekeepingTask.findMany.mockResolvedValueOnce([] as never);
+
+    const out = await service.suggestAssignments(user, 'corr', {
+      propertyId: PROP,
+      businessDate: DATE,
+      candidateUserIds: [USER_A],
+      shiftCapacityMin: 290,
+      lookbackDays: 30,
+    });
+    expect(out.suggestions[0]!.predictedMin).toBe(30);
+    expect(out.defaultDurationMin).toBe(30);
+  });
+});
+
 describe('HousekeepingTasksService.cancel', () => {
   it('cancels a PENDING task and emits task_cancelled', async () => {
     const { service, events } = buildService({

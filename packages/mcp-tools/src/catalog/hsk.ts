@@ -43,6 +43,21 @@ export const hskListTodayInput = z.object({
 });
 export type HskListTodayInput = z.infer<typeof hskListTodayInput>;
 
+export const hskSuggestAssignmentsInput = z.object({
+  propertyId: z.string().uuid(),
+  businessDate: isoDate.optional(),
+  // Lista opcional de camareras candidatas; si se omite el servicio infiere
+  // las del dia (cualquiera con tareas asignadas en businessDate).
+  candidateUserIds: z.array(z.string().uuid()).optional(),
+  // Capacidad estimada por camarera en minutos. Default: 8h * 0.6 = 290 min
+  // (productividad real en turno con descansos + tareas auxiliares).
+  shiftCapacityMin: z.coerce.number().int().min(60).max(720).default(290),
+  // Ventana de historico para calcular la mediana de durationMin por
+  // (taskType, roomTypeId). 30 dias es razonable para hoteles boutique.
+  lookbackDays: z.coerce.number().int().min(7).max(180).default(30),
+});
+export type HskSuggestAssignmentsInput = z.infer<typeof hskSuggestAssignmentsInput>;
+
 export interface HskToolMeta {
   name: string;
   description: string;
@@ -81,6 +96,14 @@ export const hskToolCatalog = {
     description:
       'Lista las tareas del dia operacional (businessDate; default hoy) para una propiedad, opcionalmente filtradas por camarera. Read-only.',
     inputSchema: hskListTodayInput,
+    mutating: false,
+    financial: false,
+  },
+  hsk_suggest_assignments: {
+    name: 'hsk_suggest_assignments',
+    description:
+      'Sugiere una asignacion de tareas HSK del dia a las camareras disponibles, balanceando carga y duracion predicha. Read-only — el supervisor confirma para aplicar (ADR-020).',
+    inputSchema: hskSuggestAssignmentsInput,
     mutating: false,
     financial: false,
   },

@@ -4,6 +4,7 @@ import {
   type HskCompleteTaskInput,
   type HskListTodayInput,
   type HskStartTaskInput,
+  type HskSuggestAssignmentsInput,
   type HskToolName,
   hskToolCatalog,
 } from '@pms/mcp-tools';
@@ -72,6 +73,17 @@ export class HskToolRouter {
           from: date,
           to: date,
           limit: 100,
+        });
+      }
+      case 'hsk_suggest_assignments': {
+        const i = input as HskSuggestAssignmentsInput;
+        const date = i.businessDate ?? new Date().toISOString().slice(0, 10);
+        return this.tasks.suggestAssignments(user, correlationId, {
+          propertyId: i.propertyId,
+          businessDate: date,
+          candidateUserIds: i.candidateUserIds,
+          shiftCapacityMin: i.shiftCapacityMin,
+          lookbackDays: i.lookbackDays,
         });
       }
     }

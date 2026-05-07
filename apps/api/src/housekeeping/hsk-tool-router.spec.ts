@@ -22,16 +22,18 @@ function makeTasksMock() {
     start: vi.fn().mockResolvedValue({ id: TASK_ID, status: HousekeepingTaskStatus.IN_PROGRESS }),
     complete: vi.fn().mockResolvedValue({ id: TASK_ID, status: HousekeepingTaskStatus.COMPLETED }),
     list: vi.fn().mockResolvedValue([]),
+    suggestAssignments: vi.fn().mockResolvedValue({ suggestions: [], unmatched: [] }),
   };
 }
 
 describe('HskToolRouter', () => {
-  it('flags assign/start/complete as mutating, list_today as read-only', () => {
+  it('flags assign/start/complete as mutating, list_today + suggest as read-only', () => {
     const router = new HskToolRouter(makeTasksMock() as never);
     expect(router.isMutating('hsk_assign_task')).toBe(true);
     expect(router.isMutating('hsk_start_task')).toBe(true);
     expect(router.isMutating('hsk_complete_task')).toBe(true);
     expect(router.isMutating('hsk_list_today')).toBe(false);
+    expect(router.isMutating('hsk_suggest_assignments')).toBe(false);
   });
 
   it('hsk_assign_task delegates to tasks.create with the same arguments', async () => {
@@ -76,5 +78,16 @@ describe('HskToolRouter', () => {
     await expect(
       router.execute('hsk_start_task', { taskId: 'not-a-uuid' }, user, 'corr'),
     ).rejects.toThrow();
+  });
+
+  it('hsk_suggest_assignments delegates to tasks.suggestAssignments con businessDate default a hoy', async () => {
+    const tasks = makeTasksMock();
+    const router = new HskToolRouter(tasks as never);
+    await router.execute('hsk_suggest_assignments', { propertyId: PROPERTY_ID }, user, 'corr');
+    expect(tasks.suggestAssignments).toHaveBeenCalledOnce();
+    const call = tasks.suggestAssignments.mock.calls[0]![2];
+    const today = new Date().toISOString().slice(0, 10);
+    expect(call.businessDate).toBe(today);
+    expect(call.shiftCapacityMin).toBe(290); // default
   });
 });

@@ -9,6 +9,7 @@ import {
   CreateTaskDto,
   ListTasksQuery,
   ReassignTaskDto,
+  SuggestAssignmentsQuery,
   SummaryQuery,
 } from './dto';
 import { HousekeepingMetrics } from './metrics';
@@ -397,6 +398,209 @@ export class HousekeepingTasksService {
         completedWithDuration > 0 ? Math.round(totalDurationMin / completedWithDuration) : null,
     };
   }
+
+  /**
+   * Heuristica V1 de asignacion de housekeeping (Sprint 5 W5, ADR-020).
+   *
+   * Read-only — devuelve sugerencias que el supervisor revisa y aplica
+   * con un click. Nunca muta nada.
+   *
+   * Algoritmo greedy interpretable:
+   *   1. Tareas candidatas: PENDING del dia (assignedToUserId puede o no
+   *      ser null — la sugerencia respeta lo ya asignado y completa el
+   *      hueco).
+   *   2. Camareras candidatas: las del input. Si no se especifican,
+   *      derivamos del propio dia (cualquiera con tareas asignadas en
+   *      esta businessDate).
+   *   3. Para cada tarea, predecimos durationMin con la mediana
+   *      historica de (taskType, room.roomTypeId) en los ultimos N dias
+   *      (lookbackDays). Fallback global: mediana de TODO el historico
+   *      del tenant. Fallback ultimo: 30 min.
+   *   4. Orden: por planta (floor) ASC, luego numero de habitacion ASC.
+   *      Eso minimiza desplazamientos — la camarera trabaja en bloques
+   *      contiguos.
+   *   5. Asignacion greedy: para cada tarea, escoger la camarera con
+   *      menor carga acumulada (totalAssignedMin) que aun tenga
+   *      capacidad (shiftCapacityMin). Si ninguna tiene capacidad, la
+   *      tarea va a `unmatched`.
+   *
+   * Returns un objeto JSON-friendly que el frontend o un copilot puede
+   * mostrar tal cual + un boton "aplicar todas" que ejecuta los reassign
+   * correspondientes (mutating, requiere confirmacion humana).
+   */
+  async suggestAssignments(
+    user: AuthUser,
+    correlationId: string,
+    query: SuggestAssignmentsQuery,
+  ): Promise<AssignmentSuggestions> {
+    const ctx = tenantCtx(user, correlationId);
+    const businessDateAsDate = new Date(query.businessDate);
+
+    return this.prisma.withTenant(ctx, async (tx) => {
+      // 1. Tareas del dia agrupables.
+      const tasks = await tx.housekeepingTask.findMany({
+        where: {
+          propertyId: query.propertyId,
+          businessDate: businessDateAsDate,
+          status: HousekeepingTaskStatus.PENDING,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          taskType: true,
+          assignedToUserId: true,
+          room: {
+            select: { id: true, number: true, floor: true, roomTypeId: true },
+          },
+        },
+      });
+
+      // 2. Candidatas. Input explicito > derivar del dia > vacio.
+      let candidateUserIds: string[] = query.candidateUserIds ?? [];
+      if (candidateUserIds.length === 0) {
+        const sameDayAssignments = await tx.housekeepingTask.findMany({
+          where: {
+            propertyId: query.propertyId,
+            businessDate: businessDateAsDate,
+            assignedToUserId: { not: null },
+            deletedAt: null,
+          },
+          select: { assignedToUserId: true },
+          distinct: ['assignedToUserId'],
+        });
+        candidateUserIds = sameDayAssignments
+          .map((r) => r.assignedToUserId)
+          .filter((u): u is string => !!u);
+      }
+
+      // 3. Mediana historica por (taskType, roomTypeId).
+      const lookbackFrom = new Date(businessDateAsDate);
+      lookbackFrom.setDate(lookbackFrom.getDate() - query.lookbackDays);
+      const historic = await tx.housekeepingTask.findMany({
+        where: {
+          propertyId: query.propertyId,
+          status: HousekeepingTaskStatus.COMPLETED,
+          durationMin: { not: null },
+          businessDate: { gte: lookbackFrom, lt: businessDateAsDate },
+          deletedAt: null,
+        },
+        select: {
+          taskType: true,
+          durationMin: true,
+          room: { select: { roomTypeId: true } },
+        },
+      });
+
+      const medianByKey = computeMedianByKey(
+        historic.map((h) => ({
+          key: `${h.taskType}|${h.room.roomTypeId}`,
+          value: h.durationMin!,
+        })),
+      );
+      const globalMedian =
+        median(historic.map((h) => h.durationMin!).filter((v) => v != null)) ?? FALLBACK_MIN;
+
+      // 4. Orden por planta + numero.
+      const sorted = tasks.sort((a, b) => {
+        const fa = a.room.floor ?? '';
+        const fb = b.room.floor ?? '';
+        if (fa !== fb) return fa.localeCompare(fb, undefined, { numeric: true });
+        return a.room.number.localeCompare(b.room.number, undefined, { numeric: true });
+      });
+
+      // 5. Greedy.
+      const load = new Map<string, { totalMin: number; taskCount: number }>(
+        candidateUserIds.map((id) => [id, { totalMin: 0, taskCount: 0 }]),
+      );
+
+      const suggestions: AssignmentSuggestion[] = [];
+      const unmatched: UnmatchedTask[] = [];
+
+      for (const t of sorted) {
+        const key = `${t.taskType}|${t.room.roomTypeId}`;
+        const predictedMin = medianByKey.get(key) ?? globalMedian;
+
+        // Camarera con menor carga que aun tenga capacidad.
+        let bestUserId: string | undefined;
+        let bestLoad = Infinity;
+        for (const userId of candidateUserIds) {
+          const slot = load.get(userId)!;
+          if (slot.totalMin + predictedMin > query.shiftCapacityMin) continue;
+          if (slot.totalMin < bestLoad) {
+            bestLoad = slot.totalMin;
+            bestUserId = userId;
+          }
+        }
+
+        if (bestUserId) {
+          const slot = load.get(bestUserId)!;
+          slot.totalMin += predictedMin;
+          slot.taskCount += 1;
+          suggestions.push({
+            taskId: t.id,
+            roomId: t.room.id,
+            roomNumber: t.room.number,
+            floor: t.room.floor ?? null,
+            taskType: t.taskType,
+            currentlyAssignedToUserId: t.assignedToUserId,
+            suggestedUserId: bestUserId,
+            predictedMin,
+          });
+        } else {
+          unmatched.push({
+            taskId: t.id,
+            roomNumber: t.room.number,
+            floor: t.room.floor ?? null,
+            taskType: t.taskType,
+            predictedMin,
+            reason: candidateUserIds.length === 0 ? 'no_candidates' : 'capacity_exhausted',
+          });
+        }
+      }
+
+      return {
+        propertyId: query.propertyId,
+        businessDate: query.businessDate,
+        shiftCapacityMin: query.shiftCapacityMin,
+        defaultDurationMin: globalMedian,
+        candidates: candidateUserIds.map((userId) => {
+          const slot = load.get(userId) ?? { totalMin: 0, taskCount: 0 };
+          return {
+            userId,
+            totalAssignedMin: slot.totalMin,
+            taskCount: slot.taskCount,
+            remainingMin: query.shiftCapacityMin - slot.totalMin,
+          };
+        }),
+        suggestions,
+        unmatched,
+      };
+    });
+  }
+}
+
+const FALLBACK_MIN = 30;
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? Math.round((sorted[mid - 1]! + sorted[mid]!) / 2) : sorted[mid]!;
+}
+
+function computeMedianByKey(rows: { key: string; value: number }[]): Map<string, number> {
+  const groups = new Map<string, number[]>();
+  for (const r of rows) {
+    const arr = groups.get(r.key) ?? [];
+    arr.push(r.value);
+    groups.set(r.key, arr);
+  }
+  const out = new Map<string, number>();
+  for (const [k, vs] of groups.entries()) {
+    const m = median(vs);
+    if (m != null) out.set(k, m);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -409,6 +613,41 @@ export interface TaskSummary {
   byType: Record<HousekeepingTaskType, number>;
   byAssignee: { userId: string | null; total: number; completed: number }[];
   avgDurationMin: number | null;
+}
+
+export interface AssignmentSuggestion {
+  taskId: string;
+  roomId: string;
+  roomNumber: string;
+  floor: string | null;
+  taskType: HousekeepingTaskType;
+  currentlyAssignedToUserId: string | null;
+  suggestedUserId: string;
+  predictedMin: number;
+}
+
+export interface UnmatchedTask {
+  taskId: string;
+  roomNumber: string;
+  floor: string | null;
+  taskType: HousekeepingTaskType;
+  predictedMin: number;
+  reason: 'no_candidates' | 'capacity_exhausted';
+}
+
+export interface AssignmentSuggestions {
+  propertyId: string;
+  businessDate: string;
+  shiftCapacityMin: number;
+  defaultDurationMin: number;
+  candidates: {
+    userId: string;
+    totalAssignedMin: number;
+    taskCount: number;
+    remainingMin: number;
+  }[];
+  suggestions: AssignmentSuggestion[];
+  unmatched: UnmatchedTask[];
 }
 
 // ---------------------------------------------------------------------------

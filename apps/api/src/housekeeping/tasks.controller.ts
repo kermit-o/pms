@@ -8,6 +8,7 @@ import {
   CreateTaskDto,
   ListTasksQuery,
   ReassignTaskDto,
+  SuggestAssignmentsQuery,
   SummaryQuery,
 } from './dto';
 import { HousekeepingTasksService } from './tasks.service';
@@ -45,6 +46,17 @@ export class HousekeepingTasksController {
   ) {
     const query = SummaryQuery.parse(rawQuery);
     return this.tasks.summary(user, correlationIdOf(req), query);
+  }
+
+  @Get('suggestions')
+  @Roles('tenant_admin', 'housekeeping_supervisor')
+  async suggestions(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Query() rawQuery: Record<string, string | undefined>,
+  ) {
+    const query = SuggestAssignmentsQuery.parse(rawQuery);
+    return this.tasks.suggestAssignments(user, correlationIdOf(req), query);
   }
 
   @Get(':id')
