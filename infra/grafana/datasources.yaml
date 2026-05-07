@@ -1,0 +1,24 @@
+# Provisioning de datasource Prometheus para Grafana Cloud / Grafana
+# self-hosted. La URL apunta al endpoint Prometheus que scrapea pms-api
+# en :9464/metrics y NATS en :8222/varz (via 6PN).
+#
+# En Grafana Cloud se usa el integrated Prometheus; copiar la URL +
+# username/password del API key. En self-hosted dirigir a Prometheus o
+# Mimir local.
+
+apiVersion: 1
+
+datasources:
+  - name: prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    isDefault: true
+    url: ${PROMETHEUS_URL}
+    basicAuth: true
+    basicAuthUser: ${PROMETHEUS_USER}
+    secureJsonData:
+      basicAuthPassword: ${PROMETHEUS_PASSWORD}
+    jsonData:
+      timeInterval: '15s'
+      httpMethod: POST

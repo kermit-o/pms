@@ -1,0 +1,15 @@
+# Provisioning de dashboards desde infra/grafana/dashboards/.
+# Grafana auto-importa todos los .json del directorio cada updateIntervalSeconds.
+
+apiVersion: 1
+
+providers:
+  - name: aubergine
+    orgId: 1
+    folder: Aubergine
+    type: file
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

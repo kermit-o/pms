@@ -1,0 +1,158 @@
+{
+  "title": "Aubergine — Housekeeping",
+  "uid": "aubergine-hsk",
+  "tags": ["aubergine", "housekeeping"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(hsk_tasks_assigned_total, tenant)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false
+      },
+      {
+        "name": "property",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(hsk_tasks_assigned_total{tenant=~\"$tenant\"}, property)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Tareas asignadas (1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(hsk_tasks_assigned_total{tenant=~\"$tenant\",property=~\"$property\"}[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Completadas (1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(hsk_tasks_completed_total{tenant=~\"$tenant\",property=~\"$property\"}[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "p95 duración (min)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(hsk_task_duration_minutes_bucket{tenant=~\"$tenant\",property=~\"$property\"}[1h])) by (le))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Pairings redimidos OK (1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(hsk_pairings_redeemed_total{tenant=~\"$tenant\",outcome=\"success\"}[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Tareas por estado (rate/min)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(hsk_tasks_assigned_total{tenant=~\"$tenant\",property=~\"$property\"}[5m])) * 60",
+          "legendFormat": "assigned"
+        },
+        {
+          "expr": "sum(rate(hsk_tasks_started_total{tenant=~\"$tenant\",property=~\"$property\"}[5m])) * 60",
+          "legendFormat": "started"
+        },
+        {
+          "expr": "sum(rate(hsk_tasks_completed_total{tenant=~\"$tenant\",property=~\"$property\"}[5m])) * 60",
+          "legendFormat": "completed"
+        },
+        {
+          "expr": "sum(rate(hsk_tasks_cancelled_total{tenant=~\"$tenant\",property=~\"$property\"}[5m])) * 60",
+          "legendFormat": "cancelled"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Histograma duración tareas (cuantiles)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(hsk_task_duration_minutes_bucket{tenant=~\"$tenant\",property=~\"$property\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(hsk_task_duration_minutes_bucket{tenant=~\"$tenant\",property=~\"$property\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(hsk_task_duration_minutes_bucket{tenant=~\"$tenant\",property=~\"$property\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Lost & Found — registrados vs resueltos",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "sum(rate(hsk_lost_found_registered_total{tenant=~\"$tenant\",property=~\"$property\"}[1h])) * 3600",
+          "legendFormat": "registered/h"
+        },
+        {
+          "expr": "sum by (status) (rate(hsk_lost_found_resolved_total{tenant=~\"$tenant\",property=~\"$property\"}[1h])) * 3600",
+          "legendFormat": "{{status}}/h"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Pairings — outcome de redeem",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 12 },
+      "description": "outcome ∈ {success, already, expired, not_found}. Picos en not_found pueden indicar enumeration.",
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(hsk_pairings_redeemed_total{tenant=~\"$tenant\"}[5m])) * 60",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    }
+  ]
+}
