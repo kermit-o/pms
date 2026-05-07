@@ -1,7 +1,16 @@
 import Link from 'next/link';
 import { auth } from '@/auth';
-import { ApiError, getTaskSummary, listTasks, type Task, type TaskSummary } from '@/lib/api';
+import {
+  ApiError,
+  type AssignmentSuggestions,
+  getAssignmentSuggestions,
+  getTaskSummary,
+  listTasks,
+  type Task,
+  type TaskSummary,
+} from '@/lib/api';
 import { ReassignControl } from './reassign-control';
+import { SuggestionsPanel } from './suggestions-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,12 +39,16 @@ export default async function SupervisorPage({ searchParams }: PageProps) {
 
   let summary: TaskSummary | null = null;
   let tasks: Task[] = [];
+  let suggestions: AssignmentSuggestions | null = null;
   let error: string | null = null;
   if (propertyId) {
     try {
-      [summary, tasks] = await Promise.all([
+      [summary, tasks, suggestions] = await Promise.all([
         getTaskSummary(session?.accessToken, { propertyId, businessDate: date }),
         listTasks(session?.accessToken, { propertyId, from: date, to: date }),
+        getAssignmentSuggestions(session?.accessToken, { propertyId, businessDate: date }).catch(
+          () => null, // sin sugerencias no rompemos el panel.
+        ),
       ]);
     } catch (err) {
       error = err instanceof ApiError ? `API ${err.status}` : (err as Error).message;
@@ -132,6 +145,10 @@ export default async function SupervisorPage({ searchParams }: PageProps) {
             })}
           </ul>
         </section>
+      )}
+
+      {suggestions && suggestions.suggestions.length > 0 && (
+        <SuggestionsPanel suggestions={suggestions} />
       )}
 
       {tasks.length > 0 && (

@@ -29,8 +29,10 @@ export {
   hskStartTaskInput,
   hskCompleteTaskInput,
   hskListTodayInput,
+  hskSuggestAssignmentsInput,
   type HskAssignTaskInput,
   type HskStartTaskInput,
   type HskCompleteTaskInput,
   type HskListTodayInput,
+  type HskSuggestAssignmentsInput,
 } from './catalog/hsk';

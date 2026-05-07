@@ -138,6 +138,66 @@ export async function getTaskSummary(
   return apiFetch(`/housekeeping/tasks/summary?${params.toString()}`, { accessToken });
 }
 
+export interface AssignmentSuggestion {
+  taskId: string;
+  roomId: string;
+  roomNumber: string;
+  floor: string | null;
+  taskType: TaskType;
+  currentlyAssignedToUserId: string | null;
+  suggestedUserId: string;
+  predictedMin: number;
+}
+
+export interface UnmatchedTask {
+  taskId: string;
+  roomNumber: string;
+  floor: string | null;
+  taskType: TaskType;
+  predictedMin: number;
+  reason: 'no_candidates' | 'capacity_exhausted';
+}
+
+export interface AssignmentSuggestions {
+  propertyId: string;
+  businessDate: string;
+  shiftCapacityMin: number;
+  defaultDurationMin: number;
+  candidates: {
+    userId: string;
+    totalAssignedMin: number;
+    taskCount: number;
+    remainingMin: number;
+  }[];
+  suggestions: AssignmentSuggestion[];
+  unmatched: UnmatchedTask[];
+}
+
+export async function getAssignmentSuggestions(
+  accessToken: string | undefined,
+  query: {
+    propertyId: string;
+    businessDate: string;
+    candidateUserIds?: string[];
+    shiftCapacityMin?: number;
+    lookbackDays?: number;
+  },
+): Promise<AssignmentSuggestions> {
+  const params = new URLSearchParams();
+  params.set('propertyId', query.propertyId);
+  params.set('businessDate', query.businessDate);
+  if (query.candidateUserIds?.length) {
+    params.set('candidateUserIds', query.candidateUserIds.join(','));
+  }
+  if (query.shiftCapacityMin != null) {
+    params.set('shiftCapacityMin', String(query.shiftCapacityMin));
+  }
+  if (query.lookbackDays != null) {
+    params.set('lookbackDays', String(query.lookbackDays));
+  }
+  return apiFetch(`/housekeeping/tasks/suggestions?${params.toString()}`, { accessToken });
+}
+
 // ---------------------------------------------------------------------------
 // Lost & Found
 // ---------------------------------------------------------------------------

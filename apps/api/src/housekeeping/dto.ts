@@ -49,3 +49,22 @@ export const SummaryQuery = z.object({
   businessDate: isoDate,
 });
 export type SummaryQuery = z.infer<typeof SummaryQuery>;
+
+const csvUuidArray = z
+  .union([z.string(), z.array(z.string()).optional()])
+  .optional()
+  .transform((v) => {
+    if (!v) return undefined;
+    const arr = typeof v === 'string' ? v.split(',') : v;
+    return arr.map((s) => s.trim()).filter(Boolean);
+  })
+  .pipe(z.array(z.string().uuid()).optional());
+
+export const SuggestAssignmentsQuery = z.object({
+  propertyId: z.string().uuid(),
+  businessDate: isoDate,
+  candidateUserIds: csvUuidArray,
+  shiftCapacityMin: z.coerce.number().int().min(60).max(720).default(290),
+  lookbackDays: z.coerce.number().int().min(7).max(180).default(30),
+});
+export type SuggestAssignmentsQuery = z.infer<typeof SuggestAssignmentsQuery>;
