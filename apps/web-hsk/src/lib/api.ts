@@ -152,6 +152,14 @@ export interface LostFoundItem {
   foundAt: string;
   description: string;
   hasPhoto: boolean;
+  /**
+   * URL pública del bucket S3 (driver=s3) o null si la foto vive inline
+   * en el server (driver=inline). El frontend usa este campo para
+   * renderizar `<img>` directamente; cuando es null, depende del
+   * endpoint que devuelva photoBase64 explícitamente (no expuesto en la
+   * lista por tamaño).
+   */
+  photoUrl: string | null;
   status: LostFoundStatus;
   claimedByGuestId: string | null;
   claimedAt: string | null;

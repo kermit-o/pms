@@ -5,6 +5,7 @@ import { HskToolRouter } from './hsk-tool-router';
 import { LostFoundController } from './lost-found.controller';
 import { LostFoundService } from './lost-found.service';
 import { HousekeepingMetrics } from './metrics';
+import { PhotoStorageService } from './photo-storage.service';
 import { HousekeepingTasksController } from './tasks.controller';
 import { HousekeepingTasksService } from './tasks.service';
 
@@ -12,6 +13,7 @@ import { HousekeepingTasksService } from './tasks.service';
   controllers: [HousekeepingTasksController, LostFoundController, DevicePairingsController],
   providers: [
     HousekeepingMetrics,
+    PhotoStorageService,
     HousekeepingTasksService,
     LostFoundService,
     DevicePairingsService,

@@ -789,6 +789,7 @@ model LostFoundItem {
   foundAt            DateTime        @default(now()) @map("found_at")
   description        String
   photoBase64        String?         @map("photo_base64")
+  photoUrl           String?         @map("photo_url")
   status             LostFoundStatus @default(FOUND)
   claimedByGuestId   String?         @map("claimed_by_guest_id") @db.Uuid
   claimedAt          DateTime?       @map("claimed_at")
