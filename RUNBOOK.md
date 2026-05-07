@@ -436,3 +436,308 @@ Alertas sugeridas (Grafana / Alertmanager):
 ### 13.8 UAT
 
 Antes de cada release, ejecutar la checklist de `docs/SPRINT-4-UAT.md` contra staging. Cubre los 9 escenarios principales (crear/start/complete, cancel, idempotencia, lost-found con/sin foto, pairing happy path + 4 fallos, reasignación, métricas).
+
+## 14. Incident response
+
+> Guion del on-call. Cada alerta de `infra/grafana/alerts.yaml` (Sprint 5 W3) tiene aquí su playbook. El canal principal es `#aubergine-oncall` en Slack; las `severity=page` escalan a PagerDuty.
+
+### 14.1 Roles + canales
+
+| Rol                      | Quién                                     | Cuándo                                                                               |
+| ------------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------ |
+| **On-call primario**     | rotación semanal del equipo de ingeniería | 24/7 durante el piloto. PagerDuty rota automático los lunes 09:00 CET.               |
+| **On-call secundario**   | otro miembro del equipo                   | si el primario no acusa la página en 10 min.                                         |
+| **Soporte hotel piloto** | account manager                           | sólo si el incidente tiene impacto visible para el operador (FO o HSK no funcionan). |
+
+Canales:
+
+- `#aubergine-oncall` — Slack, todas las alertas Alertmanager.
+- `#aubergine-incidentes` — Slack, post-mortems + comunicación con el hotel.
+- PagerDuty `aubergine-prod` service — sólo `severity=page`.
+
+### 14.2 Severidades + SLA
+
+| Severity        | Disparadores                                                                                                              | SLA acuse | SLA mitigación      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------- |
+| **page** (P1)   | `ApiErrorRateHigh`, `NightAuditRunFailed`, `HskPairingsNotFoundBurst`                                                     | < 5 min   | < 30 min            |
+| **ticket** (P2) | `ApiP95LatencyHigh`, `SesSubmissionFailing`, `HskTaskDurationP95High`, `HskNoCompletedDuringShift`, `NatsConsumerBacklog` | < 30 min  | mismo día laborable |
+
+El **SLA del piloto** es 99.5% de disponibilidad mensual (descontando ventana de Night Audit 04:00–05:00 CET). 4h/mes de downtime aceptables — documentado en el contrato del piloto.
+
+### 14.3 DR drill mensual
+
+Una vez al mes (primer martes), el on-call primario ejecuta un drill de restore:
+
+```bash
+# 1. Identificar el snapshot mas reciente de pms-postgres.
+flyctl postgres snapshots list pms-postgres -a pms-postgres
+
+# 2. Provisional un cluster paralelo desde el snapshot.
+flyctl postgres restore <snapshot-id> --name pms-postgres-drill --region mad
+
+# 3. Apuntar una API "shadow" (pms-api-drill) al cluster restaurado.
+flyctl secrets set -a pms-api-drill DATABASE_URL="<conn-del-cluster-restored>"
+flyctl deploy -c apps/api/fly.toml --app pms-api-drill --build-context .
+
+# 4. Smoke test: cuenta de reservas, folios, business_day_states del dia
+#    anterior coinciden con prod.
+curl "https://pms-api-drill.fly.dev/health/ready"
+curl "https://pms-api-drill.fly.dev/reports/manager?propertyId=$PROP&businessDate=$YESTERDAY" \
+  -H "authorization: Bearer $TOKEN" | jq '.totals'
+# Comparar con el mismo endpoint contra prod.
+
+# 5. Tear down.
+flyctl apps destroy pms-api-drill --yes
+flyctl postgres destroy pms-postgres-drill --yes
+```
+
+El drill se documenta en `docs/dr-drills/<YYYY-MM-DD>.md` con: snapshot id, tiempo de restore, diff de counts vs prod, problemas encontrados.
+
+### 14.4 Playbooks por alerta
+
+#### `ApiErrorRateHigh` (P1, page)
+
+**Síntoma:** 5xx > 1% durante 5 min.
+
+1. Mira el panel "Status code mix" en `Aubergine — API health`. ¿Qué status predomina (500, 502, 503)?
+2. `flyctl logs -a pms-api | head -200` — busca el primer stack trace.
+3. Casos comunes:
+   - **DB caída** → `flyctl postgres status -a pms-postgres`. Si está down, restart machine. Mira `flyctl postgres logs -a pms-postgres` por OOM.
+   - **NATS caído** → `flyctl logs -a pms-nats`. El publish con timeout 5s sigue trabajando si NATS responde tarde; si no responde, los `await events.publish(...)` cuelgan. Mitigación inmediata: `flyctl machine restart -a pms-nats`.
+   - **Migración pending** → si justo se ha desplegado y el `release_command = prisma migrate deploy` ha fallado, el rollout abortó. `flyctl status -a pms-api` muestra la versión activa; verifica `flyctl releases -a pms-api`.
+4. Si nada ágil resuelve, **rollback**: `flyctl deploy --image registry.fly.io/pms-api:<sha-anterior> -a pms-api`.
+5. Post-mortem en `#aubergine-incidentes` con timeline y root cause.
+
+#### `ApiP95LatencyHigh` (P2)
+
+**Síntoma:** p95 > 800 ms durante 10 min (SLO objetivo 400 ms).
+
+1. Panel "Top 10 rutas más lentas" del dashboard `api-health`. ¿Cuál ruta?
+2. Si es `/reports/*` → check `flyctl postgres metrics -a pms-postgres` por queries lentas. Probable solución: añadir índice si la query plan lo justifica. PR aparte.
+3. Si es `/copilot/*` → posible LLM lento. Check si `ANTHROPIC_API_KEY` está set y la tarifa Anthropic; el stub determinístico no causa latencia.
+4. Si es genérico → check Fly Machine CPU + memory en `flyctl status`. Escalar `[[vm]]` si cpu sustained > 80%.
+
+#### `NightAuditRunFailed` (P1, page)
+
+Sigue [§12.5](#125-cosas-que-pueden-ir-mal). El on-call:
+
+1. `curl /night-audit/state?propertyId=X&businessDate=Y` para ver el `lastFailedStep` y `lastError`.
+2. Aplicar el fix correspondiente (caja recontada, NO_SHOW manual, etc.).
+3. `POST /night-audit/runs/:id/resume`.
+4. **No avanzar** la business_date hasta que el run quede `COMPLETED` — un día abierto bloquea todas las operaciones del día siguiente.
+
+#### `SesSubmissionFailing` (P2)
+
+**Síntoma:** SES.HOSPEDAJES rate de fallo > 1/h durante 1h.
+
+1. `curl /compliance/ses/status` → mira la queue + último error.
+2. Si el endpoint Guardia Civil rechaza con 4xx → revisar payload con un huésped de prueba (DNI/NIE válido).
+3. Si rechaza con 5xx sostenido → el ministerio tiene incidencia. Documenta el ticket en su portal y deja la queue acumular. **No reintentar agresivo**: la regla de plazo legal son 24h desde el check-in.
+4. Si la API de Aubergine rechaza local → verifica `SES_HOSPEDAJES_API_KEY` en `flyctl secrets list -a pms-api`.
+
+#### `HskPairingsNotFoundBurst` (P1, page)
+
+**Síntoma:** > 0.5/s de redeem con `outcome=not_found` durante 5 min — posible enumeration del código de 12 chars.
+
+1. `flyctl logs -a pms-api | grep redeemed_token` — saca las IPs de origen de los intentos fallidos.
+2. Si todas las IPs vienen del mismo /24 → posible scanner. Bloquear en Cloudflare.
+3. Si el patrón es disperso → puede ser una camarera que tira el código mal varias veces. Confirma con la supervisora antes de bloquear.
+4. Mitigación dura: bajar `PAIRING_CODE_TTL_SECONDS` temporalmente a 60.
+5. Si la enumeration pinta seria, considerar añadir rate-limit por IP en `apps/api` — PR de seguimiento.
+
+#### `HskTaskDurationP95High` (P2)
+
+**Síntoma:** p95 duración tareas > 90 min en una propiedad durante 30 min.
+
+1. Panel HSK → identificar la camarera o el `task_type` con la cola más larga.
+2. Coordinar con la supervisora del piloto vía Slack o teléfono. Posibles causas: una camarera nueva, una habitación con incidencia no reportada, un checklist nuevo que la formación no cubrió.
+3. **No es un incidente técnico**, pero la métrica nos avisa de un problema operacional en el hotel — alertarlo es parte del valor.
+
+#### `HskNoCompletedDuringShift` (P2)
+
+**Síntoma:** cero tareas completadas en 2h durante turno operativo (08:00–18:00).
+
+1. ¿La PWA `/login/qr` carga? `curl https://hsk.aubergine.es/api/health` — si 5xx, alerta de la API ya disparó.
+2. ¿Hay tareas asignadas? `GET /housekeeping/tasks?propertyId=X&from=Y&to=Y&status=PENDING`.
+3. Si hay tareas pero cero `completed`, llamar al hotel — probable problema de pairing o conectividad WiFi en planta. Soluciones: re-pairing (`/supervisor/pair`), intentar 4G en lugar de WiFi.
+
+#### `NatsConsumerBacklog` (P2)
+
+**Síntoma:** consumer NATS > 10k pendientes durante 15 min.
+
+1. `nats consumer ls pms-events` → cuál consumer está atascado.
+2. `nats consumer info pms-events <name>` → ¿está sin asignar (no hay client)? ¿Está procesando (last delivered)?
+3. Si el consumer es de un proceso muerto, `nats consumer rm pms-events <name>` para que se recree limpio cuando arranque el cliente.
+4. Si el cliente está vivo y procesando lento → escalar el worker o tunnear `max_ack_pending` del consumer.
+
+### 14.5 Comunicación con el hotel piloto
+
+Si el incidente afecta operativa visible (FO sin login, NA sin cierre, HSK sin pairing):
+
+1. **0–5 min**: el on-call ack en Slack `#aubergine-incidentes`. Account manager pone un mensaje al WhatsApp del hotel: _"Tenemos una incidencia, estamos en ello, te aviso en 30 min con estimación."_
+2. **30 min**: nuevo mensaje con root cause + ETA o (si no hay ETA) propuesta de workaround temporal (ej. modo manual de reservas en una hoja, login Keycloak en lugar de QR).
+3. **Resolución**: confirmar con el hotel que ven el sistema funcionando + post-mortem público en el canal del cliente con el patch desplegado.
+
+### 14.6 Rotación de secrets
+
+Cuando un incidente expone un secret (logs leakeados, breach, ex-empleado):
+
+```bash
+# PAIRING_SECRET (HMAC pairing tokens HSK)
+flyctl secrets set -a pms-api PAIRING_SECRET="$(openssl rand -hex 32)"
+# Las cookies actuales caducan en cuanto la API rota. Las camareras deben
+# volver a hacer login QR. Para evitar el corte completo, soporta dual-secret
+# durante 12h (PR de seguimiento si se vuelve operativo).
+
+# KEYCLOAK_CLIENT_SECRET (cualquier cliente)
+# 1. Rotar en la UI Admin de Keycloak (Clients → pms-X → Credentials → Regenerate).
+# 2. Propagar el nuevo secret al app correspondiente:
+flyctl secrets set -a pms-web-fo  KEYCLOAK_CLIENT_SECRET="<new>"
+flyctl secrets set -a pms-web-hsk KEYCLOAK_CLIENT_SECRET="<new>"
+
+# DATABASE_URL (rotar password Postgres)
+flyctl postgres update pms-postgres --password-rotate
+flyctl secrets set -a pms-api DATABASE_URL="<new-url>"
+
+# SES_HOSPEDAJES_API_KEY
+# Pedir nueva al MIR/operador SOS. Setear y verificar con un envio de prueba.
+```
+
+Cada rotación se documenta en `docs/dr-drills/<YYYY-MM-DD>-rotation.md` con la causa.
+
+---
+
+## 15. Onboarding de un nuevo hotel
+
+> Pasos secuenciales para llevar un nuevo cliente desde "firma del contrato" a "facturando con Aubergine en producción". Estimación: 5–10 días laborables.
+
+### 15.1 Pre-requisitos
+
+- Contrato firmado, datos legales del hotel (CIF, dirección, IBAN).
+- Acceso al sistema actual del hotel (Mews / Excel / lo que sea) para extraer:
+  - Habitaciones + room types + tarifas (BAR, REF, NRF…).
+  - Reservas in-house y de los próximos 7 días.
+  - Cardex de huéspedes con check-out reciente (90 días) — solo si tienen GDPR consent explícito; si no, vacío.
+- Credenciales SES.HOSPEDAJES de producción (operador SOS).
+- Lista de roles/usuarios del hotel: `tenant_admin`, `front_desk`, `housekeeping_supervisor`, `housekeeper`, `night_auditor`.
+
+### 15.2 Día 1 — Provisioning del tenant
+
+```bash
+# 1. Crear el tenant en Postgres (a través del seed o directamente).
+psql "$DATABASE_URL" -c "INSERT INTO tenants (id, name, status) \
+  VALUES ('<uuid>', 'Hotel Aubergine BCN', 'ACTIVE');"
+
+# 2. Bootstrap de Keycloak — crear users con tenant_id mapper.
+TENANT_ID=<uuid> pnpm bootstrap:keycloak
+# Para cada usuario del hotel: setear tenant_id en sus atributos.
+
+# 3. Validar que el tenant aparece y RLS aísla:
+curl "$API_URL/me" -H "authorization: Bearer $HOTEL_TOKEN" | jq '.tenantId'
+# Debe coincidir con el uuid de arriba.
+```
+
+### 15.3 Día 2 — Importación de datos estáticos
+
+Ver `scripts/README.md` (`import-piloto.ts`).
+
+```bash
+# Estructura del directorio de datos:
+mkdir -p piloto-data/aubergine-bcn
+# manifest.json + room-types.jsonl + rooms.jsonl + rate-plans.jsonl
+# (ver scripts/import-piloto-sample/ como template)
+
+pnpm import:piloto --dir ./piloto-data/aubergine-bcn --dry-run
+# Revisar el resumen.
+pnpm import:piloto --dir ./piloto-data/aubergine-bcn
+# Exit 0 = todo idempotente; exit 1 = filas saltadas (corregir y re-correr).
+```
+
+Verificación: `GET /properties` y `GET /rooms?propertyId=X` devuelven lo que el hotel espera.
+
+### 15.4 Día 3 — Reservas + check-ins en paralelo
+
+**No** importamos reservas históricas (ver `scripts/README.md`). El hotel:
+
+1. Mantiene su sistema actual hasta el cierre del día anterior al go-live.
+2. En el día del go-live (D), para cada reserva in-house, el front desk hace **check-in manual** en Aubergine (`/reservations/new` o copiloto: _"crea reserva walk-in para Juan Pérez del 2026-06-10 al 2026-06-12 en propertyId X habitación Y"_).
+3. Las reservas para D+1, D+2, D+7 se crean también manuales ese mismo día.
+
+Mientras tanto, el sistema viejo se mantiene en read-only por 30 días (compliance, auditoría) — no recibe nuevas reservas.
+
+### 15.5 Día 4 — SES.HOSPEDAJES live
+
+```bash
+# Prueba con sandbox primero.
+flyctl secrets set -a pms-api \
+  SES_HOSPEDAJES_ENDPOINT="<sandbox-url>" \
+  SES_HOSPEDAJES_API_KEY="<sandbox-key>"
+
+# Smoke con un huésped de prueba (real CIF/NIF, no inventado).
+curl -X POST "$API_URL/compliance/ses/submit" \
+  -H "authorization: Bearer $TOKEN" \
+  -d '{"reservationId":"<test-res>"}'
+# Verificar acuse en sandbox.
+
+# Si OK, swap a producción:
+flyctl secrets set -a pms-api \
+  SES_HOSPEDAJES_ENDPOINT="<prod-url>" \
+  SES_HOSPEDAJES_API_KEY="<prod-key>"
+
+# Activar el job recurrente que consume la cola.
+```
+
+El primer envío real se hace asistido por el on-call: confirma visualmente el acuse de Guardia Civil + `flyctl logs -a pms-api | grep ses_submission`.
+
+### 15.6 Día 5 — Formación del personal
+
+Material en `docs/training/` (PDFs + vídeos cortos por rol):
+
+| Rol                     | Material                                          | Duración |
+| ----------------------- | ------------------------------------------------- | -------- |
+| Front desk              | `front-desk.pdf` + `check-in.mp4` (4 min)         | 30 min   |
+| Night auditor           | `night-audit.pdf` + `cierre-nocturno.mp4` (8 min) | 60 min   |
+| Housekeeping supervisor | `supervisor-hsk.pdf` + `pairing.mp4` (5 min)      | 45 min   |
+| Housekeeper             | `camarera-hsk.pdf` + `tarea-rapida.mp4` (3 min)   | 30 min   |
+| Tenant admin            | `admin.pdf` (cuentas + Keycloak)                  | 60 min   |
+
+Sesión presencial al menos un día completo. El on-call está en un canal Slack/WhatsApp dedicado al hotel durante las **2 primeras semanas** post-go-live para responder dudas.
+
+### 15.7 Día 6 — Go-live
+
+1. **04:00 CET**: el sistema viejo deja de aceptar nuevas reservas.
+2. **05:00 CET**: el on-call hace un smoke completo en producción (FO check-in dummy, HSK pairing dummy, NA dry-run del día anterior con cuenta de cajas a 0).
+3. **08:00 CET**: el front desk arranca el turno con Aubergine. Account manager presente físicamente o por videollamada.
+4. **18:00 CET**: revisión del día con el director del hotel — KPIs (reservas creadas, checkins, lost-found, durations HSK).
+5. **04:00 CET D+1**: primer Night Audit real. El night_auditor ejecuta el cierre, el on-call observa en `flyctl logs`. Si falla, sigue [§12](#12-cierre-nocturno-night-audit) + [§14.4](#playbooks-por-alerta).
+
+### 15.8 Día 7–14 — Modo asistido
+
+- Daily standup de 15 min con el director: qué fue bien, qué fricción.
+- Bugs visibles → tickets en `#aubergine-incidentes` + PR de fix prioritario.
+- Métricas Grafana revisadas cada mañana — los SLOs (p95 < 0.4s, NA close > 99%) deben cumplirse.
+
+### 15.9 Día 14+ — Modo normal
+
+- On-call vía PagerDuty + Slack 24/7.
+- Reuniones semanales con el director del hotel para feedback.
+- Backups WAL automáticos cada 6h validados con DR drill mensual ([§14.3](#143-dr-drill-mensual)).
+
+### 15.10 Coste mensual estimado
+
+Por hotel (ver ADR-023):
+
+- Fly Apps + Postgres + NATS + Keycloak: ~85 €/mes
+- Servicios SaaS (Upstash Redis, Backblaze B2, Grafana Cloud free tier): ~5 €/mes
+- Total infra: **~90 €/mes**
+
+Coste por hotel baja con cada nuevo cliente (la API + Keycloak + NATS son compartidos). Modelo multi-tenant (ADR-001): un solo stack sirve a todos.
+
+### 15.11 Lo que NO entra en el onboarding del piloto
+
+- Channel Manager (Booking.com, Expedia) — V2 según §4.4.
+- Revenue Management (Duetto, IDeaS) — V2.
+- POS de F&B — V2.
+- Booking engine propio — V2.
+- Federation con AD/LDAP del hotel — V2 si el cliente lo pide.
+- App nativa iOS/Android — la PWA es la app oficial.
