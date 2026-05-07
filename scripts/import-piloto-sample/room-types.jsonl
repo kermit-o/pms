@@ -1,0 +1,3 @@
+{ "code": "STD", "name": "Standard Doble", "baseOccupancy": 2, "maxOccupancy": 3, "defaultRate": 110, "defaultCurrency": "EUR" }
+{ "code": "DLX", "name": "Deluxe Doble", "baseOccupancy": 2, "maxOccupancy": 3, "defaultRate": 145, "defaultCurrency": "EUR" }
+{ "code": "SUI", "name": "Suite Junior", "baseOccupancy": 2, "maxOccupancy": 4, "defaultRate": 220, "defaultCurrency": "EUR" }

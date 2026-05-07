@@ -1,0 +1,8 @@
+{ "number": "101", "floor": "1", "roomTypeCode": "STD" }
+{ "number": "102", "floor": "1", "roomTypeCode": "STD" }
+{ "number": "103", "floor": "1", "roomTypeCode": "DLX" }
+{ "number": "201", "floor": "2", "roomTypeCode": "STD" }
+{ "number": "202", "floor": "2", "roomTypeCode": "DLX" }
+{ "number": "203", "floor": "2", "roomTypeCode": "DLX" }
+{ "number": "301", "floor": "3", "roomTypeCode": "SUI" }
+{ "number": "302", "floor": "3", "roomTypeCode": "SUI" }
