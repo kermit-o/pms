@@ -99,10 +99,11 @@ como `REDIS_URL` secret.
 con Cloudflare R2 delante para CDN. Buckets `aubergine-prod-photos` y
 `aubergine-prod-exports`. Credenciales como secrets en `pms-api`.
 
-**Keycloak**: Fly App `pms-keycloak` con imagen oficial Keycloak 25, Postgres
-attached pequeño y volumen para themes custom. Bootstrap del realm `pms` con
-el script `scripts/keycloak-bootstrap.ts`. Los clientes son `pms-web`,
-`pms-hsk` y `pms-api`. Detalle en `infra/fly/keycloak/` (PR aparte).
+**Keycloak**: Fly App `pms-keycloak` con imagen oficial Keycloak 25 (build
+optimizado en runtime) y Postgres dedicado `pms-keycloak-db` aislado del
+cluster de la API. Bootstrap del realm `pms` (clientes `pms-web`, `pms-hsk`,
+`pms-api`) con el script `scripts/keycloak-bootstrap.ts` post-deploy.
+Detalle en [`infra/fly/keycloak/`](./keycloak/).
 
 ## Observabilidad
 

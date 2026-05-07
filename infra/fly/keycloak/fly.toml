@@ -1,0 +1,69 @@
+# fly.toml — pms-keycloak en Fly.io (region primaria mad, ADR-023).
+#
+# Deploy desde la raiz del monorepo:
+#   flyctl deploy -c infra/fly/keycloak/fly.toml --build-context infra/fly/keycloak
+#
+# Setup la primera vez (ver README.md de esta carpeta para el flujo
+# completo + bootstrap del realm via scripts/keycloak-bootstrap.ts).
+
+app = "pms-keycloak"
+primary_region = "mad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  KC_HOSTNAME = "auth.aubergine.es"
+  KC_PROXY_HEADERS = "xforwarded"
+  KC_HEALTH_ENABLED = "true"
+  KC_METRICS_ENABLED = "true"
+  KC_HTTP_ENABLED = "true"
+  KC_HOSTNAME_STRICT = "false"
+  # JVM heap conservador para una shared-cpu de 1 GB.
+  JAVA_OPTS_APPEND = "-Xms256m -Xmx768m -XX:MaxRAMPercentage=70"
+
+# Secrets (NO commitear, set via flyctl):
+#   KC_DB_URL                jdbc:postgresql://pms-keycloak-db.flycast:5432/keycloak
+#   KC_DB_USERNAME           keycloak
+#   KC_DB_PASSWORD           <gen>
+#   KEYCLOAK_ADMIN           admin
+#   KEYCLOAK_ADMIN_PASSWORD  <gen>
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "60s"
+    interval = "20s"
+    method = "GET"
+    path = "/health/ready"
+    protocol = "http"
+    timeout = "10s"
+
+# Puerto interno 9000 para Prometheus scrape (KC_METRICS_ENABLED).
+# Solo accesible via 6PN; no se publica externamente.
+[[services]]
+  internal_port = 9000
+  protocol = "tcp"
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 9000
+
+# 1 GB minimo recomendado por Keycloak para no swappear con realms con
+# usuarios concurrentes. shared-cpu 2x para que el bootstrap del realm no
+# tarde una eternidad.
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory = "1gb"
+
+[deploy]
+  strategy = "rolling"
