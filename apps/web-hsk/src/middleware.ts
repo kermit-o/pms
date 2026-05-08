@@ -14,6 +14,7 @@ export default function middleware(req: NextRequest) {
   const isPublic =
     path === '/login' ||
     path === '/login/qr' ||
+    path === '/api/health' ||
     path.startsWith('/api/auth') ||
     path.startsWith('/api/proxy/pairings/redeem') ||
     path.startsWith('/_next') ||

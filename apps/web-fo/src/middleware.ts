@@ -12,6 +12,7 @@ export default function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   const isPublic =
     path === '/login' ||
+    path === '/api/health' ||
     path.startsWith('/api/auth') ||
     path.startsWith('/_next') ||
     path === '/favicon.ico';
