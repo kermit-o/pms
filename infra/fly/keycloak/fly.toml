@@ -21,10 +21,6 @@ kill_timeout = "30s"
   KC_METRICS_ENABLED = "true"
   KC_HTTP_ENABLED = "true"
   KC_HOSTNAME_STRICT = "false"
-  # En KC 25 las endpoints /health/* viven en el management port (9000)
-  # por defecto. El healthcheck de Fly los necesita en 8080. Esta flag
-  # los re-enruta al puerto principal.
-  KC_LEGACY_OBSERVABILITY_INTERFACE = "true"
   # JVM heap conservador para una shared-cpu de 1 GB.
   JAVA_OPTS_APPEND = "-Xms256m -Xmx768m -XX:MaxRAMPercentage=70"
 
@@ -43,11 +39,17 @@ kill_timeout = "30s"
   min_machines_running = 1
   processes = ["app"]
 
+  # KC 25 separa /health/* en el puerto 9000 (management interface) por
+  # defecto y solo se puede mover a 8080 vía rebuild con
+  # --legacy-observability-interface. En vez de tocar la imagen oficial,
+  # comprobamos un endpoint que SI vive en 8080 — el discovery de OIDC
+  # del realm master, disponible en cuanto KC arranca. Las metricas
+  # siguen scrapeandose en :9000/metrics via 6PN.
   [[http_service.checks]]
     grace_period = "60s"
     interval = "20s"
     method = "GET"
-    path = "/health/ready"
+    path = "/realms/master/.well-known/openid-configuration"
     protocol = "http"
     timeout = "10s"
 
