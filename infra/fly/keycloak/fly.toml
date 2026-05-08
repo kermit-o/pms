@@ -15,7 +15,7 @@ kill_timeout = "30s"
   dockerfile = "Dockerfile"
 
 [env]
-  KC_HOSTNAME = "auth.aubergine.es"
+  KC_HOSTNAME = "pms-keycloak.fly.dev"
   KC_PROXY_HEADERS = "xforwarded"
   KC_HEALTH_ENABLED = "true"
   KC_METRICS_ENABLED = "true"
