@@ -21,6 +21,10 @@ kill_timeout = "30s"
   KC_METRICS_ENABLED = "true"
   KC_HTTP_ENABLED = "true"
   KC_HOSTNAME_STRICT = "false"
+  # En KC 25 las endpoints /health/* viven en el management port (9000)
+  # por defecto. El healthcheck de Fly los necesita en 8080. Esta flag
+  # los re-enruta al puerto principal.
+  KC_LEGACY_OBSERVABILITY_INTERFACE = "true"
   # JVM heap conservador para una shared-cpu de 1 GB.
   JAVA_OPTS_APPEND = "-Xms256m -Xmx768m -XX:MaxRAMPercentage=70"
 
