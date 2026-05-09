@@ -10,14 +10,22 @@ interface ApiInit extends RequestInit {
 }
 
 export async function apiFetch<T = unknown>(path: string, init: ApiInit = {}): Promise<T> {
-  const { accessToken, headers, ...rest } = init;
+  const { accessToken, headers, body, ...rest } = init;
+  // Solo declaramos JSON cuando hay body — Fastify rechaza POST sin body con
+  // content-type: application/json (status 400). Para POSTs idempotentes sin
+  // payload (start, check-in/out, etc.) enviamos un body vacio "{}" para que
+  // el servidor lo parsee sin protestar.
+  const method = (rest.method ?? 'GET').toUpperCase();
+  const isWrite = method === 'POST' || method === 'PUT' || method === 'PATCH';
+  const finalBody = body ?? (isWrite ? '{}' : undefined);
   const merged: HeadersInit = {
-    'content-type': 'application/json',
+    ...(finalBody !== undefined ? { 'content-type': 'application/json' } : {}),
     ...(headers ?? {}),
     ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
   };
   const res = await fetch(`${API_URL}${path}`, {
     ...rest,
+    body: finalBody,
     headers: merged,
     cache: 'no-store',
   });
