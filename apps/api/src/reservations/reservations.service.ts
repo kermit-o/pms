@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { Prisma, ReservationSource, ReservationStatus as PrismaReservationStatus } from '@pms/db';
+import { Prisma, ReservationSource, ReservationStatus as PrismaReservationStatus, RoomStatus, HousekeepingTaskStatus, HousekeepingTaskType } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
@@ -632,12 +632,99 @@ export class ReservationsService {
   }
 
   async checkOut(
-    _user: AuthUser,
-    _correlationId: string,
-    _id: string,
+    user: AuthUser,
+    correlationId: string,
+    id: string,
     _input: CheckOutDto,
   ): Promise<{ id: string; balance: number }> {
-    throw new ForbiddenException('reservations.checkOut — Sprint 2 W3');
+    const ctx = tenantCtx(user, correlationId);
+
+    const result = await this.prisma.withTenant(ctx, async (tx) => {
+      const existing = await tx.reservation.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+          id: true,
+          status: true,
+          propertyId: true,
+          code: true,
+          roomId: true,
+          folio: { select: { id: true, balance: true } },
+        },
+      });
+      if (!existing) {
+        throw new NotFoundException(`Reservation ${id} not found`);
+      }
+
+      try {
+        assertTransition(existing.status, PrismaReservationStatus.CHECKED_OUT);
+      } catch (err) {
+        if (err instanceof IllegalReservationTransitionError) {
+          throw new ConflictException(err.message);
+        }
+        throw err;
+      }
+
+      if (!existing.roomId) {
+        throw new BadRequestException('cannot check out: reservation has no assigned room');
+      }
+
+      const checkedOutAt = new Date();
+      const businessDate = new Date(checkedOutAt.toISOString().slice(0, 10));
+
+      const updated = await tx.reservation.update({
+        where: { id: existing.id },
+        data: {
+          status: PrismaReservationStatus.CHECKED_OUT,
+          checkedOutAt,
+        },
+        select: { id: true, propertyId: true, code: true },
+      });
+
+      // Habitacion -> DIRTY (la HSK la pasa a CLEAN al completar la tarea)
+      await tx.room.update({
+        where: { id: existing.roomId },
+        data: { status: RoomStatus.DIRTY },
+      });
+
+      // Tarea HSK CHECKOUT_CLEAN. La unique (propertyId, businessDate, roomId,
+      // taskType) garantiza idempotencia si se llama dos veces el mismo dia.
+      await tx.housekeepingTask.upsert({
+        where: {
+          propertyId_businessDate_roomId_taskType: {
+            propertyId: existing.propertyId,
+            businessDate,
+            roomId: existing.roomId,
+            taskType: HousekeepingTaskType.CHECKOUT_CLEAN,
+          },
+        },
+        update: {},
+        create: {
+          tenantId: user.tenantId,
+          propertyId: existing.propertyId,
+          roomId: existing.roomId,
+          taskType: HousekeepingTaskType.CHECKOUT_CLEAN,
+          status: HousekeepingTaskStatus.PENDING,
+          businessDate,
+          scheduledFor: new Date(checkedOutAt.getTime() + 30 * 60_000),
+        },
+      });
+
+      const balance = existing.folio?.balance
+        ? Number(existing.folio.balance.toString())
+        : 0;
+
+      return { updated, roomId: existing.roomId, checkedOutAt, balance };
+    });
+
+    await this.events.publish('reservation.checked_out', ctx, {
+      reservationId: result.updated.id,
+      propertyId: result.updated.propertyId,
+      code: result.updated.code,
+      checkedOutAt: result.checkedOutAt.toISOString(),
+      finalBalance: result.balance.toFixed(2),
+    });
+
+    return { id: result.updated.id, balance: result.balance };
   }
 
   async assignRoom(
