@@ -34,6 +34,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const t = token as Record<string, unknown>;
       if (account?.access_token) {
         t.accessToken = account.access_token;
+        t.refreshToken = account.refresh_token;
+        // account.expires_at viene en segundos UNIX. Lo convertimos a ms para
+        // comparar con Date.now().
+        t.accessTokenExpiresAt =
+          typeof account.expires_at === 'number'
+            ? account.expires_at * 1000
+            : Date.now() + 60 * 1000;
       }
       if (profile && typeof profile === 'object') {
         const claims = profile as Record<string, unknown>;
@@ -45,6 +52,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           t.roles = realmAccess.roles;
         }
       }
+
+      // Si el access_token sigue valido (con 30s de margen), reutilizamos.
+      const expiresAt = typeof t.accessTokenExpiresAt === 'number' ? t.accessTokenExpiresAt : 0;
+      if (Date.now() < expiresAt - 30_000) {
+        return token;
+      }
+
+      // Caducado: intenta refresh contra Keycloak.
+      if (typeof t.refreshToken === 'string') {
+        try {
+          const res = await fetch(`${keycloakIssuer}/protocol/openid-connect/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              grant_type: 'refresh_token',
+              client_id: process.env.KEYCLOAK_CLIENT_ID ?? 'pms-web',
+              client_secret: process.env.KEYCLOAK_CLIENT_SECRET ?? '',
+              refresh_token: t.refreshToken,
+            }),
+          });
+          if (res.ok) {
+            const refreshed = (await res.json()) as {
+              access_token: string;
+              expires_in: number;
+              refresh_token?: string;
+            };
+            t.accessToken = refreshed.access_token;
+            t.accessTokenExpiresAt = Date.now() + refreshed.expires_in * 1000;
+            if (refreshed.refresh_token) t.refreshToken = refreshed.refresh_token;
+            return token;
+          }
+          // 401/400 → refresh inválido (caducado o revocado). Marca token
+          // como invalido para que la session devuelva null y middleware
+          // redirija a /login.
+          t.error = 'RefreshTokenError';
+        } catch {
+          t.error = 'RefreshTokenError';
+        }
+      }
       return token;
     },
     async session({ session, token }) {
@@ -52,7 +98,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         accessToken?: string;
         tenantId?: string;
         roles?: string[];
+        error?: string;
       };
+      if (t.error === 'RefreshTokenError') {
+        // Provoca que getServerSession devuelva null → middleware redirige.
+        return { ...session, accessToken: undefined, tenantId: undefined, roles: undefined };
+      }
       session.accessToken = t.accessToken;
       session.tenantId = t.tenantId;
       session.roles = t.roles;
