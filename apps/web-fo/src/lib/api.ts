@@ -139,6 +139,29 @@ export async function cancelReservation(
   });
 }
 
+export async function assignRoom(
+  accessToken: string | undefined,
+  reservationId: string,
+  roomId: string,
+): Promise<{ id: string; roomId: string }> {
+  return apiFetch(`/reservations/${reservationId}/assign-room`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ roomId }),
+  });
+}
+
+export async function checkOutReservation(
+  accessToken: string | undefined,
+  reservationId: string,
+): Promise<{ id: string; balance: number }> {
+  return apiFetch(`/reservations/${reservationId}/check-out`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({}),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Folio
 // ---------------------------------------------------------------------------

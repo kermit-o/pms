@@ -1,13 +1,17 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
+import { redirect } from 'next/navigation';
 import {
   ApiError,
   addFolioCharge,
   addFolioPayment,
   apiFetch,
+  assignRoom,
+  checkOutReservation,
   closeFolio,
   getFolio,
+  listRooms,
 } from '@/lib/api';
 import type { FolioDetail } from '@/lib/api';
 
@@ -15,6 +19,9 @@ export const dynamic = 'force-dynamic';
 
 interface ReservationDetail {
   id: string;
+  propertyId: string;
+  roomTypeId: string;
+  roomId: string | null;
   code: string;
   status: string;
   arrivalDate: string;
@@ -122,13 +129,38 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
     revalidatePath(`/reservations/${reservationId}`);
   }
 
+  async function doCheckOut() {
+    'use server';
+    const session = await auth();
+    if (!detail) throw new Error('No reservation');
+
+    // Si la reserva no tiene habitacion asignada, asignar una libre del mismo
+    // roomType. UX: walk-in puede haberse creado sin habitacion (Sprint 2 W3).
+    if (!detail.roomId) {
+      const rooms = await listRooms(session?.accessToken, {
+        propertyId: detail.propertyId,
+      });
+      const free = rooms.find(
+        (r) => r.roomTypeId === detail.roomTypeId && r.status === 'CLEAN' && !r.isOutOfOrder,
+      );
+      if (!free) {
+        throw new Error('No hay habitaciones libres del tipo de la reserva');
+      }
+      await assignRoom(session?.accessToken, reservationId, free.id);
+    }
+
+    await checkOutReservation(session?.accessToken, reservationId);
+    revalidatePath(`/reservations/${reservationId}`);
+    redirect(`/reservations/${reservationId}`);
+  }
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-10">
       <Link href="/reservations" className="text-sm text-aubergine-500 hover:underline">
         ← Volver a reservas
       </Link>
 
-      <header className="flex items-end justify-between">
+      <header className="flex items-end justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
             Aubergine · Reservas
@@ -139,6 +171,16 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
             {detail.departureDate}
           </p>
         </div>
+        {detail.status === 'CHECKED_IN' && (
+          <form action={doCheckOut}>
+            <button
+              type="submit"
+              className="rounded-lg bg-aubergine-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-aubergine-800"
+            >
+              Check-out
+            </button>
+          </form>
+        )}
       </header>
 
       <div className="grid gap-6 md:grid-cols-2">
