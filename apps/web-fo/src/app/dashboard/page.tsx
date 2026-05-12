@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { auth, signOut } from '@/auth';
 import { fetchDashboardKpis } from '@/lib/api';
+import { getActivePropertyId } from '@/lib/active-property';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const session = await auth();
-  const kpis = await fetchDashboardKpis(session?.accessToken);
+  const propertyId = await getActivePropertyId();
+  const kpis = await fetchDashboardKpis(session?.accessToken, propertyId ?? undefined);
 
   return (
     <main className="mx-auto max-w-6xl space-y-8 px-6 py-10">

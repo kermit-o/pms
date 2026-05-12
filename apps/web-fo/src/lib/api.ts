@@ -16,13 +16,40 @@ export interface DashboardKpis {
   occupancyPct: number;
 }
 
-export async function fetchDashboardKpis(_accessToken: string | undefined): Promise<DashboardKpis> {
-  return {
-    arrivalsToday: 0,
-    departuresToday: 0,
-    inHouse: 0,
-    occupancyPct: 0,
-  };
+export async function fetchDashboardKpis(
+  accessToken: string | undefined,
+  propertyId?: string,
+): Promise<DashboardKpis> {
+  if (!accessToken || !propertyId) {
+    return { arrivalsToday: 0, departuresToday: 0, inHouse: 0, occupancyPct: 0 };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  // Ventana ±1 dia para capturar tanto in-house como llegadas/salidas de hoy.
+  // El filtro de la API es departureDate>from AND arrivalDate<to (estricto).
+  const [reservations, rooms] = await Promise.all([
+    listReservations(accessToken, { from: yesterday, to: tomorrow, limit: 200 }),
+    listRooms(accessToken, { propertyId }),
+  ]);
+
+  const items = reservations.items;
+  const arrivalsToday = items.filter(
+    (r) =>
+      r.arrivalDate === today &&
+      (r.status === 'CONFIRMED' || r.status === 'PENDING' || r.status === 'CHECKED_IN'),
+  ).length;
+  const departuresToday = items.filter(
+    (r) =>
+      r.departureDate === today &&
+      (r.status === 'CHECKED_IN' || r.status === 'CHECKED_OUT'),
+  ).length;
+  const inHouse = items.filter((r) => r.status === 'CHECKED_IN').length;
+  const totalRooms = rooms.filter((r) => !r.isOutOfOrder).length || 1;
+  const occupancyPct = Math.round((inHouse / totalRooms) * 100);
+
+  return { arrivalsToday, departuresToday, inHouse, occupancyPct };
 }
 
 interface ApiInit extends RequestInit {
@@ -125,6 +152,25 @@ export async function createReservation(
     accessToken,
     body: JSON.stringify(input),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Properties
+// ---------------------------------------------------------------------------
+
+export interface PropertySummary {
+  id: string;
+  code: string;
+  name: string;
+  timezone: string;
+  currency: string;
+  locale: string;
+}
+
+export async function listProperties(
+  accessToken: string | undefined,
+): Promise<PropertySummary[]> {
+  return apiFetch(`/properties`, { accessToken });
 }
 
 export async function cancelReservation(

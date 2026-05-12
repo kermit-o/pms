@@ -1,5 +1,6 @@
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
+import { getActivePropertyId } from '@/lib/active-property';
 import {
   ApiError,
   closeBusinessDay,
@@ -17,7 +18,7 @@ interface PageProps {
 
 export default async function BusinessDayPage({ searchParams }: PageProps) {
   const session = await auth();
-  const propertyId = searchParams.propertyId;
+  const propertyId = searchParams.propertyId ?? (await getActivePropertyId()) ?? undefined;
   const businessDate = searchParams.businessDate ?? new Date().toISOString().slice(0, 10);
 
   let current: BusinessDayState | null = null;

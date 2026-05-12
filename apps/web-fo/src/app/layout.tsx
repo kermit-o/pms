@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { auth, signOut } from '@/auth';
 import CopilotSidebar from '@/components/CopilotSidebar';
+import PropertyPicker from '@/components/PropertyPicker';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -51,6 +52,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                   </li>
                 ))}
               </ul>
+              <PropertyPicker />
               <form
                 action={async () => {
                   'use server';
