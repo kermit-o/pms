@@ -72,7 +72,7 @@ export class ReservationsService {
 
       const roomType = await tx.roomType.findFirst({
         where: { id: input.roomTypeId, propertyId: property.id, deletedAt: null },
-        select: { id: true },
+        select: { id: true, defaultRate: true, defaultCurrency: true },
       });
       if (!roomType) {
         throw new BadRequestException(
@@ -80,6 +80,7 @@ export class ReservationsService {
         );
       }
 
+      let ratePlanAttributes: Prisma.JsonValue | null = null;
       if (input.ratePlanId) {
         const ratePlan = await tx.ratePlan.findFirst({
           where: {
@@ -87,14 +88,32 @@ export class ReservationsService {
             propertyId: property.id,
             deletedAt: null,
           },
-          select: { id: true },
+          select: { id: true, attributes: true },
         });
         if (!ratePlan) {
           throw new BadRequestException(
             `RatePlan ${input.ratePlanId} not found for property ${property.id}`,
           );
         }
+        ratePlanAttributes = ratePlan.attributes;
       }
+
+      // Si la API call no pasa totalAmount, lo calculamos: nights × dailyRate.
+      // dailyRate viene de RatePlan.attributes.dailyRate (si tiene tarifa
+      // declarada) o RoomType.defaultRate como fallback. Misma logica que
+      // night-audit/steps/post-room-charges.ts.
+      const nights = Math.max(
+        1,
+        Math.round(
+          (new Date(input.departure).getTime() - new Date(input.arrival).getTime()) /
+            (1000 * 60 * 60 * 24),
+        ),
+      );
+      const dailyRate = resolveDailyRateFromInputs(roomType.defaultRate, ratePlanAttributes);
+      const computedTotal = dailyRate.mul(nights);
+      const effectiveTotal = input.totalAmount
+        ? new Prisma.Decimal(input.totalAmount)
+        : computedTotal;
 
       const guestId = input.guestId ?? (await ensureAdHocGuest(tx, user.tenantId, input));
 
@@ -120,7 +139,7 @@ export class ReservationsService {
           children: input.occupancy.children,
           roomTypeId: input.roomTypeId,
           ratePlanId: input.ratePlanId ?? null,
-          totalAmount: new Prisma.Decimal(input.totalAmount ?? 0),
+          totalAmount: effectiveTotal,
           currency: input.currency ?? property.currency,
           source,
           specialRequests: input.specialRequests ?? null,
@@ -1009,4 +1028,29 @@ function toDetail(row: ReservationDetailRow): ReservationDetail {
 
 function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+// Resuelve la tarifa diaria: RatePlan.attributes.dailyRate > RoomType.defaultRate.
+// Mismo contrato que apps/api/src/night-audit/steps/post-room-charges.ts
+// resolveDailyRate — extraido aqui para usar en create().
+function resolveDailyRateFromInputs(
+  roomTypeDefaultRate: Prisma.Decimal,
+  ratePlanAttributes: Prisma.JsonValue | null,
+): Prisma.Decimal {
+  if (
+    ratePlanAttributes &&
+    typeof ratePlanAttributes === 'object' &&
+    !Array.isArray(ratePlanAttributes) &&
+    'dailyRate' in ratePlanAttributes
+  ) {
+    const raw = (ratePlanAttributes as Record<string, unknown>).dailyRate;
+    if (typeof raw === 'number' || typeof raw === 'string') {
+      try {
+        return new Prisma.Decimal(raw);
+      } catch {
+        // fall through
+      }
+    }
+  }
+  return new Prisma.Decimal(roomTypeDefaultRate);
 }
