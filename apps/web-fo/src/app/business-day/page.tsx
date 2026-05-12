@@ -170,43 +170,67 @@ export default async function BusinessDayPage({ searchParams }: PageProps) {
         </section>
       )}
 
-      {history.length > 0 && (
-        <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-aubergine-100">
-          <header className="bg-aubergine-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-aubergine-500">
-            Historial
-          </header>
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-aubergine-500">
-              <tr>
-                <th className="px-4 py-2">Fecha</th>
-                <th className="px-4 py-2">Estado</th>
-                <th className="px-4 py-2">Cerrado</th>
-                <th className="px-4 py-2">Reabierto</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-aubergine-100/70">
-              {history.map((d) => (
-                <tr key={d.businessDate}>
-                  <td className="px-4 py-2">{d.businessDate}</td>
-                  <td className="px-4 py-2">
-                    <span
-                      className={
-                        d.status === 'CLOSED'
-                          ? 'rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800'
-                          : 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800'
-                      }
-                    >
-                      {d.status.toLowerCase()}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-aubergine-700/70">{d.closedAt ?? '—'}</td>
-                  <td className="px-4 py-2 text-aubergine-700/70">{d.reopenedAt ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+      {history.length > 0 && (() => {
+        const open = history.filter((d) => d.status === 'OPEN');
+        const lastClosed = history
+          .filter((d) => d.status === 'CLOSED' && d.closedAt)
+          .sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? ''))[0];
+
+        return (
+          <section className="space-y-4">
+            {lastClosed && (
+              <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100">
+                <p className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
+                  Último cierre
+                </p>
+                <p className="mt-1 text-base font-medium text-aubergine-700">
+                  {lastClosed.businessDate} · {relativeTime(lastClosed.closedAt!)}
+                </p>
+              </div>
+            )}
+
+            {open.length > 0 && (
+              <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-aubergine-100">
+                <header className="bg-amber-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                  Días abiertos pendientes ({open.length})
+                </header>
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs uppercase tracking-wide text-aubergine-500">
+                    <tr>
+                      <th className="px-4 py-2">Fecha</th>
+                      <th className="px-4 py-2">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-aubergine-100/70">
+                    {open.map((d) => (
+                      <tr key={d.businessDate}>
+                        <td className="px-4 py-2">{d.businessDate}</td>
+                        <td className="px-4 py-2">
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                            open
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        );
+      })()}
     </main>
   );
+}
+
+function relativeTime(isoTimestamp: string): string {
+  const diffMs = Date.now() - new Date(isoTimestamp).getTime();
+  if (diffMs < 0) return 'en el futuro';
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return 'hace unos segundos';
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `hace ${days} d`;
 }
