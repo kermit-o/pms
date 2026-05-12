@@ -91,6 +91,38 @@ export class BusinessDayService {
       if (existing && existing.status === BusinessDayStatus.CLOSED) {
         throw new ConflictException(`Business day ${input.businessDate} is already closed`);
       }
+
+      // No permitir cerrar dias futuros: la operativa hotelera cierra el dia
+      // activo cuando termina el turno de noche, nunca un dia que aun no ha
+      // pasado. Permitimos hoy mismo (UTC) por simplicidad — la hora de cierre
+      // efectiva la marca closedAt.
+      const today = new Date(new Date().toISOString().slice(0, 10));
+      if (businessDate.getTime() > today.getTime()) {
+        throw new ConflictException(
+          `Cannot close future business day ${input.businessDate}`,
+        );
+      }
+
+      // No permitir cerrar dia N si hay algun N-X aun OPEN. Esto preserva
+      // integridad contable y de audit log: la secuencia de cierres debe ser
+      // cronologica. Solo bloqueamos si existe el registro OPEN — dias sin
+      // registro (no hubo actividad) no necesitan cierre explicito.
+      const earlierOpen = await tx.businessDayState.findFirst({
+        where: {
+          propertyId: input.propertyId,
+          businessDate: { lt: businessDate },
+          status: BusinessDayStatus.OPEN,
+        },
+        orderBy: { businessDate: 'asc' },
+        select: { businessDate: true },
+      });
+      if (earlierOpen) {
+        const earlier = earlierOpen.businessDate.toISOString().slice(0, 10);
+        throw new ConflictException(
+          `Cannot close ${input.businessDate}: earlier business day ${earlier} is still OPEN`,
+        );
+      }
+
       if (existing) {
         await tx.businessDayState.update({
           where: {
