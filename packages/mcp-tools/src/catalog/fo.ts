@@ -169,7 +169,7 @@ export const foToolCatalog = {
   create_reservation_group: {
     name: 'create_reservation_group',
     description:
-      'Creates a GROUP booking with multiple reservations under one organizer (tours, weddings, conferences). Returns the group plus the created reservations. Use this when the user asks for several rooms in one go (e.g. "7 individuales + 6 dobles para Miki Tour"). All roomTypeId values MUST come from list_room_types — never invent UUIDs.',
+      'Creates a GROUP booking with multiple reservations under one organizer (tours, weddings, conferences). Use this whenever the user asks for several rooms in one go. INPUTS REQUIRED in a single call: propertyId, name, organizerName, and the COMPLETE `reservations` array (min 2 items). Each item must have: guest (firstName + lastName), arrival, departure, roomTypeId (UUID from list_room_types), occupancy.adults. NEVER propose this tool without the full reservations array. Workflow: (1) call list_room_types, (2) compute the array client-side, (3) propose this tool in ONE tool_use with all data.',
     inputSchema: createReservationGroupInput,
     mutating: true,
     financial: false,

@@ -337,6 +337,26 @@ export class CopilotService {
       const meta = this.resolver.getMeta(toolUse.name as AnyToolName);
 
       if (meta.mutating) {
+        // Pre-validamos contra el zod schema antes de pasarlo al humano.
+        // Si el LLM mandó algo incompleto (ej. group sin reservations array),
+        // devolvemos el error como tool_result y le dejamos corregir en la
+        // próxima iteración. Así evitamos cards-fantasma vacías.
+        const validation = this.resolver.tryValidate(toolUse.name as AnyToolName, toolUse.input);
+        if (!validation.ok) {
+          conv.push({ role: 'assistant', content: resp.content });
+          conv.push({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: toolUse.id,
+                content: `ERROR de validación. Tu propuesta no cumple el schema:\n${validation.error}\nCorrige los campos faltantes y vuelve a llamar al tool con el payload COMPLETO en este mismo turno.`,
+                is_error: true,
+              },
+            ],
+          });
+          continue;
+        }
         // Devuelve para que la UI pida confirmacion humana.
         return { kind: 'tool', tool: toolUse.name as AnyToolName, input: toolUse.input };
       }
