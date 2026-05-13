@@ -3,7 +3,13 @@ import { Prisma, ReservationStatus, RoomStatus } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
-import { AvailabilityQuery, ChangeStatusDto, ListRoomsQuery, SearchAvailabilityQuery } from './dto';
+import {
+  AvailabilityQuery,
+  ChangeStatusDto,
+  ListRoomsQuery,
+  SearchAvailabilityByTypeQuery,
+  SearchAvailabilityQuery,
+} from './dto';
 
 @Injectable()
 export class RoomsService {
@@ -186,6 +192,121 @@ export class RoomsService {
     });
   }
 
+  /**
+   * Resumen agregado por roomType para un rango [arrival, departure).
+   * Devuelve cada tipo con: rooms libres, total operativos, precio/noche y
+   * total de la estancia. Esto alimenta el wizard de creación de reservas.
+   *
+   * Precio: si se pasa ratePlanId con attributes.dailyRate, se usa eso;
+   * si no, RoomType.defaultRate. Mismo contrato que post-room-charges y
+   * createReservation.
+   */
+  async searchAvailabilityByType(
+    user: AuthUser,
+    correlationId: string,
+    query: SearchAvailabilityByTypeQuery,
+  ): Promise<RoomTypeAvailability[]> {
+    if (query.arrival >= query.departure) {
+      throw new BadRequestException('arrival must be before departure');
+    }
+    const ctx = tenantCtx(user, correlationId);
+    const arrival = new Date(query.arrival);
+    const departure = new Date(query.departure);
+    const nights = Math.max(
+      1,
+      Math.round((departure.getTime() - arrival.getTime()) / (1000 * 60 * 60 * 24)),
+    );
+
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const ratePlanAttrs = query.ratePlanId
+        ? await tx.ratePlan
+            .findFirst({
+              where: { id: query.ratePlanId, propertyId: query.propertyId, deletedAt: null },
+              select: { attributes: true },
+            })
+            .then((rp) => rp?.attributes ?? null)
+        : null;
+
+      const types = await tx.roomType.findMany({
+        where: { propertyId: query.propertyId, deletedAt: null },
+        orderBy: { defaultRate: 'asc' },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          description: true,
+          baseOccupancy: true,
+          maxOccupancy: true,
+          defaultRate: true,
+          defaultCurrency: true,
+        },
+      });
+
+      const rooms = await tx.room.findMany({
+        where: {
+          propertyId: query.propertyId,
+          deletedAt: null,
+          isOutOfOrder: false,
+        },
+        select: { id: true, roomTypeId: true },
+      });
+
+      const overlapping = await tx.reservation.findMany({
+        where: {
+          deletedAt: null,
+          propertyId: query.propertyId,
+          status: {
+            in: [
+              ReservationStatus.PENDING,
+              ReservationStatus.CONFIRMED,
+              ReservationStatus.CHECKED_IN,
+            ],
+          },
+          arrivalDate: { lt: departure },
+          departureDate: { gt: arrival },
+        },
+        select: { roomId: true, roomTypeId: true },
+      });
+
+      const takenRoomIds = new Set(
+        overlapping.map((r) => r.roomId).filter((id): id is string => !!id),
+      );
+      // Reservas SIN room asignada (PENDING/walk-in pre-asignación) cuentan
+      // como ocupación pendiente para su roomType.
+      const unassignedByType = new Map<string, number>();
+      for (const r of overlapping) {
+        if (!r.roomId) {
+          unassignedByType.set(r.roomTypeId, (unassignedByType.get(r.roomTypeId) ?? 0) + 1);
+        }
+      }
+
+      return types.map<RoomTypeAvailability>((rt) => {
+        const total = rooms.filter((r) => r.roomTypeId === rt.id).length;
+        const occupiedAssigned = rooms.filter(
+          (r) => r.roomTypeId === rt.id && takenRoomIds.has(r.id),
+        ).length;
+        const occupiedUnassigned = unassignedByType.get(rt.id) ?? 0;
+        const available = Math.max(0, total - occupiedAssigned - occupiedUnassigned);
+        const dailyRate = resolveDailyRateAttrs(rt.defaultRate, ratePlanAttrs);
+        const total_ = dailyRate.mul(nights);
+        return {
+          roomTypeId: rt.id,
+          code: rt.code,
+          name: rt.name,
+          description: rt.description,
+          baseOccupancy: rt.baseOccupancy,
+          maxOccupancy: rt.maxOccupancy,
+          totalRooms: total,
+          availableRooms: available,
+          pricePerNight: dailyRate.toString(),
+          nights,
+          totalForStay: total_.toString(),
+          currency: rt.defaultCurrency,
+        };
+      });
+    });
+  }
+
   async changeStatus(
     user: AuthUser,
     correlationId: string,
@@ -300,4 +421,43 @@ export interface AvailabilityMatrix {
   days: string[];
   rooms: RoomListItem[];
   cells: Record<string, Record<string, AvailabilityCell>>;
+}
+
+export interface RoomTypeAvailability {
+  roomTypeId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  baseOccupancy: number;
+  maxOccupancy: number;
+  totalRooms: number;
+  availableRooms: number;
+  pricePerNight: string;
+  nights: number;
+  totalForStay: string;
+  currency: string;
+}
+
+// Resolver compartido: igual contrato que reservations.service +
+// post-room-charges. Mover a packages/db en futuro refactor.
+function resolveDailyRateAttrs(
+  defaultRate: Prisma.Decimal,
+  ratePlanAttrs: Prisma.JsonValue | null,
+): Prisma.Decimal {
+  if (
+    ratePlanAttrs &&
+    typeof ratePlanAttrs === 'object' &&
+    !Array.isArray(ratePlanAttrs) &&
+    'dailyRate' in ratePlanAttrs
+  ) {
+    const raw = (ratePlanAttrs as Record<string, unknown>).dailyRate;
+    if (typeof raw === 'number' || typeof raw === 'string') {
+      try {
+        return new Prisma.Decimal(raw);
+      } catch {
+        // fall through
+      }
+    }
+  }
+  return new Prisma.Decimal(defaultRate);
 }

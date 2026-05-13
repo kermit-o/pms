@@ -173,6 +173,38 @@ export async function listProperties(
   return apiFetch(`/properties`, { accessToken });
 }
 
+// ---------------------------------------------------------------------------
+// Availability search (alimenta el wizard de creación)
+// ---------------------------------------------------------------------------
+
+export interface RoomTypeAvailability {
+  roomTypeId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  baseOccupancy: number;
+  maxOccupancy: number;
+  totalRooms: number;
+  availableRooms: number;
+  pricePerNight: string;
+  nights: number;
+  totalForStay: string;
+  currency: string;
+}
+
+export async function searchAvailabilityByType(
+  accessToken: string | undefined,
+  query: { propertyId: string; arrival: string; departure: string; ratePlanId?: string },
+): Promise<RoomTypeAvailability[]> {
+  const params = new URLSearchParams({
+    propertyId: query.propertyId,
+    arrival: query.arrival,
+    departure: query.departure,
+  });
+  if (query.ratePlanId) params.set('ratePlanId', query.ratePlanId);
+  return apiFetch(`/rooms/availability/by-type?${params.toString()}`, { accessToken });
+}
+
 export async function cancelReservation(
   accessToken: string | undefined,
   id: string,

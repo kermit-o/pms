@@ -2,7 +2,13 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
-import { AvailabilityQuery, ChangeStatusDto, ListRoomsQuery, SearchAvailabilityQuery } from './dto';
+import {
+  AvailabilityQuery,
+  ChangeStatusDto,
+  ListRoomsQuery,
+  SearchAvailabilityByTypeQuery,
+  SearchAvailabilityQuery,
+} from './dto';
 import { RoomsService } from './rooms.service';
 
 const READ_ROLES = [
@@ -48,6 +54,20 @@ export class RoomsController {
   ) {
     const query = SearchAvailabilityQuery.parse(rawQuery);
     return this.rooms.searchAvailability(user, correlationIdOf(req), query);
+  }
+
+  // Resumen agregado por tipo de habitación con disponibilidad + precio para
+  // un rango de noches. Esto es lo que consume el wizard de reservas para
+  // mostrar las opciones al recepcionista (en vez de obligar a teclear UUIDs).
+  @Get('availability/by-type')
+  @Roles(...READ_ROLES)
+  async searchAvailabilityByType(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Query() rawQuery: Record<string, string | undefined>,
+  ) {
+    const query = SearchAvailabilityByTypeQuery.parse(rawQuery);
+    return this.rooms.searchAvailabilityByType(user, correlationIdOf(req), query);
   }
 
   @Post(':id/status')
