@@ -47,6 +47,9 @@ export class CopilotService {
     private readonly config: ConfigService<Env, true>,
   ) {
     this.anthropicApiKey = this.config.get('ANTHROPIC_API_KEY', { infer: true });
+    this.log.log(
+      `Copilot init: anthropic=${this.anthropicApiKey ? 'present(' + this.anthropicApiKey.length + 'ch)' : 'absent'}`,
+    );
   }
 
   createSession(user: AuthUser, propertyId: string | undefined): { sessionId: string } {
@@ -215,10 +218,14 @@ export class CopilotService {
    */
   private async proposeReply(session: Session, content: string): Promise<ToolProposal> {
     if (!this.anthropicApiKey) {
+      this.log.warn('Anthropic key absent, using stub');
       return stubProposal(content);
     }
     try {
-      return await this.anthropicPropose(session, content);
+      this.log.log(`Anthropic propose: msg="${content.slice(0, 60)}"`);
+      const result = await this.anthropicPropose(session, content);
+      this.log.log(`Anthropic result kind=${result.kind}`);
+      return result;
     } catch (err) {
       this.log.error('Anthropic adapter error, falling back to stub', err as Error);
       return stubProposal(content);
