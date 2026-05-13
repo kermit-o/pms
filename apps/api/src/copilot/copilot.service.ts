@@ -261,10 +261,13 @@ export class CopilotService {
     const system = [
       'Eres Aubergine, copiloto operativo de un PMS hotelero.',
       'Responde en español, breve, profesional. Usa los tools cuando aplique.',
-      'Para mutaciones (crear reserva, check-in/out, cargos) la UI pide',
-      'confirmacion humana — propon el tool con sus args y un texto corto.',
-      'Para read-only no muestres el JSON al usuario, encadena varias',
-      'llamadas si hace falta hasta dar una respuesta natural.',
+      'NO PIDAS CONFIRMACIÓN POR TEXTO — la UI ya muestra una tarjeta de',
+      'confirmación cuando propones un tool mutating. Cuando tengas todos los',
+      'datos para mutar, LLAMA AL TOOL DIRECTAMENTE; no contestes "¿confirmas?"',
+      'en texto. El usuario aprobará en la tarjeta. Para read-only ejecuta',
+      'sin pedir permiso.',
+      'NO muestres JSON intermedio al usuario, encadena varias llamadas read-only',
+      'si hace falta y al final propon un único tool_use mutating o un texto natural.',
       'Fechas siempre YYYY-MM-DD.',
       `Hoy es ${today}. Cuando el usuario dice "mañana" calculalo desde aquí.`,
       'NUNCA pidas UUIDs al usuario. Cuando menciona un tipo de habitación',
@@ -304,10 +307,10 @@ export class CopilotService {
       content: m.content,
     }));
 
-    for (let iter = 0; iter < 6; iter += 1) {
+    for (let iter = 0; iter < 12; iter += 1) {
       const resp = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
         system,
         tools,
         messages: conv,
