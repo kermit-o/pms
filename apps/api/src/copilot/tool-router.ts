@@ -8,6 +8,8 @@ import {
   type FoToolName,
   type GenerateReportInput,
   type QueryAvailabilityInput,
+  type ListRoomTypesInput,
+  type SearchAvailabilityByTypeInput,
   foToolCatalog,
 } from '@pms/mcp-tools';
 import type { AuthUser } from '../auth';
@@ -67,6 +69,14 @@ export class FoToolRouter {
       case 'query_availability': {
         const i = input as QueryAvailabilityInput;
         return this.rooms.availability(user, correlationId, i);
+      }
+      case 'list_room_types': {
+        const i = input as ListRoomTypesInput;
+        return this.rooms.listRoomTypes(user, correlationId, i.propertyId);
+      }
+      case 'search_availability_by_type': {
+        const i = input as SearchAvailabilityByTypeInput;
+        return this.rooms.searchAvailabilityByType(user, correlationId, i);
       }
       case 'create_reservation': {
         const i = input as CreateReservationInput;

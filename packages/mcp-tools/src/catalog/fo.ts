@@ -39,6 +39,18 @@ export const queryAvailabilityInput = z.object({
 });
 export type QueryAvailabilityInput = z.infer<typeof queryAvailabilityInput>;
 
+export const listRoomTypesInput = z.object({
+  propertyId: z.string().uuid(),
+});
+export type ListRoomTypesInput = z.infer<typeof listRoomTypesInput>;
+
+export const searchAvailabilityByTypeInput = z.object({
+  propertyId: z.string().uuid(),
+  arrival: isoDate,
+  departure: isoDate,
+});
+export type SearchAvailabilityByTypeInput = z.infer<typeof searchAvailabilityByTypeInput>;
+
 export const createReservationInput = z.object({
   propertyId: z.string().uuid(),
   guest: guestRef,
@@ -102,6 +114,22 @@ export const foToolCatalog = {
     description:
       'Returns the (room x day) availability matrix for a property and date range, including occupied dates and reservation codes.',
     inputSchema: queryAvailabilityInput,
+    mutating: false,
+    financial: false,
+  },
+  list_room_types: {
+    name: 'list_room_types',
+    description:
+      'Lists all room types of a property with code (e.g. "DBL"), name, capacity, defaultRate and roomTypeId UUID. Call this when the user mentions a room type by name (e.g. "doble estandar", "suite") to resolve the UUID before creating a reservation.',
+    inputSchema: listRoomTypesInput,
+    mutating: false,
+    financial: false,
+  },
+  search_availability_by_type: {
+    name: 'search_availability_by_type',
+    description:
+      'Aggregated availability summary per room type for a stay window. Returns available rooms count, totalRooms, pricePerNight and totalForStay. Use this when user wants to book and you need to know how many of each type are free + price.',
+    inputSchema: searchAvailabilityByTypeInput,
     mutating: false,
     financial: false,
   },

@@ -201,6 +201,51 @@ export class RoomsService {
    * si no, RoomType.defaultRate. Mismo contrato que post-room-charges y
    * createReservation.
    */
+  async listRoomTypes(
+    user: AuthUser,
+    correlationId: string,
+    propertyId: string,
+  ): Promise<
+    Array<{
+      roomTypeId: string;
+      code: string;
+      name: string;
+      description: string | null;
+      baseOccupancy: number;
+      maxOccupancy: number;
+      defaultRate: string;
+      currency: string;
+    }>
+  > {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const rows = await tx.roomType.findMany({
+        where: { propertyId, deletedAt: null },
+        orderBy: { defaultRate: 'asc' },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          description: true,
+          baseOccupancy: true,
+          maxOccupancy: true,
+          defaultRate: true,
+          defaultCurrency: true,
+        },
+      });
+      return rows.map((r) => ({
+        roomTypeId: r.id,
+        code: r.code,
+        name: r.name,
+        description: r.description,
+        baseOccupancy: r.baseOccupancy,
+        maxOccupancy: r.maxOccupancy,
+        defaultRate: r.defaultRate.toString(),
+        currency: r.defaultCurrency,
+      }));
+    });
+  }
+
   async searchAvailabilityByType(
     user: AuthUser,
     correlationId: string,
