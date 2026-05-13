@@ -322,6 +322,29 @@ function ToolInputSummary({ tool, input }: { tool: string; input: unknown }) {
     if (obj.roomTypeId) {
       rows.push(['Tipo habitación', String(obj.roomTypeId).slice(0, 8) + '…']);
     }
+  } else if (tool === 'create_reservation_group') {
+    if (obj.name) rows.push(['Grupo', String(obj.name)]);
+    const reservations = Array.isArray(obj.reservations) ? obj.reservations : [];
+    if (reservations.length > 0) {
+      rows.push(['Reservas', `${reservations.length}`]);
+      const byType = new Map<string, number>();
+      for (const r of reservations as Record<string, unknown>[]) {
+        const rt = String(r.roomTypeId ?? '???').slice(0, 8);
+        byType.set(rt, (byType.get(rt) ?? 0) + 1);
+      }
+      rows.push([
+        'Distribución',
+        Array.from(byType.entries())
+          .map(([k, v]) => `${v}×${k}…`)
+          .join(' · '),
+      ]);
+      const firstArrival = (reservations[0] as Record<string, unknown>).arrival;
+      const firstDeparture = (reservations[0] as Record<string, unknown>).departure;
+      if (firstArrival && firstDeparture) {
+        rows.push(['Fechas', `${firstArrival} → ${firstDeparture}`]);
+      }
+    }
+    if (obj.organizerName) rows.push(['Organizador', String(obj.organizerName)]);
   } else if (tool === 'check_in' || tool === 'check_out') {
     if (obj.reservationId) rows.push(['Reserva', String(obj.reservationId).slice(0, 8) + '…']);
     if (obj.roomId) rows.push(['Habitación', String(obj.roomId).slice(0, 8) + '…']);

@@ -5,6 +5,7 @@ import {
   type CheckInInput,
   type CheckOutInput,
   type CreateReservationInput,
+  type CreateReservationGroupInput,
   type FoToolName,
   type GenerateReportInput,
   type QueryAvailabilityInput,
@@ -102,6 +103,42 @@ export class FoToolRouter {
                   nationality: guest.nationality,
                 },
               }),
+        });
+      }
+      case 'create_reservation_group': {
+        const i = input as CreateReservationGroupInput;
+        return this.reservations.createGroup(user, correlationId, {
+          propertyId: i.propertyId,
+          name: i.name,
+          code: i.code,
+          organizerName: i.organizerName,
+          organizerEmail: i.organizerEmail,
+          organizerPhone: i.organizerPhone,
+          notes: i.notes,
+          reservations: i.reservations.map((r) => {
+            const guest = r.guest;
+            return {
+              arrival: r.arrival,
+              departure: r.departure,
+              roomTypeId: r.roomTypeId,
+              ratePlanId: r.ratePlanId,
+              occupancy: r.occupancy,
+              notes: r.notes,
+              currency: 'EUR',
+              walkIn: false,
+              ...('guestId' in guest
+                ? { guestId: guest.guestId }
+                : {
+                    guestData: {
+                      firstName: guest.firstName,
+                      lastName: guest.lastName,
+                      email: guest.email,
+                      phone: guest.phone,
+                      nationality: guest.nationality,
+                    },
+                  }),
+            };
+          }),
         });
       }
       case 'check_in': {

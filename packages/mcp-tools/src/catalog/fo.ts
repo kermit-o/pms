@@ -66,6 +66,31 @@ export const createReservationInput = z.object({
 });
 export type CreateReservationInput = z.infer<typeof createReservationInput>;
 
+const groupChildInput = z.object({
+  guest: guestRef,
+  arrival: isoDate,
+  departure: isoDate,
+  roomTypeId: z.string().uuid(),
+  ratePlanId: z.string().uuid().optional(),
+  occupancy: z.object({
+    adults: z.number().int().min(1).max(10),
+    children: z.number().int().min(0).max(10).default(0),
+  }),
+  notes: z.string().max(2000).optional(),
+});
+
+export const createReservationGroupInput = z.object({
+  propertyId: z.string().uuid(),
+  name: z.string().min(1).max(200),
+  code: z.string().min(1).max(40).optional(),
+  organizerName: z.string().max(200).optional(),
+  organizerEmail: z.string().email().optional(),
+  organizerPhone: z.string().max(40).optional(),
+  notes: z.string().max(2000).optional(),
+  reservations: z.array(groupChildInput).min(2).max(50),
+});
+export type CreateReservationGroupInput = z.infer<typeof createReservationGroupInput>;
+
 export const checkInInput = z.object({
   reservationId: z.string().uuid(),
   roomId: z.string().uuid().optional(),
@@ -136,8 +161,16 @@ export const foToolCatalog = {
   create_reservation: {
     name: 'create_reservation',
     description:
-      'Creates a new reservation in PENDING status. Accepts an existing guest by id or inline guest data.',
+      'Creates a new reservation in PENDING status. Accepts an existing guest by id or inline guest data. roomTypeId MUST be a real UUID returned by list_room_types; never invent one.',
     inputSchema: createReservationInput,
+    mutating: true,
+    financial: false,
+  },
+  create_reservation_group: {
+    name: 'create_reservation_group',
+    description:
+      'Creates a GROUP booking with multiple reservations under one organizer (tours, weddings, conferences). Returns the group plus the created reservations. Use this when the user asks for several rooms in one go (e.g. "7 individuales + 6 dobles para Miki Tour"). All roomTypeId values MUST come from list_room_types — never invent UUIDs.',
+    inputSchema: createReservationGroupInput,
     mutating: true,
     financial: false,
   },
