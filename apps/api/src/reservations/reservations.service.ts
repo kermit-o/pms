@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { Prisma, ReservationSource, ReservationStatus as PrismaReservationStatus, RoomStatus, HousekeepingTaskStatus, HousekeepingTaskType } from '@pms/db';
+import { Prisma, ReservationSource, ReservationStatus as PrismaReservationStatus, RoomStatus, HousekeepingTaskStatus, HousekeepingTaskType, GuaranteeType, GuaranteeStatus } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
@@ -19,6 +19,7 @@ import {
   CreateReservationDto,
   CreateReservationGroupDto,
   PatchReservationDto,
+  UpdateGuaranteeDto,
 } from './dto';
 import { IllegalReservationTransitionError, assertTransition } from './reservation-status';
 
@@ -127,6 +128,23 @@ export class ReservationsService {
         ? ReservationSource.WALK_IN
         : ReservationSource.DIRECT;
 
+      // Garantía: si walk-in, NONE por defecto (el huésped está en mostrador
+      // y el pago se cobra en folio). Si reserva remota sin guarantee
+      // explícita, marcar PENDING con deadline 2h — operador completa luego.
+      const guaranteeInput = input.guarantee;
+      const guaranteeType: GuaranteeType = (guaranteeInput?.type as GuaranteeType | undefined) ??
+        (walkIn ? GuaranteeType.NONE : GuaranteeType.CARD_ON_FILE);
+      const guaranteeStatus: GuaranteeStatus =
+        guaranteeType === GuaranteeType.NONE
+          ? GuaranteeStatus.RELEASED
+          : guaranteeInput?.reference
+            ? GuaranteeStatus.SECURED
+            : GuaranteeStatus.PENDING;
+      const guaranteeDeadline =
+        guaranteeStatus === GuaranteeStatus.PENDING
+          ? new Date(Date.now() + 2 * 60 * 60 * 1000)
+          : null;
+
       const reservation = await tx.reservation.create({
         data: {
           tenantId: user.tenantId,
@@ -145,6 +163,13 @@ export class ReservationsService {
           specialRequests: input.specialRequests ?? null,
           notes: input.notes ?? null,
           checkedInAt: walkIn ? new Date() : null,
+          guaranteeType,
+          guaranteeStatus,
+          guaranteeAmount: guaranteeInput?.amount ? new Prisma.Decimal(guaranteeInput.amount) : null,
+          guaranteeReference: guaranteeInput?.reference ?? null,
+          guaranteeDeadline,
+          guaranteeSecuredAt: guaranteeStatus === GuaranteeStatus.SECURED ? new Date() : null,
+          cancellationPolicyId: guaranteeInput?.cancellationPolicyId ?? null,
           guests: {
             create: {
               tenantId: user.tenantId,
@@ -819,6 +844,45 @@ export class ReservationsService {
 
     return { id: result.updated.id, roomId: result.roomId };
   }
+
+  async updateGuarantee(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+    input: UpdateGuaranteeDto,
+  ): Promise<{ id: string; guaranteeStatus: GuaranteeStatus; guaranteeType: GuaranteeType }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const existing = await tx.reservation.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true, guaranteeType: true, guaranteeStatus: true },
+      });
+      if (!existing) throw new NotFoundException(`Reservation ${id} not found`);
+
+      const nextType = (input.type as GuaranteeType | undefined) ?? existing.guaranteeType;
+      const nextStatus = (input.status as GuaranteeStatus | undefined) ?? existing.guaranteeStatus;
+
+      const updated = await tx.reservation.update({
+        where: { id },
+        data: {
+          guaranteeType: nextType,
+          guaranteeStatus: nextStatus,
+          guaranteeAmount:
+            input.amount !== undefined ? new Prisma.Decimal(input.amount) : undefined,
+          guaranteeReference: input.reference ?? undefined,
+          guaranteeSecuredAt:
+            nextStatus === GuaranteeStatus.SECURED ? new Date() : undefined,
+          guaranteeDeadline:
+            nextStatus === GuaranteeStatus.SECURED || nextStatus === GuaranteeStatus.RELEASED
+              ? null
+              : undefined,
+        },
+        select: { id: true, guaranteeStatus: true, guaranteeType: true },
+      });
+
+      return updated;
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -900,6 +964,13 @@ const RESERVATION_DETAIL_SELECT = {
   checkedOutAt: true,
   cancelledAt: true,
   cancellationReason: true,
+  guaranteeType: true,
+  guaranteeStatus: true,
+  guaranteeAmount: true,
+  guaranteeReference: true,
+  guaranteeDeadline: true,
+  guaranteeSecuredAt: true,
+  cancellationPolicyId: true,
   createdAt: true,
   updatedAt: true,
   propertyId: true,
@@ -959,6 +1030,13 @@ export type ReservationDetail = ReservationListItem & {
   checkedOutAt: string | null;
   cancelledAt: string | null;
   cancellationReason: string | null;
+  guaranteeType: GuaranteeType;
+  guaranteeStatus: GuaranteeStatus;
+  guaranteeAmount: string | null;
+  guaranteeReference: string | null;
+  guaranteeDeadline: string | null;
+  guaranteeSecuredAt: string | null;
+  cancellationPolicyId: string | null;
   createdAt: string;
   updatedAt: string;
   propertyId: string;
@@ -1008,6 +1086,13 @@ function toDetail(row: ReservationDetailRow): ReservationDetail {
     checkedOutAt: row.checkedOutAt?.toISOString() ?? null,
     cancelledAt: row.cancelledAt?.toISOString() ?? null,
     cancellationReason: row.cancellationReason,
+    guaranteeType: row.guaranteeType,
+    guaranteeStatus: row.guaranteeStatus,
+    guaranteeAmount: row.guaranteeAmount?.toString() ?? null,
+    guaranteeReference: row.guaranteeReference,
+    guaranteeDeadline: row.guaranteeDeadline?.toISOString() ?? null,
+    guaranteeSecuredAt: row.guaranteeSecuredAt?.toISOString() ?? null,
+    cancellationPolicyId: row.cancellationPolicyId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     propertyId: row.propertyId,

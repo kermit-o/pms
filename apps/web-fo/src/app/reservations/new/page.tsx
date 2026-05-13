@@ -316,6 +316,16 @@ async function StepHuesped(props: {
     const email = formData.get('email')?.toString().trim() || undefined;
     const phone = formData.get('phone')?.toString().trim() || undefined;
     const notes = formData.get('notes')?.toString() || undefined;
+    const guaranteeType = formData.get('guaranteeType')?.toString() as
+      | 'NONE'
+      | 'CARD_ON_FILE'
+      | 'DEPOSIT'
+      | 'CORPORATE'
+      | 'HOTEL_GUARANTEE'
+      | undefined;
+    const guaranteeReference = formData.get('guaranteeReference')?.toString().trim() || undefined;
+    const guaranteeAmountRaw = formData.get('guaranteeAmount')?.toString().trim();
+    const guaranteeAmount = guaranteeAmountRaw ? Number(guaranteeAmountRaw) : undefined;
 
     if (!firstName || !lastName) throw new Error('Nombre y apellidos requeridos');
 
@@ -329,6 +339,13 @@ async function StepHuesped(props: {
         occupancy: { adults: propsCopy.adults, children: propsCopy.children },
         notes,
         walkIn: propsCopy.isWalkIn,
+        guarantee: guaranteeType
+          ? {
+              type: guaranteeType,
+              amount: guaranteeAmount,
+              reference: guaranteeReference,
+            }
+          : undefined,
       });
 
       // Walk-in: auto-asignar primera habitación libre del tipo elegido.
@@ -371,6 +388,40 @@ async function StepHuesped(props: {
         <Field label="Email" name="email" type="email" />
         <Field label="Teléfono" name="phone" />
       </div>
+
+      <fieldset className="space-y-3 rounded-xl bg-aubergine-50/40 p-4">
+        <legend className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
+          Garantía
+        </legend>
+        <p className="text-xs text-aubergine-700/70">
+          {props.isWalkIn
+            ? 'Walk-in pagado en mostrador → NONE por defecto.'
+            : 'Sin garantía la reserva queda en PENDING 2h y luego se libera.'}
+        </p>
+        <label className="block text-sm">
+          <span className="font-medium text-aubergine-700">Tipo</span>
+          <select
+            name="guaranteeType"
+            defaultValue={props.isWalkIn ? 'NONE' : 'CARD_ON_FILE'}
+            className="mt-1 w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm"
+          >
+            <option value="NONE">Ninguna (walk-in / pago en mostrador)</option>
+            <option value="CARD_ON_FILE">Tarjeta en archivo (CCG)</option>
+            <option value="DEPOSIT">Depósito / Prepago</option>
+            <option value="CORPORATE">Cuenta empresa</option>
+            <option value="HOTEL_GUARANTEE">Hotel garantiza (VIP)</option>
+          </select>
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field
+            label="Importe (opc · para depósito)"
+            name="guaranteeAmount"
+            type="number"
+            min={0}
+          />
+          <Field label="Referencia (últimos 4, voucher…)" name="guaranteeReference" />
+        </div>
+      </fieldset>
 
       <label className="block text-sm">
         <span className="font-medium text-aubergine-700">Notas (opcional)</span>

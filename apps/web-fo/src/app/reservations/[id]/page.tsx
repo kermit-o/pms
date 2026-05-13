@@ -12,6 +12,7 @@ import {
   closeFolio,
   getFolio,
   listRooms,
+  updateGuarantee,
 } from '@/lib/api';
 import type { FolioDetail } from '@/lib/api';
 
@@ -31,6 +32,11 @@ interface ReservationDetail {
   totalAmount: string;
   currency: string;
   notes: string | null;
+  guaranteeType: 'NONE' | 'CARD_ON_FILE' | 'DEPOSIT' | 'CORPORATE' | 'HOTEL_GUARANTEE';
+  guaranteeStatus: 'PENDING' | 'SECURED' | 'EXPIRED' | 'FAILED' | 'RELEASED';
+  guaranteeAmount: string | null;
+  guaranteeReference: string | null;
+  guaranteeDeadline: string | null;
   guests: Array<{
     isPrimary: boolean;
     guest: { id: string; firstName: string; lastName: string; email: string | null };
@@ -129,6 +135,17 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
     revalidatePath(`/reservations/${reservationId}`);
   }
 
+  async function markGuaranteeSecured(formData: FormData) {
+    'use server';
+    const session = await auth();
+    const reference = formData.get('reference')?.toString().trim() || undefined;
+    await updateGuarantee(session?.accessToken, reservationId, {
+      status: 'SECURED',
+      reference,
+    });
+    revalidatePath(`/reservations/${reservationId}`);
+  }
+
   async function doCheckOut() {
     'use server';
     const session = await auth();
@@ -182,6 +199,16 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
           </form>
         )}
       </header>
+
+      <GuaranteeCard
+        type={detail.guaranteeType}
+        status={detail.guaranteeStatus}
+        amount={detail.guaranteeAmount}
+        reference={detail.guaranteeReference}
+        deadline={detail.guaranteeDeadline}
+        currency={detail.currency}
+        onMarkSecured={markGuaranteeSecured}
+      />
 
       <div className="grid gap-6 md:grid-cols-2">
         <Section title="Estancia">
@@ -437,5 +464,88 @@ function Select({
         {children}
       </select>
     </label>
+  );
+}
+
+function GuaranteeCard({
+  type,
+  status,
+  amount,
+  reference,
+  deadline,
+  currency,
+  onMarkSecured,
+}: {
+  type: 'NONE' | 'CARD_ON_FILE' | 'DEPOSIT' | 'CORPORATE' | 'HOTEL_GUARANTEE';
+  status: 'PENDING' | 'SECURED' | 'EXPIRED' | 'FAILED' | 'RELEASED';
+  amount: string | null;
+  reference: string | null;
+  deadline: string | null;
+  currency: string;
+  onMarkSecured: (fd: FormData) => Promise<void>;
+}) {
+  const typeLabel: Record<typeof type, string> = {
+    NONE: 'Sin garantía (walk-in / mostrador)',
+    CARD_ON_FILE: 'Tarjeta en archivo (CCG)',
+    DEPOSIT: 'Depósito / Prepago',
+    CORPORATE: 'Cuenta empresa',
+    HOTEL_GUARANTEE: 'Hotel garantiza (VIP)',
+  };
+  const statusStyles: Record<typeof status, string> = {
+    PENDING: 'bg-amber-100 text-amber-800 ring-amber-200',
+    SECURED: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
+    EXPIRED: 'bg-rose-100 text-rose-800 ring-rose-200',
+    FAILED: 'bg-rose-100 text-rose-800 ring-rose-200',
+    RELEASED: 'bg-aubergine-100 text-aubergine-800 ring-aubergine-200',
+  };
+
+  const isNone = type === 'NONE';
+  const canMarkSecured = !isNone && (status === 'PENDING' || status === 'FAILED');
+
+  return (
+    <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
+          Garantía
+        </p>
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${statusStyles[status]}`}
+        >
+          {status.toLowerCase()}
+        </span>
+        <span className="text-sm text-aubergine-700">{typeLabel[type]}</span>
+        {amount && (
+          <span className="text-sm text-aubergine-700/70">
+            · {amount} {currency}
+          </span>
+        )}
+        {reference && (
+          <span className="text-sm text-aubergine-700/70">· ref {reference}</span>
+        )}
+      </div>
+      {status === 'PENDING' && deadline && (
+        <p className="mt-2 text-xs text-amber-700">
+          Confirmar antes de {new Date(deadline).toLocaleString('es-ES')}
+        </p>
+      )}
+      {canMarkSecured && (
+        <form action={onMarkSecured} className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="text-xs text-aubergine-700">
+            Referencia (últimos 4, voucher…)
+            <input
+              name="reference"
+              type="text"
+              className="ml-2 rounded border border-aubergine-100 px-2 py-1 text-sm"
+            />
+          </label>
+          <button
+            type="submit"
+            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+          >
+            Marcar garantía OK
+          </button>
+        </form>
+      )}
+    </section>
   );
 }

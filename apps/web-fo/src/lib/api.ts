@@ -127,6 +127,30 @@ export interface CreateReservationInput {
   currency?: string;
   specialRequests?: string;
   notes?: string;
+  walkIn?: boolean;
+  guarantee?: {
+    type: 'NONE' | 'CARD_ON_FILE' | 'DEPOSIT' | 'CORPORATE' | 'HOTEL_GUARANTEE';
+    amount?: number;
+    reference?: string;
+    cancellationPolicyId?: string;
+  };
+}
+
+export async function updateGuarantee(
+  accessToken: string | undefined,
+  reservationId: string,
+  input: {
+    type?: 'NONE' | 'CARD_ON_FILE' | 'DEPOSIT' | 'CORPORATE' | 'HOTEL_GUARANTEE';
+    status?: 'PENDING' | 'SECURED' | 'EXPIRED' | 'FAILED' | 'RELEASED';
+    amount?: number;
+    reference?: string;
+  },
+): Promise<{ id: string; guaranteeStatus: string; guaranteeType: string }> {
+  return apiFetch(`/reservations/${reservationId}/guarantee`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
 }
 
 export async function listReservations(

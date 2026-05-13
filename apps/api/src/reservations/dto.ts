@@ -15,6 +15,14 @@ const occupancyShape = z.object({
   children: z.number().int().min(0).max(10).default(0),
 });
 
+const guaranteeShape = z.object({
+  type: z.enum(['NONE', 'CARD_ON_FILE', 'DEPOSIT', 'CORPORATE', 'HOTEL_GUARANTEE']),
+  amount: z.number().nonnegative().optional(),
+  reference: z.string().max(200).optional(),
+  cancellationPolicyId: z.string().uuid().optional(),
+});
+export type GuaranteeInput = z.infer<typeof guaranteeShape>;
+
 const baseReservationShape = z.object({
   propertyId: z.string().uuid(),
   guestId: z.string().uuid().optional(),
@@ -29,7 +37,16 @@ const baseReservationShape = z.object({
   specialRequests: z.string().max(2000).optional(),
   notes: z.string().max(2000).optional(),
   walkIn: z.boolean().default(false),
+  guarantee: guaranteeShape.optional(),
 });
+
+export const UpdateGuaranteeDto = z.object({
+  type: z.enum(['NONE', 'CARD_ON_FILE', 'DEPOSIT', 'CORPORATE', 'HOTEL_GUARANTEE']).optional(),
+  status: z.enum(['PENDING', 'SECURED', 'EXPIRED', 'FAILED', 'RELEASED']).optional(),
+  amount: z.number().nonnegative().optional(),
+  reference: z.string().max(200).optional(),
+});
+export type UpdateGuaranteeDto = z.infer<typeof UpdateGuaranteeDto>;
 
 export const CreateReservationDto = baseReservationShape
   .refine((v) => v.guestId || v.guestData, {

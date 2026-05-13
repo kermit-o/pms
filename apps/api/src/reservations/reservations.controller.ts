@@ -21,6 +21,7 @@ import {
   CreateReservationDto,
   CreateReservationGroupDto,
   PatchReservationDto,
+  UpdateGuaranteeDto,
 } from './dto';
 import { ReservationsService } from './reservations.service';
 
@@ -144,6 +145,18 @@ export class ReservationsController {
   ) {
     const input = AssignRoomDto.parse(body);
     return this.reservations.assignRoom(user, correlationIdOf(req), id, input);
+  }
+
+  @Post(':id/guarantee')
+  @Roles(...FRONT_DESK_ROLES)
+  async updateGuarantee(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = UpdateGuaranteeDto.parse(body);
+    return this.reservations.updateGuarantee(user, correlationIdOf(req), id, input);
   }
 }
 
