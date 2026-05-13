@@ -86,7 +86,7 @@ export class CopilotService {
       createdAt: new Date(),
     });
 
-    const proposal = await this.proposeReply(session, content);
+    const proposal = await this.proposeReply(session, user, correlationId, content);
 
     if (proposal.kind === 'text') {
       session.messages.push({
@@ -98,10 +98,12 @@ export class CopilotService {
       return toView(session);
     }
 
-    // Tool intent.
+    // Tool intent: el agentic loop solo devuelve mutating aqui (los
+    // read-only se ejecutan internamente en anthropicPropose).
     const meta = this.resolver.getMeta(proposal.tool);
     if (!meta.mutating) {
-      // Auto-execute read-only.
+      // Fallback (stub path): si por algun motivo nos llega un read-only,
+      // ejecuta y muestra.
       try {
         const result = await this.resolver.execute(
           proposal.tool,
@@ -112,16 +114,14 @@ export class CopilotService {
         session.messages.push({
           id: randomUUID(),
           role: 'assistant',
-          content: `He consultado \`${proposal.tool}\`. Resultado:\n\n\`\`\`json\n${truncateJson(
-            result,
-          )}\n\`\`\``,
+          content: `Resultado de ${proposal.tool}:\n\n\`\`\`json\n${truncateJson(result)}\n\`\`\``,
           createdAt: new Date(),
         });
       } catch (err) {
         session.messages.push({
           id: randomUUID(),
           role: 'assistant',
-          content: `No pude ejecutar \`${proposal.tool}\`: ${(err as Error).message}`,
+          content: `No pude ejecutar ${proposal.tool}: ${(err as Error).message}`,
           createdAt: new Date(),
         });
       }
@@ -216,14 +216,19 @@ export class CopilotService {
    * tool_use. Sin la key cae al stub deterministico — suficiente para
    * tests y demos.
    */
-  private async proposeReply(session: Session, content: string): Promise<ToolProposal> {
+  private async proposeReply(
+    session: Session,
+    user: AuthUser,
+    correlationId: string,
+    content: string,
+  ): Promise<ToolProposal> {
     if (!this.anthropicApiKey) {
       this.log.warn('Anthropic key absent, using stub');
       return stubProposal(content);
     }
     try {
       this.log.log(`Anthropic propose: msg="${content.slice(0, 60)}"`);
-      const result = await this.anthropicPropose(session, content);
+      const result = await this.anthropicPropose(session, user, correlationId);
       this.log.log(`Anthropic result kind=${result.kind}`);
       return result;
     } catch (err) {
@@ -232,64 +237,115 @@ export class CopilotService {
     }
   }
 
-  private async anthropicPropose(session: Session, _content: string): Promise<ToolProposal> {
+  /**
+   * Agentic loop: el LLM ve la conversacion + tool catalog. Si propone un
+   * tool read-only, lo ejecutamos en silencio, devolvemos el resultado al
+   * LLM como tool_result y le dejamos seguir razonando. Repetimos hasta
+   * que devuelva un mensaje de texto final o un tool MUTATING (que
+   * requiere confirmacion humana).
+   *
+   * Pre: this.anthropicApiKey definido.
+   */
+  private async anthropicPropose(
+    session: Session,
+    user: AuthUser,
+    correlationId: string,
+  ): Promise<ToolProposal> {
     const client = new Anthropic({ apiKey: this.anthropicApiKey });
-
-    const messages: Anthropic.Messages.MessageParam[] = session.messages.map((m) => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: m.content,
-    }));
-
     const tools = buildAnthropicTools();
 
+    const today = new Date().toISOString().slice(0, 10);
     const propertyHint = session.propertyId
       ? `Property activa: ${session.propertyId}. Usala como propertyId por defecto.`
       : 'Si necesitas propertyId pide al usuario que lo confirme.';
-
-    const today = new Date().toISOString().slice(0, 10);
     const system = [
       'Eres Aubergine, copiloto operativo de un PMS hotelero.',
       'Responde en español, breve, profesional. Usa los tools cuando aplique.',
       'Para mutaciones (crear reserva, check-in/out, cargos) la UI pide',
       'confirmacion humana — propon el tool con sus args y un texto corto.',
-      'Para read-only ejecuta directo. Fechas siempre YYYY-MM-DD.',
+      'Para read-only no muestres el JSON al usuario, encadena varias',
+      'llamadas si hace falta hasta dar una respuesta natural.',
+      'Fechas siempre YYYY-MM-DD.',
       `Hoy es ${today}. Cuando el usuario dice "mañana" calculalo desde aquí.`,
       'NUNCA pidas UUIDs al usuario. Cuando menciona un tipo de habitación',
-      'por nombre ("doble", "doble estándar", "suite", "individual") llama',
-      'PRIMERO a list_room_types para resolver el roomTypeId, luego crea',
-      'la reserva. Si no hay match exacto del nombre, sugiere los',
-      'disponibles. Lo mismo con habitaciones concretas (busca por numero).',
+      'por nombre ("doble", "doble estándar", "suite") llama PRIMERO a',
+      'list_room_types para resolver el roomTypeId, luego procede.',
       'Si el usuario da nombre y apellido en una sola frase (ej. "Smith Arnold"),',
       'asume firstName=primero, lastName=segundo. No vuelvas a preguntar.',
       propertyHint,
     ].join(' ');
 
-    const resp = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      system,
-      tools,
-      messages,
-    });
+    // Construye historial inicial desde session.messages.
+    const conv: Anthropic.Messages.MessageParam[] = session.messages.map((m) => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.content,
+    }));
 
-    // Busca primero un tool_use block.
-    for (const block of resp.content) {
-      if (block.type === 'tool_use') {
-        const toolName = block.name;
-        if (this.resolver.has(toolName)) {
-          return { kind: 'tool', tool: toolName as AnyToolName, input: block.input };
-        }
-        this.log.warn(`Anthropic returned unknown tool: ${toolName}`);
+    for (let iter = 0; iter < 6; iter += 1) {
+      const resp = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system,
+        tools,
+        messages: conv,
+      });
+
+      // Busca tool_use block.
+      const toolUse = resp.content.find(
+        (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use',
+      );
+
+      if (!toolUse) {
+        const text = resp.content
+          .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
+          .map((b) => b.text)
+          .join('\n')
+          .trim();
+        return { kind: 'text', text: text || '…' };
       }
+
+      if (!this.resolver.has(toolUse.name)) {
+        this.log.warn(`Anthropic returned unknown tool: ${toolUse.name}`);
+        return {
+          kind: 'text',
+          text: `Quise usar el tool ${toolUse.name} pero no existe. ¿Puedes reformular?`,
+        };
+      }
+      const meta = this.resolver.getMeta(toolUse.name as AnyToolName);
+
+      if (meta.mutating) {
+        // Devuelve para que la UI pida confirmacion humana.
+        return { kind: 'tool', tool: toolUse.name as AnyToolName, input: toolUse.input };
+      }
+
+      // Read-only: ejecuta silenciosamente, alimenta el resultado al LLM.
+      let toolResultText: string;
+      try {
+        const result = await this.resolver.execute(
+          toolUse.name as AnyToolName,
+          toolUse.input,
+          user,
+          correlationId,
+        );
+        toolResultText = truncateJson(result);
+      } catch (err) {
+        toolResultText = `ERROR: ${(err as Error).message}`;
+      }
+
+      conv.push({ role: 'assistant', content: resp.content });
+      conv.push({
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: toolResultText,
+          },
+        ],
+      });
     }
 
-    // Si no, junta los text blocks.
-    const text = resp.content
-      .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n')
-      .trim();
-    return { kind: 'text', text: text || '…' };
+    return { kind: 'text', text: 'Demasiados pasos. ¿Puedes simplificar la petición?' };
   }
 
   private requireSession(user: AuthUser, sessionId: string): Session {
