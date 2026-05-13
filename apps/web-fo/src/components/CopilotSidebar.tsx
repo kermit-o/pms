@@ -371,14 +371,24 @@ function ToolInputSummary({ tool, input }: { tool: string; input: unknown }) {
   }
 
   return (
-    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded bg-aubergine-50/80 p-2 text-[11px]">
-      {rows.map(([k, v]) => (
-        <div key={k} className="contents">
-          <dt className="font-medium text-aubergine-700/70">{k}</dt>
-          <dd className="text-aubergine-900">{v}</dd>
-        </div>
-      ))}
-    </dl>
+    <div>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded bg-aubergine-50/80 p-2 text-[11px]">
+        {rows.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="font-medium text-aubergine-700/70">{k}</dt>
+            <dd className="text-aubergine-900">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <details className="mt-1">
+        <summary className="cursor-pointer text-[10px] text-aubergine-700/60 hover:text-aubergine-700">
+          Ver JSON crudo
+        </summary>
+        <pre className="mt-1 overflow-auto rounded bg-aubergine-50/40 p-2 text-[10px] text-aubergine-900">
+          {JSON.stringify(input, null, 2)}
+        </pre>
+      </details>
+    </div>
   );
 }
 
