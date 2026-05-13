@@ -15,9 +15,9 @@ export const metadata: Metadata = {
 };
 
 const NAV_ITEMS: Array<{ href: string; label: string }> = [
-  { href: '/dashboard', label: 'Dashboard' },
   { href: '/calendar', label: 'Calendario' },
   { href: '/reservations', label: 'Reservas' },
+  { href: '/dashboard', label: 'Dashboard' },
   { href: '/rooms', label: 'Habitaciones' },
   { href: '/guests', label: 'Cardex' },
   { href: '/business-day', label: 'Cierre día' },

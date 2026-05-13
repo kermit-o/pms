@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { auth } from '@/auth';
 import { ApiError, getRoomAvailability, type AvailabilityMatrix } from '@/lib/api';
+import { getActivePropertyId } from '@/lib/active-property';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,7 @@ const DEFAULT_DAYS = 14;
 
 export default async function CalendarPage({ searchParams }: PageProps) {
   const session = await auth();
-  const propertyId = searchParams.propertyId;
+  const propertyId = searchParams.propertyId ?? (await getActivePropertyId()) ?? undefined;
   const from = searchParams.from ?? toIsoDate(new Date());
   const days = clamp(Number(searchParams.days ?? DEFAULT_DAYS), 7, 60);
   const fromDate = new Date(from);
@@ -22,8 +23,7 @@ export default async function CalendarPage({ searchParams }: PageProps) {
   let matrix: AvailabilityMatrix | null = null;
   let error: string | null = null;
   if (!propertyId) {
-    error =
-      'Falta el parámetro propertyId. Configura el property por defecto en la sesión o pásalo en la URL.';
+    error = 'No hay propiedad activa. Configúrala en el selector del nav.';
   } else {
     try {
       matrix = await getRoomAvailability(session?.accessToken, {
@@ -62,7 +62,7 @@ export default async function CalendarPage({ searchParams }: PageProps) {
             label="Siguiente →"
           />
           <Link
-            href={`/reservations/new${propertyId ? `?propertyId=${propertyId}` : ''}`}
+            href={`/reservations/new?step=1&arrival=${from}&departure=${toIsoDate(addDays(fromDate, 1))}`}
             className="rounded-lg bg-aubergine-600 px-3 py-1.5 text-white hover:bg-aubergine-700"
           >
             Nueva reserva
@@ -70,7 +70,7 @@ export default async function CalendarPage({ searchParams }: PageProps) {
         </div>
       </header>
 
-      <PropertyForm propertyId={propertyId} from={from} days={days} />
+      <DateRangeForm from={from} days={days} />
 
       {error && (
         <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-100">
@@ -83,31 +83,13 @@ export default async function CalendarPage({ searchParams }: PageProps) {
   );
 }
 
-function PropertyForm({
-  propertyId,
-  from,
-  days,
-}: {
-  propertyId: string | undefined;
-  from: string;
-  days: number;
-}) {
+function DateRangeForm({ from, days }: { from: string; days: number }) {
   return (
     <form
       method="get"
       action="/calendar"
       className="flex flex-wrap items-end gap-2 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-aubergine-100"
     >
-      <label className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
-        Property ID
-        <input
-          name="propertyId"
-          type="text"
-          defaultValue={propertyId ?? ''}
-          placeholder="UUID del hotel"
-          className="mt-1 block w-72 rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
-        />
-      </label>
       <label className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
         Desde
         <input
@@ -212,11 +194,13 @@ function Grid({ matrix }: { matrix: AvailabilityMatrix }) {
               </td>
               {dayMeta.map((d) => {
                 const cell = matrix.cells[room.id]?.[d.iso];
+                const nextDay = addDaysIso(d.iso, 1);
                 if (!cell) {
                   return <td key={d.iso} className="h-10 border-t border-aubergine-100 px-0.5" />;
                 }
                 const cls = cellStyle(cell.state, d.isWeekend);
                 const startsHere = cell.reservation && cell.reservation.arrivalDate === d.iso;
+                const isFree = !cell.reservation && cell.state !== 'OOO';
                 return (
                   <td
                     key={d.iso}
@@ -233,6 +217,15 @@ function Grid({ matrix }: { matrix: AvailabilityMatrix }) {
                         className="block truncate px-1 text-[10px] font-mono text-white"
                       >
                         {cell.reservation.code.split('-').slice(1).join('-')}
+                      </Link>
+                    )}
+                    {isFree && (
+                      <Link
+                        href={`/reservations/new?step=3&arrival=${d.iso}&departure=${nextDay}&adults=2&children=0&roomTypeId=${room.roomTypeId}`}
+                        className="block h-full w-full text-transparent hover:text-aubergine-700"
+                        title={`Crear reserva: ${room.number} · ${d.iso}`}
+                      >
+                        +
                       </Link>
                     )}
                   </td>
@@ -272,6 +265,10 @@ function addDays(d: Date, n: number): Date {
   const out = new Date(d);
   out.setDate(out.getDate() + n);
   return out;
+}
+
+function addDaysIso(iso: string, n: number): string {
+  return toIsoDate(addDays(new Date(iso), n));
 }
 
 function clamp(n: number, min: number, max: number): number {
