@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
+import Anthropic from '@anthropic-ai/sdk';
+import { foToolCatalog, hskToolCatalog } from '@pms/mcp-tools';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { AuthUser } from '../auth';
 import type { Env } from '../config/env.schema';
 import { type AnyToolName, ToolResolver } from './tool-resolver';
@@ -210,13 +213,67 @@ export class CopilotService {
    * tool_use. Sin la key cae al stub deterministico — suficiente para
    * tests y demos.
    */
-  private async proposeReply(_session: Session, content: string): Promise<ToolProposal> {
+  private async proposeReply(session: Session, content: string): Promise<ToolProposal> {
     if (!this.anthropicApiKey) {
       return stubProposal(content);
     }
-    // Real Anthropic integration is wired in a follow-up; the stub keeps
-    // the surface deterministic until then.
-    return stubProposal(content);
+    try {
+      return await this.anthropicPropose(session, content);
+    } catch (err) {
+      this.log.error('Anthropic adapter error, falling back to stub', err as Error);
+      return stubProposal(content);
+    }
+  }
+
+  private async anthropicPropose(session: Session, _content: string): Promise<ToolProposal> {
+    const client = new Anthropic({ apiKey: this.anthropicApiKey });
+
+    const messages: Anthropic.Messages.MessageParam[] = session.messages.map((m) => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.content,
+    }));
+
+    const tools = buildAnthropicTools();
+
+    const propertyHint = session.propertyId
+      ? `Property activa: ${session.propertyId}. Usala como propertyId por defecto.`
+      : 'Si necesitas propertyId pide al usuario que lo confirme.';
+
+    const system = [
+      'Eres Aubergine, copiloto operativo de un PMS hotelero.',
+      'Responde en español, breve, profesional. Usa los tools cuando aplique.',
+      'Para mutaciones (crear reserva, check-in/out, cargos) la UI pide',
+      'confirmacion humana — propon el tool con sus args y un texto corto.',
+      'Para read-only ejecuta directo. Fechas siempre YYYY-MM-DD.',
+      propertyHint,
+    ].join(' ');
+
+    const resp = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system,
+      tools,
+      messages,
+    });
+
+    // Busca primero un tool_use block.
+    for (const block of resp.content) {
+      if (block.type === 'tool_use') {
+        const toolName = block.name;
+        if (this.resolver.has(toolName)) {
+          return { kind: 'tool', tool: toolName as AnyToolName, input: block.input };
+        }
+        this.log.warn(`Anthropic returned unknown tool: ${toolName}`);
+      }
+    }
+
+    // Si no, junta los text blocks.
+    const text = resp.content
+      .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n')
+      .trim();
+    return { kind: 'text', text: text || '…' };
   }
 
   private requireSession(user: AuthUser, sessionId: string): Session {
@@ -457,4 +514,30 @@ function toView(session: Session): SessionView {
       createdAt: p.createdAt.toISOString(),
     })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Anthropic tools build
+// ---------------------------------------------------------------------------
+
+type ToolMetaShape = { name: string; description: string; inputSchema: unknown };
+
+function buildAnthropicTools(): Anthropic.Messages.Tool[] {
+  const out: Anthropic.Messages.Tool[] = [];
+  const catalogs: Record<string, ToolMetaShape>[] = [
+    foToolCatalog as unknown as Record<string, ToolMetaShape>,
+    hskToolCatalog as unknown as Record<string, ToolMetaShape>,
+  ];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const toJson = zodToJsonSchema as unknown as (schema: any) => Record<string, unknown>;
+  for (const cat of catalogs) {
+    for (const meta of Object.values(cat)) {
+      out.push({
+        name: meta.name,
+        description: meta.description,
+        input_schema: toJson(meta.inputSchema) as Anthropic.Messages.Tool.InputSchema,
+      });
+    }
+  }
+  return out;
 }
