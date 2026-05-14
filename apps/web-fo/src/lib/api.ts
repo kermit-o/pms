@@ -191,6 +191,39 @@ export async function cancelReservationGroup(
   });
 }
 
+export async function bulkAssignRooms(
+  accessToken: string | undefined,
+  id: string,
+): Promise<{ id: string; assignedCount: number; missingByType: Record<string, number> }> {
+  return apiFetch(`/reservations/groups/${id}/bulk-assign-rooms`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function bulkCheckIn(
+  accessToken: string | undefined,
+  id: string,
+): Promise<{ id: string; checkedIn: number; skipped: Array<{ id: string; reason: string }> }> {
+  return apiFetch(`/reservations/groups/${id}/bulk-check-in`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function bulkCheckOut(
+  accessToken: string | undefined,
+  id: string,
+): Promise<{ id: string; checkedOut: number; skipped: Array<{ id: string; reason: string }> }> {
+  return apiFetch(`/reservations/groups/${id}/bulk-check-out`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({}),
+  });
+}
+
 export async function updateGuarantee(
   accessToken: string | undefined,
   reservationId: string,

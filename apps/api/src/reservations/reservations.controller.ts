@@ -91,6 +91,36 @@ export class ReservationsController {
     return this.reservations.cancelGroup(user, correlationIdOf(req), id, input);
   }
 
+  @Post('groups/:id/bulk-assign-rooms')
+  @Roles(...FRONT_DESK_ROLES)
+  async bulkAssignRooms(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.reservations.bulkAssignRooms(user, correlationIdOf(req), id);
+  }
+
+  @Post('groups/:id/bulk-check-in')
+  @Roles(...FRONT_DESK_ROLES)
+  async bulkCheckIn(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.reservations.bulkCheckIn(user, correlationIdOf(req), id);
+  }
+
+  @Post('groups/:id/bulk-check-out')
+  @Roles(...FRONT_DESK_ROLES)
+  async bulkCheckOut(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.reservations.bulkCheckOut(user, correlationIdOf(req), id);
+  }
+
   @Post('walk-in')
   @Roles(...FRONT_DESK_ROLES)
   async createWalkIn(

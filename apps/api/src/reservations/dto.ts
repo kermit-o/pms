@@ -157,3 +157,11 @@ export const PatchReservationGroupDto = z
     path: ['departure'],
   });
 export type PatchReservationGroupDto = z.infer<typeof PatchReservationGroupDto>;
+
+// Bulk ops sobre el grupo entero. Aplican a reservas no-terminales del
+// grupo (skip CHECKED_OUT, CANCELLED, NO_SHOW).
+export const BulkGroupActionDto = z.object({
+  // opcional: notas para todas las acciones (motivo, comentario)
+  notes: z.string().max(500).optional(),
+});
+export type BulkGroupActionDto = z.infer<typeof BulkGroupActionDto>;

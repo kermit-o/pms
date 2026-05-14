@@ -3,6 +3,9 @@ import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import {
   ApiError,
+  bulkAssignRooms,
+  bulkCheckIn,
+  bulkCheckOut,
   cancelReservationGroup,
   getReservationGroup,
   patchReservationGroup,
@@ -65,6 +68,27 @@ export default async function ReservationGroupPage({ params }: { params: { id: s
     const reason = formData.get('reason')?.toString().trim();
     if (!reason) throw new Error('Motivo requerido');
     await cancelReservationGroup(session?.accessToken, groupId, reason);
+    revalidatePath(`/reservations/groups/${groupId}`);
+  }
+
+  async function doAssignRooms() {
+    'use server';
+    const session = await auth();
+    await bulkAssignRooms(session?.accessToken, groupId);
+    revalidatePath(`/reservations/groups/${groupId}`);
+  }
+
+  async function doBulkCheckIn() {
+    'use server';
+    const session = await auth();
+    await bulkCheckIn(session?.accessToken, groupId);
+    revalidatePath(`/reservations/groups/${groupId}`);
+  }
+
+  async function doBulkCheckOut() {
+    'use server';
+    const session = await auth();
+    await bulkCheckOut(session?.accessToken, groupId);
     revalidatePath(`/reservations/groups/${groupId}`);
   }
 
@@ -162,6 +186,47 @@ export default async function ReservationGroupPage({ params }: { params: { id: s
           </div>
         </form>
       </section>
+
+      {/* Bulk operations */}
+      {active.length > 0 && (
+        <section className="rounded-2xl bg-aubergine-50 p-4 ring-1 ring-aubergine-200">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-aubergine-700">
+            Operaciones masivas
+          </h2>
+          <p className="mt-1 text-xs text-aubergine-700/70">
+            Aplica a todas las reservas activas del grupo. Las terminadas se ignoran.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <form action={doAssignRooms}>
+              <button
+                type="submit"
+                className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-aubergine-700 ring-1 ring-aubergine-200 hover:bg-aubergine-100"
+                title="Asigna primera habitación libre del tipo correcto a cada reserva sin room"
+              >
+                🛏 Asignar habitaciones
+              </button>
+            </form>
+            <form action={doBulkCheckIn}>
+              <button
+                type="submit"
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                title="Check-in masivo (requiere room asignada)"
+              >
+                ✓ Check-in todos
+              </button>
+            </form>
+            <form action={doBulkCheckOut}>
+              <button
+                type="submit"
+                className="rounded-lg bg-aubergine-700 px-4 py-2 text-sm font-medium text-white hover:bg-aubergine-800"
+                title="Check-out masivo + crea tareas HSK"
+              >
+                ↗ Check-out todos
+              </button>
+            </form>
+          </div>
+        </section>
+      )}
 
       {/* Bulk cancel */}
       {active.length > 0 && (

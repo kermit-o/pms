@@ -1021,6 +1021,222 @@ export class ReservationsService {
       return { id, cancelledReservations: result.count };
     });
   }
+
+  /**
+   * Asigna habitaciones libres del tipo correcto a CADA reserva no-terminal
+   * sin roomId del grupo. No reasigna las que ya tienen room.
+   */
+  async bulkAssignRooms(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+  ): Promise<{ id: string; assignedCount: number; missingByType: Record<string, number> }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true, propertyId: true },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      const pending = await tx.reservation.findMany({
+        where: {
+          groupId: id,
+          deletedAt: null,
+          roomId: null,
+          status: {
+            notIn: [
+              PrismaReservationStatus.CHECKED_OUT,
+              PrismaReservationStatus.CANCELLED,
+              PrismaReservationStatus.NO_SHOW,
+            ],
+          },
+        },
+        select: { id: true, roomTypeId: true, arrivalDate: true, departureDate: true },
+      });
+
+      const allRooms = await tx.room.findMany({
+        where: { propertyId: grp.propertyId, deletedAt: null, isOutOfOrder: false },
+        select: { id: true, roomTypeId: true },
+      });
+
+      // Habitaciones ocupadas en cualquier rango que solape con cada reserva
+      // pending. Para simplificar, una pasada que coge cualquier reserva
+      // overlapping en el rango completo del grupo.
+      const groupRange = pending.reduce(
+        (acc, r) => ({
+          minArrival: !acc.minArrival || r.arrivalDate < acc.minArrival ? r.arrivalDate : acc.minArrival,
+          maxDeparture: !acc.maxDeparture || r.departureDate > acc.maxDeparture ? r.departureDate : acc.maxDeparture,
+        }),
+        { minArrival: undefined as Date | undefined, maxDeparture: undefined as Date | undefined },
+      );
+
+      const conflicting = await tx.reservation.findMany({
+        where: {
+          propertyId: grp.propertyId,
+          deletedAt: null,
+          NOT: { roomId: null },
+          status: {
+            in: [
+              PrismaReservationStatus.PENDING,
+              PrismaReservationStatus.CONFIRMED,
+              PrismaReservationStatus.CHECKED_IN,
+            ],
+          },
+          ...(groupRange.minArrival && groupRange.maxDeparture
+            ? {
+                arrivalDate: { lt: groupRange.maxDeparture },
+                departureDate: { gt: groupRange.minArrival },
+              }
+            : {}),
+        },
+        select: { roomId: true },
+      });
+      const taken = new Set(conflicting.map((r) => r.roomId).filter(Boolean) as string[]);
+
+      const missingByType: Record<string, number> = {};
+      let assignedCount = 0;
+
+      for (const reservation of pending) {
+        const candidate = allRooms.find(
+          (r) => r.roomTypeId === reservation.roomTypeId && !taken.has(r.id),
+        );
+        if (!candidate) {
+          missingByType[reservation.roomTypeId] = (missingByType[reservation.roomTypeId] ?? 0) + 1;
+          continue;
+        }
+        await tx.reservation.update({
+          where: { id: reservation.id },
+          data: { roomId: candidate.id },
+        });
+        taken.add(candidate.id);
+        assignedCount += 1;
+      }
+
+      return { id, assignedCount, missingByType };
+    });
+  }
+
+  /**
+   * Check-in masivo: para cada reserva PENDING/CONFIRMED del grupo, transita
+   * a CHECKED_IN. Si la reserva no tiene roomId, falla solo esa (el resto
+   * se procesan). El operador debe correr bulkAssignRooms antes.
+   */
+  async bulkCheckIn(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+  ): Promise<{ id: string; checkedIn: number; skipped: Array<{ id: string; reason: string }> }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      const items = await tx.reservation.findMany({
+        where: {
+          groupId: id,
+          deletedAt: null,
+          status: {
+            in: [PrismaReservationStatus.PENDING, PrismaReservationStatus.CONFIRMED],
+          },
+        },
+        select: { id: true, roomId: true, code: true },
+      });
+
+      const skipped: Array<{ id: string; reason: string }> = [];
+      let checkedIn = 0;
+      const now = new Date();
+
+      for (const r of items) {
+        if (!r.roomId) {
+          skipped.push({ id: r.id, reason: 'no roomId — corre bulkAssignRooms primero' });
+          continue;
+        }
+        await tx.reservation.update({
+          where: { id: r.id },
+          data: { status: PrismaReservationStatus.CHECKED_IN, checkedInAt: now },
+        });
+        checkedIn += 1;
+      }
+
+      return { id, checkedIn, skipped };
+    });
+  }
+
+  /**
+   * Check-out masivo: para cada reserva CHECKED_IN del grupo, transita a
+   * CHECKED_OUT, marca room DIRTY, crea tarea HSK CHECKOUT_CLEAN (upsert
+   * por unique).
+   */
+  async bulkCheckOut(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+  ): Promise<{ id: string; checkedOut: number; skipped: Array<{ id: string; reason: string }> }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true, propertyId: true },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      const items = await tx.reservation.findMany({
+        where: {
+          groupId: id,
+          deletedAt: null,
+          status: PrismaReservationStatus.CHECKED_IN,
+        },
+        select: { id: true, roomId: true, code: true },
+      });
+
+      const skipped: Array<{ id: string; reason: string }> = [];
+      let checkedOut = 0;
+      const now = new Date();
+      const businessDate = new Date(now.toISOString().slice(0, 10));
+
+      for (const r of items) {
+        if (!r.roomId) {
+          skipped.push({ id: r.id, reason: 'no roomId' });
+          continue;
+        }
+        await tx.reservation.update({
+          where: { id: r.id },
+          data: { status: PrismaReservationStatus.CHECKED_OUT, checkedOutAt: now },
+        });
+        await tx.room.update({
+          where: { id: r.roomId },
+          data: { status: RoomStatus.DIRTY },
+        });
+        await tx.housekeepingTask.upsert({
+          where: {
+            propertyId_businessDate_roomId_taskType: {
+              propertyId: grp.propertyId,
+              businessDate,
+              roomId: r.roomId,
+              taskType: HousekeepingTaskType.CHECKOUT_CLEAN,
+            },
+          },
+          update: {},
+          create: {
+            tenantId: user.tenantId,
+            propertyId: grp.propertyId,
+            roomId: r.roomId,
+            taskType: HousekeepingTaskType.CHECKOUT_CLEAN,
+            status: HousekeepingTaskStatus.PENDING,
+            businessDate,
+            scheduledFor: new Date(now.getTime() + 30 * 60_000),
+          },
+        });
+        checkedOut += 1;
+      }
+
+      return { id, checkedOut, skipped };
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
