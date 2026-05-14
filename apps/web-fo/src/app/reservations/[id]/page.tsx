@@ -37,6 +37,7 @@ interface ReservationDetail {
   guaranteeAmount: string | null;
   guaranteeReference: string | null;
   guaranteeDeadline: string | null;
+  groupId: string | null;
   guests: Array<{
     isPrimary: boolean;
     guest: { id: string; firstName: string; lastName: string; email: string | null };
@@ -199,6 +200,15 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
           </form>
         )}
       </header>
+
+      {detail.groupId && (
+        <Link
+          href={`/reservations/groups/${detail.groupId}`}
+          className="block rounded-xl bg-indigo-50 px-4 py-3 text-sm text-indigo-900 ring-1 ring-indigo-200 hover:bg-indigo-100"
+        >
+          📎 Esta reserva pertenece a un grupo · ver y editar grupo →
+        </Link>
+      )}
 
       <GuaranteeCard
         type={detail.guaranteeType}

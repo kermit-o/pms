@@ -19,6 +19,7 @@ import {
   CreateReservationDto,
   CreateReservationGroupDto,
   PatchReservationDto,
+  PatchReservationGroupDto,
   UpdateGuaranteeDto,
 } from './dto';
 import { IllegalReservationTransitionError, assertTransition } from './reservation-status';
@@ -883,6 +884,143 @@ export class ReservationsService {
       return updated;
     });
   }
+
+  // ===========================================================================
+  // GROUP OPERATIONS
+  // ===========================================================================
+
+  /** Detalle de un grupo con todas sus reservas hijas. */
+  async findGroup(user: AuthUser, correlationId: string, id: string) {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          organizerName: true,
+          organizerEmail: true,
+          organizerPhone: true,
+          notes: true,
+          propertyId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      const items = await tx.reservation.findMany({
+        where: { groupId: id, deletedAt: null },
+        orderBy: [{ arrivalDate: 'asc' }, { code: 'asc' }],
+        select: RESERVATION_LIST_SELECT,
+      });
+
+      return { ...grp, reservations: items.map(toListItem) };
+    });
+  }
+
+  /**
+   * Patch a nivel grupo. Campos del grupo (name, organizer*, notes) actualizan
+   * solo el grupo. Campos de estancia (arrival, departure, roomTypeId,
+   * ratePlanId) hacen cascade a TODAS las reservas hijas que no esten en
+   * estado terminal (CHECKED_OUT, CANCELLED, NO_SHOW). Lo que no se especifica
+   * se mantiene por reserva — la edicion linea-a-linea sigue valida.
+   */
+  async patchGroup(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+    input: PatchReservationGroupDto,
+  ): Promise<{ id: string; affectedReservations: number }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      // 1. Update group-level fields
+      await tx.reservationGroup.update({
+        where: { id },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.organizerName !== undefined ? { organizerName: input.organizerName } : {}),
+          ...(input.organizerEmail !== undefined ? { organizerEmail: input.organizerEmail } : {}),
+          ...(input.organizerPhone !== undefined ? { organizerPhone: input.organizerPhone } : {}),
+          ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        },
+      });
+
+      // 2. Cascade fields a las reservas hijas no-terminales
+      const cascadeData: Record<string, unknown> = {};
+      if (input.arrival !== undefined) cascadeData.arrivalDate = new Date(input.arrival);
+      if (input.departure !== undefined) cascadeData.departureDate = new Date(input.departure);
+      if (input.roomTypeId !== undefined) cascadeData.roomTypeId = input.roomTypeId;
+      if (input.ratePlanId !== undefined) cascadeData.ratePlanId = input.ratePlanId;
+
+      let affected = 0;
+      if (Object.keys(cascadeData).length > 0) {
+        const result = await tx.reservation.updateMany({
+          where: {
+            groupId: id,
+            deletedAt: null,
+            status: {
+              notIn: [
+                PrismaReservationStatus.CHECKED_OUT,
+                PrismaReservationStatus.CANCELLED,
+                PrismaReservationStatus.NO_SHOW,
+              ],
+            },
+          },
+          data: cascadeData,
+        });
+        affected = result.count;
+      }
+
+      return { id, affectedReservations: affected };
+    });
+  }
+
+  /** Cancela TODAS las reservas no-terminales del grupo en una transaccion. */
+  async cancelGroup(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+    input: CancelReservationDto,
+  ): Promise<{ id: string; cancelledReservations: number }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      const cancelledAt = new Date();
+      const result = await tx.reservation.updateMany({
+        where: {
+          groupId: id,
+          deletedAt: null,
+          status: {
+            notIn: [
+              PrismaReservationStatus.CHECKED_OUT,
+              PrismaReservationStatus.CANCELLED,
+              PrismaReservationStatus.NO_SHOW,
+            ],
+          },
+        },
+        data: {
+          status: PrismaReservationStatus.CANCELLED,
+          cancelledAt,
+          cancellationReason: input.reason,
+        },
+      });
+
+      return { id, cancelledReservations: result.count };
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -971,6 +1109,7 @@ const RESERVATION_DETAIL_SELECT = {
   guaranteeDeadline: true,
   guaranteeSecuredAt: true,
   cancellationPolicyId: true,
+  groupId: true,
   createdAt: true,
   updatedAt: true,
   propertyId: true,
@@ -1037,6 +1176,7 @@ export type ReservationDetail = ReservationListItem & {
   guaranteeDeadline: string | null;
   guaranteeSecuredAt: string | null;
   cancellationPolicyId: string | null;
+  groupId: string | null;
   createdAt: string;
   updatedAt: string;
   propertyId: string;
@@ -1093,6 +1233,7 @@ function toDetail(row: ReservationDetailRow): ReservationDetail {
     guaranteeDeadline: row.guaranteeDeadline?.toISOString() ?? null,
     guaranteeSecuredAt: row.guaranteeSecuredAt?.toISOString() ?? null,
     cancellationPolicyId: row.cancellationPolicyId,
+    groupId: row.groupId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     propertyId: row.propertyId,

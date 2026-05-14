@@ -21,6 +21,7 @@ import {
   CreateReservationDto,
   CreateReservationGroupDto,
   PatchReservationDto,
+  PatchReservationGroupDto,
   UpdateGuaranteeDto,
 } from './dto';
 import { ReservationsService } from './reservations.service';
@@ -54,6 +55,40 @@ export class ReservationsController {
   ) {
     const input = CreateReservationGroupDto.parse(body);
     return this.reservations.createGroup(user, correlationIdOf(req), input);
+  }
+
+  @Get('groups/:id')
+  @Roles(...FRONT_DESK_ROLES, 'night_auditor')
+  async findGroup(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.reservations.findGroup(user, correlationIdOf(req), id);
+  }
+
+  @Patch('groups/:id')
+  @Roles(...FRONT_DESK_ROLES)
+  async patchGroup(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = PatchReservationGroupDto.parse(body);
+    return this.reservations.patchGroup(user, correlationIdOf(req), id, input);
+  }
+
+  @Post('groups/:id/cancel')
+  @Roles(...FRONT_DESK_ROLES)
+  async cancelGroup(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = CancelReservationDto.parse(body);
+    return this.reservations.cancelGroup(user, correlationIdOf(req), id, input);
   }
 
   @Post('walk-in')

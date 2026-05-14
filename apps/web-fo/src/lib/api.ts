@@ -136,6 +136,61 @@ export interface CreateReservationInput {
   };
 }
 
+export interface ReservationGroupDetail {
+  id: string;
+  code: string;
+  name: string;
+  organizerName: string | null;
+  organizerEmail: string | null;
+  organizerPhone: string | null;
+  notes: string | null;
+  propertyId: string;
+  createdAt: string;
+  updatedAt: string;
+  reservations: ReservationListItem[];
+}
+
+export async function getReservationGroup(
+  accessToken: string | undefined,
+  id: string,
+): Promise<ReservationGroupDetail> {
+  return apiFetch(`/reservations/groups/${id}`, { accessToken });
+}
+
+export async function patchReservationGroup(
+  accessToken: string | undefined,
+  id: string,
+  input: {
+    name?: string;
+    organizerName?: string;
+    organizerEmail?: string;
+    organizerPhone?: string;
+    notes?: string;
+    arrival?: string;
+    departure?: string;
+    roomTypeId?: string;
+    ratePlanId?: string;
+  },
+): Promise<{ id: string; affectedReservations: number }> {
+  return apiFetch(`/reservations/groups/${id}`, {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function cancelReservationGroup(
+  accessToken: string | undefined,
+  id: string,
+  reason: string,
+): Promise<{ id: string; cancelledReservations: number }> {
+  return apiFetch(`/reservations/groups/${id}/cancel`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ reason }),
+  });
+}
+
 export async function updateGuarantee(
   accessToken: string | undefined,
   reservationId: string,
