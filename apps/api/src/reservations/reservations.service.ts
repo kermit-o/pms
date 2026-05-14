@@ -913,10 +913,20 @@ export class ReservationsService {
       const items = await tx.reservation.findMany({
         where: { groupId: id, deletedAt: null },
         orderBy: [{ arrivalDate: 'asc' }, { code: 'asc' }],
-        select: RESERVATION_LIST_SELECT,
+        select: {
+          ...RESERVATION_LIST_SELECT,
+          room: { select: { number: true, floor: true } },
+        },
       });
 
-      return { ...grp, reservations: items.map(toListItem) };
+      return {
+        ...grp,
+        reservations: items.map((r) => ({
+          ...toListItem(r),
+          roomNumber: r.room?.number ?? null,
+          roomFloor: r.room?.floor ?? null,
+        })),
+      };
     });
   }
 

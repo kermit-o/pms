@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import {
   ApiError,
@@ -14,8 +15,15 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-export default async function ReservationGroupPage({ params }: { params: { id: string } }) {
+export default async function ReservationGroupPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { flash?: string };
+}) {
   const session = await auth();
+  const flash = searchParams.flash;
 
   let detail: ReservationGroupDetail | null = null;
   let error: string | null = null;
@@ -74,22 +82,38 @@ export default async function ReservationGroupPage({ params }: { params: { id: s
   async function doAssignRooms() {
     'use server';
     const session = await auth();
-    await bulkAssignRooms(session?.accessToken, groupId);
-    revalidatePath(`/reservations/groups/${groupId}`);
+    const r = await bulkAssignRooms(session?.accessToken, groupId);
+    const missing = Object.entries(r.missingByType)
+      .map(([rt, n]) => `${n}×${rt.slice(0, 8)}…`)
+      .join(', ');
+    const msg = missing
+      ? `Asignadas ${r.assignedCount}. Faltaron por stock: ${missing}`
+      : `Asignadas ${r.assignedCount} habitaciones (todo OK)`;
+    redirect(`/reservations/groups/${groupId}?flash=${encodeURIComponent(msg)}`);
   }
 
   async function doBulkCheckIn() {
     'use server';
     const session = await auth();
-    await bulkCheckIn(session?.accessToken, groupId);
-    revalidatePath(`/reservations/groups/${groupId}`);
+    const r = await bulkCheckIn(session?.accessToken, groupId);
+    const skip = r.skipped.length ? ` · ${r.skipped.length} saltadas` : '';
+    redirect(
+      `/reservations/groups/${groupId}?flash=${encodeURIComponent(
+        `Check-in: ${r.checkedIn} reservas${skip}`,
+      )}`,
+    );
   }
 
   async function doBulkCheckOut() {
     'use server';
     const session = await auth();
-    await bulkCheckOut(session?.accessToken, groupId);
-    revalidatePath(`/reservations/groups/${groupId}`);
+    const r = await bulkCheckOut(session?.accessToken, groupId);
+    const skip = r.skipped.length ? ` · ${r.skipped.length} saltadas` : '';
+    redirect(
+      `/reservations/groups/${groupId}?flash=${encodeURIComponent(
+        `Check-out: ${r.checkedOut} reservas${skip} · tareas HSK creadas`,
+      )}`,
+    );
   }
 
   const active = detail.reservations.filter(
@@ -187,6 +211,12 @@ export default async function ReservationGroupPage({ params }: { params: { id: s
         </form>
       </section>
 
+      {flash && (
+        <div className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-900 ring-1 ring-emerald-200">
+          ✓ {flash}
+        </div>
+      )}
+
       {/* Bulk operations */}
       {active.length > 0 && (
         <section className="rounded-2xl bg-aubergine-50 p-4 ring-1 ring-aubergine-200">
@@ -267,6 +297,7 @@ export default async function ReservationGroupPage({ params }: { params: { id: s
             <tr>
               <th className="px-4 py-2">Código</th>
               <th className="px-4 py-2">Estado</th>
+              <th className="px-4 py-2">Habitación</th>
               <th className="px-4 py-2">Llegada</th>
               <th className="px-4 py-2">Salida</th>
               <th className="px-4 py-2">PAX</th>
@@ -285,7 +316,19 @@ export default async function ReservationGroupPage({ params }: { params: { id: s
                   </Link>
                 </td>
                 <td className="px-4 py-2 text-xs text-aubergine-700/70">
-                  {r.status.toLowerCase()}
+                  {r.status.toLowerCase().replace('_', ' ')}
+                </td>
+                <td className="px-4 py-2 text-xs font-mono">
+                  {r.roomNumber ? (
+                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-800">
+                      {r.roomNumber}
+                      {r.roomFloor && (
+                        <span className="ml-1 text-emerald-700/60">P{r.roomFloor}</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-aubergine-700/40">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-2 text-xs">{r.arrivalDate}</td>
                 <td className="px-4 py-2 text-xs">{r.departureDate}</td>

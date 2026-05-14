@@ -147,7 +147,7 @@ export interface ReservationGroupDetail {
   propertyId: string;
   createdAt: string;
   updatedAt: string;
-  reservations: ReservationListItem[];
+  reservations: Array<ReservationListItem & { roomNumber: string | null; roomFloor: string | null }>;
 }
 
 export async function getReservationGroup(
