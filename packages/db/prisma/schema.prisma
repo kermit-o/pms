@@ -396,6 +396,16 @@ model Reservation {
   guaranteeDeadline    DateTime?       @map("guarantee_deadline")
   guaranteeSecuredAt   DateTime?       @map("guarantee_secured_at")
   cancellationPolicyId String?         @map("cancellation_policy_id") @db.Uuid
+  // Stripe Setup Intent + tokenized payment method (Corte B garantía).
+  // Solo guardamos referencias y últimos 4 — el PAN nunca toca nuestros
+  // servidores (Stripe es el custodian PCI-compliant).
+  stripeCustomerId      String?  @map("stripe_customer_id")
+  stripeSetupIntentId   String?  @map("stripe_setup_intent_id")
+  stripePaymentMethodId String?  @map("stripe_payment_method_id")
+  stripeCardBrand       String?  @map("stripe_card_brand")
+  stripeCardLast4       String?  @map("stripe_card_last4") @db.Char(4)
+  stripeCardExpMonth    Int?     @map("stripe_card_exp_month") @db.SmallInt
+  stripeCardExpYear     Int?     @map("stripe_card_exp_year") @db.SmallInt
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
   deletedAt          DateTime?         @map("deleted_at")

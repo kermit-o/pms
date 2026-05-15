@@ -224,6 +224,17 @@ export async function bulkCheckOut(
   });
 }
 
+export async function createStripeSetupIntent(
+  accessToken: string | undefined,
+  reservationId: string,
+): Promise<{ clientSecret: string; publishableKey: string }> {
+  return apiFetch(`/payments/stripe/reservations/${reservationId}/setup-intent`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({}),
+  });
+}
+
 export async function updateGuarantee(
   accessToken: string | undefined,
   reservationId: string,

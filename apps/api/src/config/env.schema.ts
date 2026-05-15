@@ -43,6 +43,15 @@ export const envSchema = z.object({
 
   ANTHROPIC_API_KEY: z.string().optional(),
 
+  // Stripe — pagos y tokenizacion de tarjeta (garantia CARD_ON_FILE).
+  // En test/dev: usa sk_test_... + whsec_test_... y la web usa pk_test_...
+  // En prod: claves live correspondientes. Si no se setean, los endpoints
+  // de payments responden 503; el operador sigue pudiendo marcar garantia
+  // manual con ultimos 4.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+
   // SES.HOSPEDAJES (Guardia Civil). En staging apunta a sandbox; en prod
   // al endpoint real. Si no se configura, los envios se quedan en QUEUED
   // y el envio real es no-op (util en tests/dev).

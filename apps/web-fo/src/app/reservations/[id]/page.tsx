@@ -14,6 +14,7 @@ import {
   listRooms,
   updateGuarantee,
 } from '@/lib/api';
+import { StripeCaptureButton } from '@/components/StripeCaptureButton';
 import type { FolioDetail } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
@@ -211,6 +212,7 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
       )}
 
       <GuaranteeCard
+        reservationId={reservationId}
         type={detail.guaranteeType}
         status={detail.guaranteeStatus}
         amount={detail.guaranteeAmount}
@@ -478,6 +480,7 @@ function Select({
 }
 
 function GuaranteeCard({
+  reservationId,
   type,
   status,
   amount,
@@ -486,6 +489,7 @@ function GuaranteeCard({
   currency,
   onMarkSecured,
 }: {
+  reservationId: string;
   type: 'NONE' | 'CARD_ON_FILE' | 'DEPOSIT' | 'CORPORATE' | 'HOTEL_GUARANTEE';
   status: 'PENDING' | 'SECURED' | 'EXPIRED' | 'FAILED' | 'RELEASED';
   amount: string | null;
@@ -537,6 +541,14 @@ function GuaranteeCard({
         <p className="mt-2 text-xs text-amber-700">
           Confirmar antes de {new Date(deadline).toLocaleString('es-ES')}
         </p>
+      )}
+      {canMarkSecured && type === 'CARD_ON_FILE' && (
+        <div className="mt-3">
+          <StripeCaptureButton reservationId={reservationId} />
+          <p className="mt-1 text-[10px] text-aubergine-700/60">
+            O marca manual abajo con últimos 4 si la tomas por teléfono.
+          </p>
+        </div>
       )}
       {canMarkSecured && (
         <form action={onMarkSecured} className="mt-3 flex flex-wrap items-end gap-2">

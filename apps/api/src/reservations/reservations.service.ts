@@ -1420,6 +1420,10 @@ const RESERVATION_DETAIL_SELECT = {
   guaranteeStatus: true,
   guaranteeAmount: true,
   guaranteeReference: true,
+  stripeCardBrand: true,
+  stripeCardLast4: true,
+  stripeCardExpMonth: true,
+  stripeCardExpYear: true,
   guaranteeDeadline: true,
   guaranteeSecuredAt: true,
   cancellationPolicyId: true,
@@ -1514,6 +1518,10 @@ export type ReservationDetail = ReservationListItem & {
   guaranteeStatus: GuaranteeStatus;
   guaranteeAmount: string | null;
   guaranteeReference: string | null;
+  stripeCardBrand: string | null;
+  stripeCardLast4: string | null;
+  stripeCardExpMonth: number | null;
+  stripeCardExpYear: number | null;
   guaranteeDeadline: string | null;
   guaranteeSecuredAt: string | null;
   cancellationPolicyId: string | null;
@@ -1600,6 +1608,10 @@ function toDetail(row: ReservationDetailRow): ReservationDetail {
     guaranteeStatus: row.guaranteeStatus,
     guaranteeAmount: row.guaranteeAmount?.toString() ?? null,
     guaranteeReference: row.guaranteeReference,
+    stripeCardBrand: row.stripeCardBrand,
+    stripeCardLast4: row.stripeCardLast4,
+    stripeCardExpMonth: row.stripeCardExpMonth,
+    stripeCardExpYear: row.stripeCardExpYear,
     guaranteeDeadline: row.guaranteeDeadline?.toISOString() ?? null,
     guaranteeSecuredAt: row.guaranteeSecuredAt?.toISOString() ?? null,
     cancellationPolicyId: row.cancellationPolicyId,
