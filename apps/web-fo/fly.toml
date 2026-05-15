@@ -1,7 +1,7 @@
 # fly.toml — pms-web-fo en Fly.io (region primaria cdg, ADR-023).
 #
 # Deploy desde la raiz del monorepo:
-#   flyctl deploy -c apps/web-fo/fly.toml --build-context .
+#   flyctl deploy -c apps/web-fo/fly.toml --dockerfile apps/web-fo/Dockerfile
 #
 # Primera vez:
 #   flyctl apps create pms-web-fo --org aubergine

@@ -1,7 +1,7 @@
 # fly.toml — pms-api en Fly.io (region primaria cdg, ADR-023).
 #
 # Deploy desde la raiz del monorepo:
-#   flyctl deploy -c apps/api/fly.toml --build-context .
+#   flyctl deploy -c apps/api/fly.toml --dockerfile apps/api/Dockerfile
 #
 # La primera vez:
 #   flyctl apps create pms-api --org aubergine
