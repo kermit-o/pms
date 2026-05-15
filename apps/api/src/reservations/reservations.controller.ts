@@ -137,7 +137,7 @@ export class ReservationsController {
   async list(
     @CurrentUser() user: AuthUser,
     @Req() req: FastifyRequest,
-    @Query() query: { from?: string; to?: string; status?: string; cursor?: string },
+    @Query() query: Record<string, string | undefined>,
   ) {
     return this.reservations.list(user, correlationIdOf(req), query);
   }

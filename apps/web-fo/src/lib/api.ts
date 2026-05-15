@@ -241,15 +241,56 @@ export async function updateGuarantee(
   });
 }
 
+export interface ReservationRichListItem extends ReservationListItem {
+  source: string;
+  ratePlanId: string | null;
+  ratePlanCode: string | null;
+  groupId: string | null;
+  groupCode: string | null;
+  groupName: string | null;
+  organizerName: string | null;
+  guaranteeStatus: 'PENDING' | 'SECURED' | 'EXPIRED' | 'FAILED' | 'RELEASED';
+  roomNumber: string | null;
+  roomFloor: string | null;
+  roomTypeCode: string | null;
+  roomTypeName: string | null;
+  primaryGuest: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+  } | null;
+  folioBalance: string | null;
+}
+
+export interface ListReservationsQuery {
+  from?: string;
+  to?: string;
+  arrivalFrom?: string;
+  arrivalTo?: string;
+  departureFrom?: string;
+  departureTo?: string;
+  /** Coma-separados, ej. "PENDING,CONFIRMED" */
+  status?: string;
+  source?: string;
+  groupId?: string;
+  search?: string;
+  guaranteeStatus?: string;
+  /** "true" → solo reservas sin roomId */
+  unassigned?: string;
+  cursor?: string;
+  limit?: number;
+}
+
 export async function listReservations(
   accessToken: string | undefined,
-  query: { from?: string; to?: string; status?: ReservationStatus; limit?: number } = {},
-): Promise<{ items: ReservationListItem[]; nextCursor: string | null }> {
+  query: ListReservationsQuery = {},
+): Promise<{ items: ReservationRichListItem[]; nextCursor: string | null }> {
   const params = new URLSearchParams();
-  if (query.from) params.set('from', query.from);
-  if (query.to) params.set('to', query.to);
-  if (query.status) params.set('status', query.status);
-  if (query.limit) params.set('limit', String(query.limit));
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== '') params.set(k, String(v));
+  }
   const q = params.toString();
   return apiFetch(`/reservations${q ? `?${q}` : ''}`, { accessToken });
 }

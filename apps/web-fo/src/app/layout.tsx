@@ -17,13 +17,15 @@ export const metadata: Metadata = {
 const NAV_ITEMS: Array<{ href: string; label: string }> = [
   { href: '/calendar', label: 'Calendario' },
   { href: '/reservations', label: 'Reservas' },
+  { href: '/arrivals', label: 'Llegadas' },
+  { href: '/departures', label: 'Salidas' },
+  { href: '/in-house', label: 'In-house' },
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/rooms', label: 'Habitaciones' },
   { href: '/guests', label: 'Cardex' },
   { href: '/business-day', label: 'Cierre día' },
   { href: '/night-audit', label: 'Night audit' },
   { href: '/reports', label: 'Reportes' },
-  { href: '/compliance', label: 'SES.HOSPEDAJES' },
 ];
 
 export default async function RootLayout({ children }: { children: ReactNode }) {

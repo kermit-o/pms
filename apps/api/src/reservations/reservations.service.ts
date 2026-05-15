@@ -366,35 +366,101 @@ export class ReservationsService {
     query: {
       from?: string;
       to?: string;
+      arrivalFrom?: string;
+      arrivalTo?: string;
+      departureFrom?: string;
+      departureTo?: string;
       status?: string;
+      source?: string;
       propertyId?: string;
+      groupId?: string;
+      search?: string;
+      guaranteeStatus?: string;
+      unassigned?: string;
       cursor?: string;
       limit?: string;
     },
-  ): Promise<{ items: ReservationListItem[]; nextCursor: string | null }> {
+  ): Promise<{ items: ReservationRichListItem[]; nextCursor: string | null }> {
     const ctx = tenantCtx(user, correlationId);
     const limit = Math.min(Math.max(parseInt(query.limit ?? '50', 10) || 50, 1), 200);
 
-    if (query.from && !ISO_DATE.test(query.from)) {
-      throw new BadRequestException('from must be YYYY-MM-DD');
+    const dateFields = [
+      'from',
+      'to',
+      'arrivalFrom',
+      'arrivalTo',
+      'departureFrom',
+      'departureTo',
+    ] as const;
+    for (const k of dateFields) {
+      const v = (query as Record<string, string | undefined>)[k];
+      if (v && !ISO_DATE.test(v)) {
+        throw new BadRequestException(`${k} must be YYYY-MM-DD`);
+      }
     }
-    if (query.to && !ISO_DATE.test(query.to)) {
-      throw new BadRequestException('to must be YYYY-MM-DD');
-    }
-    if (query.status && !(query.status in PrismaReservationStatus)) {
-      throw new BadRequestException(`unknown status: ${query.status}`);
+    if (query.status) {
+      const tokens = query.status.split(',');
+      for (const s of tokens) {
+        if (!(s in PrismaReservationStatus)) {
+          throw new BadRequestException(`unknown status: ${s}`);
+        }
+      }
     }
 
     const where: Prisma.ReservationWhereInput = { deletedAt: null };
+    const and: Prisma.ReservationWhereInput[] = [];
     if (query.propertyId) where.propertyId = query.propertyId;
+    if (query.groupId) where.groupId = query.groupId;
     if (query.status) {
-      where.status = PrismaReservationStatus[query.status as keyof typeof PrismaReservationStatus];
+      const tokens = query.status.split(',') as Array<keyof typeof PrismaReservationStatus>;
+      where.status = { in: tokens.map((t) => PrismaReservationStatus[t]) };
     }
-    if (query.from || query.to) {
-      where.AND = [];
-      if (query.from) where.AND.push({ departureDate: { gt: new Date(query.from) } });
-      if (query.to) where.AND.push({ arrivalDate: { lt: new Date(query.to) } });
+    if (query.source) {
+      const tokens = query.source.split(',') as Array<keyof typeof ReservationSource>;
+      where.source = { in: tokens.map((t) => ReservationSource[t]) };
     }
+    if (query.guaranteeStatus) {
+      where.guaranteeStatus = query.guaranteeStatus as Prisma.ReservationWhereInput['guaranteeStatus'];
+    }
+    if (query.unassigned === 'true') {
+      where.roomId = null;
+    }
+    // Legacy from/to: stays overlapping the window.
+    if (query.from) and.push({ departureDate: { gt: new Date(query.from) } });
+    if (query.to) and.push({ arrivalDate: { lt: new Date(query.to) } });
+    // Explicit arrival/departure ranges (inclusive).
+    if (query.arrivalFrom) and.push({ arrivalDate: { gte: new Date(query.arrivalFrom) } });
+    if (query.arrivalTo) and.push({ arrivalDate: { lte: new Date(query.arrivalTo) } });
+    if (query.departureFrom) and.push({ departureDate: { gte: new Date(query.departureFrom) } });
+    if (query.departureTo) and.push({ departureDate: { lte: new Date(query.departureTo) } });
+    if (query.search) {
+      const term = query.search.trim();
+      // Búsqueda libre: code reserva, group code/name, organizador, o
+      // huésped por nombre/email/teléfono.
+      and.push({
+        OR: [
+          { code: { contains: term, mode: 'insensitive' } },
+          { group: { code: { contains: term, mode: 'insensitive' } } },
+          { group: { name: { contains: term, mode: 'insensitive' } } },
+          { group: { organizerName: { contains: term, mode: 'insensitive' } } },
+          {
+            guests: {
+              some: {
+                guest: {
+                  OR: [
+                    { firstName: { contains: term, mode: 'insensitive' } },
+                    { lastName: { contains: term, mode: 'insensitive' } },
+                    { email: { contains: term, mode: 'insensitive' } },
+                    { phone: { contains: term, mode: 'insensitive' } },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      });
+    }
+    if (and.length > 0) where.AND = and;
 
     const items = await this.prisma.withTenant(ctx, (tx) =>
       tx.reservation.findMany({
@@ -402,12 +468,12 @@ export class ReservationsService {
         orderBy: [{ arrivalDate: 'asc' }, { id: 'asc' }],
         take: limit + 1,
         ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-        select: RESERVATION_LIST_SELECT,
+        select: RESERVATION_RICH_LIST_SELECT,
       }),
     );
 
     const nextCursor = items.length > limit ? items[limit]!.id : null;
-    return { items: items.slice(0, limit).map(toListItem), nextCursor };
+    return { items: items.slice(0, limit).map(toRichListItem), nextCursor };
   }
 
   async findOne(user: AuthUser, correlationId: string, id: string): Promise<ReservationDetail> {
@@ -1318,6 +1384,28 @@ const RESERVATION_LIST_SELECT = {
   currency: true,
 } as const;
 
+const RESERVATION_RICH_LIST_SELECT = {
+  ...RESERVATION_LIST_SELECT,
+  source: true,
+  ratePlanId: true,
+  groupId: true,
+  guaranteeStatus: true,
+  room: { select: { number: true, floor: true } },
+  roomType: { select: { code: true, name: true } },
+  ratePlan: { select: { code: true } },
+  group: { select: { code: true, name: true, organizerName: true } },
+  folio: { select: { balance: true } },
+  guests: {
+    where: { isPrimary: true },
+    take: 1,
+    select: {
+      guest: {
+        select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+      },
+    },
+  },
+} as const;
+
 const RESERVATION_DETAIL_SELECT = {
   ...RESERVATION_LIST_SELECT,
   ratePlanId: true,
@@ -1368,9 +1456,36 @@ type ReservationListRow = Prisma.ReservationGetPayload<{
   select: typeof RESERVATION_LIST_SELECT;
 }>;
 
+type ReservationRichListRow = Prisma.ReservationGetPayload<{
+  select: typeof RESERVATION_RICH_LIST_SELECT;
+}>;
+
 type ReservationDetailRow = Prisma.ReservationGetPayload<{
   select: typeof RESERVATION_DETAIL_SELECT;
 }>;
+
+export interface ReservationRichListItem extends ReservationListItem {
+  source: ReservationSource;
+  ratePlanId: string | null;
+  ratePlanCode: string | null;
+  groupId: string | null;
+  groupCode: string | null;
+  groupName: string | null;
+  organizerName: string | null;
+  guaranteeStatus: import('@pms/db').GuaranteeStatus;
+  roomNumber: string | null;
+  roomFloor: string | null;
+  roomTypeCode: string | null;
+  roomTypeName: string | null;
+  primaryGuest: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+  } | null;
+  folioBalance: string | null;
+}
 
 export interface ReservationListItem {
   id: string;
@@ -1438,6 +1553,35 @@ function toListItem(row: ReservationListRow): ReservationListItem {
     roomId: row.roomId,
     totalAmount: row.totalAmount.toString(),
     currency: row.currency,
+  };
+}
+
+function toRichListItem(row: ReservationRichListRow): ReservationRichListItem {
+  const primary = row.guests[0]?.guest;
+  return {
+    ...toListItem(row),
+    source: row.source,
+    ratePlanId: row.ratePlanId,
+    ratePlanCode: row.ratePlan?.code ?? null,
+    groupId: row.groupId,
+    groupCode: row.group?.code ?? null,
+    groupName: row.group?.name ?? null,
+    organizerName: row.group?.organizerName ?? null,
+    guaranteeStatus: row.guaranteeStatus,
+    roomNumber: row.room?.number ?? null,
+    roomFloor: row.room?.floor ?? null,
+    roomTypeCode: row.roomType?.code ?? null,
+    roomTypeName: row.roomType?.name ?? null,
+    primaryGuest: primary
+      ? {
+          id: primary.id,
+          firstName: primary.firstName,
+          lastName: primary.lastName,
+          email: primary.email,
+          phone: primary.phone,
+        }
+      : null,
+    folioBalance: row.folio?.balance?.toString() ?? null,
   };
 }
 
