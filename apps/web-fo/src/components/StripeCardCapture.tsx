@@ -15,12 +15,14 @@ export function StripeCardCapture({
   open,
   clientSecret,
   publishableKey,
+  reservationId,
   onClose,
   onSuccess,
 }: {
   open: boolean;
   clientSecret: string | null;
   publishableKey: string | null;
+  reservationId: string;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -54,14 +56,22 @@ export function StripeCardCapture({
           stripe={stripePromise}
           options={{ clientSecret, appearance: { theme: 'flat' } }}
         >
-          <CardForm onSuccess={onSuccess} onClose={onClose} />
+          <CardForm reservationId={reservationId} onSuccess={onSuccess} onClose={onClose} />
         </Elements>
       </div>
     </div>
   );
 }
 
-function CardForm({ onSuccess, onClose }: { onSuccess: () => void; onClose: () => void }) {
+function CardForm({
+  reservationId,
+  onSuccess,
+  onClose,
+}: {
+  reservationId: string;
+  onSuccess: () => void;
+  onClose: () => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [busy, setBusy] = useState(false);
@@ -83,6 +93,14 @@ function CardForm({ onSuccess, onClose }: { onSuccess: () => void; onClose: () =
         return;
       }
       if (setupIntent && setupIntent.status === 'succeeded') {
+        // Fallback al webhook: confirmamos server-side para fijar SECURED.
+        const res = await fetch(`/api/payments/confirm-setup-intent/${reservationId}`, {
+          method: 'POST',
+        });
+        if (!res.ok) {
+          setError('Tarjeta tokenizada pero no pudimos confirmar: ' + (await res.text()));
+          return;
+        }
         onSuccess();
       } else {
         setError('Estado inesperado: ' + (setupIntent?.status ?? 'desconocido'));

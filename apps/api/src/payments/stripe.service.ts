@@ -156,6 +156,74 @@ export class StripeService {
   }
 
   /**
+   * Confirmación lado cliente (fallback al webhook). Cuando el frontend
+   * recibe setup_intent.status === 'succeeded' del confirmSetup, llama
+   * aquí para que server-side traiga el SI desde Stripe (verificación
+   * de verdad) y actualice la reserva.
+   *
+   * Esto evita depender del webhook si no es viable (cuentas con eventos
+   * restringidos, ngrok local, etc.). El webhook sigue siendo el path
+   * autoritativo en producción; este endpoint es idempotente.
+   */
+  async confirmSetupIntent(
+    user: AuthUser,
+    correlationId: string,
+    reservationId: string,
+  ): Promise<{ status: GuaranteeStatus; brand: string | null; last4: string | null }> {
+    const stripe = this.requireStripe();
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId };
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const reservation = await tx.reservation.findFirst({
+        where: { id: reservationId, deletedAt: null },
+        select: { id: true, stripeSetupIntentId: true, guaranteeStatus: true },
+      });
+      if (!reservation) throw new NotFoundException(`Reservation ${reservationId} not found`);
+      if (!reservation.stripeSetupIntentId) {
+        throw new BadRequestException('No SetupIntent activo en esta reserva');
+      }
+
+      const si = await stripe.setupIntents.retrieve(reservation.stripeSetupIntentId);
+      if (si.status !== 'succeeded') {
+        // No marcamos SECURED aún. El operador puede reintentar.
+        return {
+          status: reservation.guaranteeStatus,
+          brand: null,
+          last4: null,
+        };
+      }
+
+      const paymentMethodId =
+        typeof si.payment_method === 'string' ? si.payment_method : si.payment_method?.id;
+      let card: Stripe.PaymentMethod.Card | null = null;
+      if (paymentMethodId) {
+        const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+        card = pm.card ?? null;
+      }
+
+      await tx.reservation.update({
+        where: { id: reservation.id },
+        data: {
+          stripePaymentMethodId: paymentMethodId ?? null,
+          stripeCardBrand: card?.brand ?? null,
+          stripeCardLast4: card?.last4 ?? null,
+          stripeCardExpMonth: card?.exp_month ?? null,
+          stripeCardExpYear: card?.exp_year ?? null,
+          guaranteeStatus: GuaranteeStatus.SECURED,
+          guaranteeSecuredAt: new Date(),
+          guaranteeReference: card?.last4 ? `**** ${card.last4} (${card.brand})` : 'stripe',
+          guaranteeDeadline: null,
+        },
+      });
+
+      return {
+        status: GuaranteeStatus.SECURED,
+        brand: card?.brand ?? null,
+        last4: card?.last4 ?? null,
+      };
+    });
+  }
+
+  /**
    * Webhook handler. Solo procesamos setup_intent.succeeded por ahora —
    * marca la reserva SECURED y guarda los datos visibles de la tarjeta.
    */

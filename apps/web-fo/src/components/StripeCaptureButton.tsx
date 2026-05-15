@@ -57,10 +57,10 @@ export function StripeCaptureButton({ reservationId }: { reservationId: string }
         open={open}
         clientSecret={clientSecret}
         publishableKey={publishableKey}
+        reservationId={reservationId}
         onClose={() => setOpen(false)}
         onSuccess={() => {
           setOpen(false);
-          // Webhook actualizará el estado SECURED. Refrescamos para verlo.
           router.refresh();
         }}
       />

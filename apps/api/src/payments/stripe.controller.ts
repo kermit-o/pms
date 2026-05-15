@@ -34,6 +34,20 @@ export class StripeController {
   }
 
   /**
+   * Llamado por el frontend tras confirmSetup() para fijar SECURED.
+   * Sirve como fallback cuando el webhook no está disponible. Idempotente.
+   */
+  @Post('reservations/:id/confirm-setup-intent')
+  @Roles(...FRONT_DESK_ROLES)
+  async confirmSetupIntent(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.stripe.confirmSetupIntent(user, correlationIdOf(req), id);
+  }
+
+  /**
    * Webhook de Stripe. Público (Stripe firma con whsec_, validamos firma
    * dentro del service). Requiere raw body.
    */
