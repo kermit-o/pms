@@ -515,6 +515,11 @@ function GuaranteeCard({
 
   const isNone = type === 'NONE';
   const canMarkSecured = !isNone && (status === 'PENDING' || status === 'FAILED');
+  // Stripe captura tarjeta y fija el tipo a CARD_ON_FILE server-side, así que
+  // también lo permitimos cuando no hay tipo asignado todavía.
+  const canCaptureCard =
+    (status === 'PENDING' || status === 'FAILED') &&
+    (type === 'CARD_ON_FILE' || type === 'NONE');
 
   return (
     <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100">
@@ -542,11 +547,13 @@ function GuaranteeCard({
           Confirmar antes de {new Date(deadline).toLocaleString('es-ES')}
         </p>
       )}
-      {canMarkSecured && type === 'CARD_ON_FILE' && (
+      {canCaptureCard && (
         <div className="mt-3">
           <StripeCaptureButton reservationId={reservationId} />
           <p className="mt-1 text-[10px] text-aubergine-700/60">
-            O marca manual abajo con últimos 4 si la tomas por teléfono.
+            Tokeniza la tarjeta con Stripe (PCI-safe).
+            {isNone && ' Al capturar, el tipo cambia a Tarjeta en archivo (CCG).'}
+            {' '}O marca manual abajo si la tomas por teléfono.
           </p>
         </div>
       )}
