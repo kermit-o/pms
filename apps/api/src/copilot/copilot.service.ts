@@ -17,6 +17,7 @@ import {
   type CopilotSessionState,
   type ToolProposal,
 } from './copilot.types';
+import { CopilotMetrics } from './metrics';
 import type { AnyToolName } from './tool-resolver';
 import { ToolResolver } from './tool-resolver';
 
@@ -44,6 +45,7 @@ export class CopilotService {
     private readonly resolver: ToolResolver,
     private readonly prisma: PrismaService,
     @Inject(COPILOT_ADAPTER) private readonly adapter: CopilotAdapter,
+    private readonly metrics: CopilotMetrics,
   ) {
     this.log.log(`Copilot init: adapter=${this.adapter.name}`);
   }
@@ -289,6 +291,32 @@ export class CopilotService {
       telemetry?: AdapterTelemetry;
     },
   ): Promise<void> {
+    // Metricas: incrementar siempre, persistir DB best-effort.
+    const model = fields.telemetry?.model ?? this.adapter.name;
+    this.metrics.messages.add(1, { tenant: user.tenantId, role: fields.role, model });
+    if (fields.telemetry) {
+      const labels = { tenant: user.tenantId, model: fields.telemetry.model };
+      if (fields.telemetry.inputTokens) {
+        this.metrics.tokens.add(fields.telemetry.inputTokens, { ...labels, kind: 'input' });
+      }
+      if (fields.telemetry.outputTokens) {
+        this.metrics.tokens.add(fields.telemetry.outputTokens, { ...labels, kind: 'output' });
+      }
+      if (fields.telemetry.cacheReadTokens) {
+        this.metrics.tokens.add(fields.telemetry.cacheReadTokens, {
+          ...labels,
+          kind: 'cache_read',
+        });
+      }
+      if (fields.telemetry.cacheWriteTokens) {
+        this.metrics.tokens.add(fields.telemetry.cacheWriteTokens, {
+          ...labels,
+          kind: 'cache_write',
+        });
+      }
+      this.metrics.latency.record(fields.telemetry.latencyMs / 1000, labels);
+    }
+
     const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: sessionId };
     try {
       await this.prisma.withTenant(ctx, async (tx) => {

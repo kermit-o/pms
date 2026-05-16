@@ -57,7 +57,17 @@ function buildService() {
       fn({ copilotMessage: { create: vi.fn().mockResolvedValue({}) } }),
     ),
   };
-  const service = new CopilotService(resolver as never, prisma as never, adapter as never);
+  const metrics = {
+    messages: { add: vi.fn() },
+    tokens: { add: vi.fn() },
+    latency: { record: vi.fn() },
+  };
+  const service = new CopilotService(
+    resolver as never,
+    prisma as never,
+    adapter as never,
+    metrics as never,
+  );
   return { service, resolver };
 }
 

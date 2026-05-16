@@ -9,6 +9,7 @@ import { AdapterFactory, COPILOT_ADAPTER } from './adapter-factory';
 import { AnthropicAdapter } from './anthropic-adapter';
 import { CopilotController } from './copilot.controller';
 import { CopilotService } from './copilot.service';
+import { CopilotMetrics } from './metrics';
 import { StubAdapter } from './stub-adapter';
 import { ToolResolver } from './tool-resolver';
 import { FoToolRouter } from './tool-router';
@@ -18,6 +19,7 @@ import { FoToolRouter } from './tool-router';
   controllers: [CopilotController],
   providers: [
     CopilotService,
+    CopilotMetrics,
     FoToolRouter,
     ToolResolver,
     StubAdapter,
