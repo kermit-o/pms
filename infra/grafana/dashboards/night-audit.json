@@ -1,0 +1,86 @@
+{
+  "title": "Aubergine — Night Audit",
+  "uid": "aubergine-na",
+  "tags": ["aubergine", "night-audit", "anomaly"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(night_audit_anomalies_total, tenant)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false
+      },
+      {
+        "name": "property",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(night_audit_anomalies_total{tenant=~\"$tenant\"}, property)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Anomalías (24h)",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(increase(night_audit_anomalies_total{tenant=~\"$tenant\", property=~\"$property\"}[24h]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "CRITICAL (24h)",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(increase(night_audit_anomalies_total{tenant=~\"$tenant\", property=~\"$property\", severity=\"CRITICAL\"}[24h]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "HIGH (24h)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(increase(night_audit_anomalies_total{tenant=~\"$tenant\", property=~\"$property\", severity=\"HIGH\"}[24h]))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Anomalías por kind",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (kind) (increase(night_audit_anomalies_total{tenant=~\"$tenant\", property=~\"$property\"}[1d]))",
+          "legendFormat": "{{kind}}"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Distribución severity × kind (7d)",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (severity, kind) (increase(night_audit_anomalies_total{tenant=~\"$tenant\", property=~\"$property\"}[7d]))",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    }
+  ]
+}

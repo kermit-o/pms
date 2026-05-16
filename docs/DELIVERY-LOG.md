@@ -80,6 +80,81 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [FEAT] · Cerrar Sprint 6 W2 — Anomaly Detection NA
+
+**Scope:** `apps/api/night-audit`, `apps/web-fo`, `packages/db`, `infra/grafana`
+**Branch:** `claude/na-w2-anomalies`
+**Refs:** commits en la rama desde `810a7df` (DB) hasta este
+
+**Qué cambió.**
+
+- **DB.** Nueva tabla `night_audit_anomalies` (id, tenant, property, run,
+  businessDate, kind, severity, details JSONB, reviewedAt, reviewedByUserId,
+  reviewNotes). RLS por `tenant_id`, audit trigger habilitado. Nuevos
+  enums `NightAuditAnomalyKind`, `NightAuditAnomalySeverity`. Valor
+  `DETECT_ANOMALIES` añadido al enum `night_audit_step`.
+- **Service.** `AnomalyService.detectAll(ctx)` corre 4 reglas en paralelo
+  (Promise.allSettled — un fallo de regla no tumba al resto):
+  - `DUPLICATE_CHARGE` (critical) — idempotency_key con amounts distintos
+  - `CASH_DRAWER_VARIANCE` (high) — |discrepancy| / expected > 5%
+  - `DEEP_DISCOUNT` (medium) — DISCOUNT ≥ 50% del CHARGE del folio/día
+  - `CANCELLATION_SPREE` (medium) — mismo guest > 3 cancellations same-day
+- **Step.** `DetectAnomaliesStep` se inserta entre `SNAPSHOT_REPORTS` y
+  `CLOSE_DAY`. Idempotente por `runId` (deleteMany propio run + createMany).
+  Nunca bloquea el cierre — ADR-020.
+- **Métricas Prometheus** (via OTel):
+  `night_audit_anomalies_total{tenant, property, kind, severity}`.
+- **API.** Dos endpoints nuevos:
+  - `GET /night-audit/anomalies` con filtros (propertyId, businessDate,
+    from/to, kind, severity, reviewed, limit ≤ 200).
+  - `PATCH /night-audit/anomalies/:id/review` idempotente — graba
+    reviewedAt + reviewedByUserId + reviewNotes.
+- **UI web-fo.** Página `/night-audit/anomalies` con filtros, badges por
+  severity/kind y botón "marcar revisada". Link añadido al nav.
+- **Observabilidad.** Dashboard `infra/grafana/dashboards/night-audit.json`
+  (stats 24h, breakdown por kind, tabla severity×kind 7d) +
+  alerta `NightAuditAnomalyDetected` → Slack (no page).
+- **Tests.** 27/27 verdes en `src/night-audit` (incluye 6 nuevos en
+  `anomaly.service.spec.ts`, pipeline y service spec actualizados al
+  pipeline de 7 pasos).
+
+**Por qué.**
+
+Sprint 6 DoD #2: el supervisor recibe una primera señal real durante el
+NA en vez de tener que revisar cada folio a mano. Cumple ADR-020 (cero
+auto-corrección) y deja la decisión al humano. Habilita los workstreams
+de UI revisión, alertas y queries SQL del piloto sin tocar la idempotencia
+del cierre.
+
+**Archivos clave.**
+
+- `packages/db/prisma/migrations/20260609000000_night_audit_anomalies/migration.sql`
+- `packages/db/prisma/schema.prisma`, `packages/db/src/index.ts`
+- `apps/api/src/night-audit/anomaly.service.ts` (+ spec con 6 tests)
+- `apps/api/src/night-audit/anomaly.metrics.ts`
+- `apps/api/src/night-audit/steps/detect-anomalies.ts`
+- `apps/api/src/night-audit/night-audit.service.ts` (pipeline 7 pasos +
+  listAnomalies / reviewAnomaly)
+- `apps/api/src/night-audit/night-audit.controller.ts` (GET + PATCH)
+- `apps/api/src/night-audit/dto.ts` (ListAnomaliesQuery, ReviewAnomalyDto)
+- `apps/web-fo/src/app/night-audit/anomalies/page.tsx`
+- `apps/web-fo/src/lib/api.ts` (listNightAuditAnomalies,
+  reviewNightAuditAnomaly, tipos)
+- `infra/grafana/dashboards/night-audit.json`
+- `infra/grafana/alerts.yaml` (nuevo grupo `aubergine-na-anomaly`)
+
+**Sigue pendiente** (fuera de scope W2):
+
+- `RATE_OVERRIDE` z-score: reservado en el enum pero la detección queda
+  deferida a V2 — requiere persistir baseline BAR diario.
+- Eventbus emission: `night_audit.anomaly_detected v1` no se emite todavía
+  (los counters Prometheus + tabla cubren observabilidad; podemos añadir
+  pub al EventbusService cuando un consumer lo necesite).
+- Workstreams Sprint 6: W3 (Voice HSK), W4 (Forecasting), W5 (Embedded
+  copilot UI).
+
+---
+
 ## 2026-05-16 · [FEAT] · Cerrar Sprint 6 W1 — Anthropic adapter completo
 
 **Scope:** `apps/api/copilot`, `packages/db`, `infra/grafana`

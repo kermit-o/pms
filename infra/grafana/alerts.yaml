@@ -160,3 +160,28 @@ groups:
             Algun consumer del stream pms-events va a mas de 10k mensajes
             sin entregar. Revisar el subscriber correspondiente — puede
             estar caido o procesando muy lento.
+
+  # ---------------------------------------------------------------------------
+  # Night Audit anomaly detection — Sprint 6 W2. Las anomalias HIGH/CRITICAL
+  # se reportan a Slack #aubergine-incidentes para que el supervisor las
+  # revise. No es page (alta friccion humana).
+  # ---------------------------------------------------------------------------
+  - name: aubergine-na-anomaly
+    interval: 60s
+    rules:
+      - alert: NightAuditAnomalyDetected
+        expr: |
+          sum by (tenant, property, kind, severity) (
+            increase(night_audit_anomalies_total{severity=~"HIGH|CRITICAL"}[10m])
+          ) > 0
+        for: 0m
+        labels:
+          severity: ticket
+          service: pms-api
+        annotations:
+          summary: 'Anomalia NA detectada: {{ $labels.kind }} ({{ $labels.severity }})'
+          description: |
+            Tenant {{ $labels.tenant }} property {{ $labels.property }} —
+            anomalia de tipo {{ $labels.kind }} con severidad
+            {{ $labels.severity }}. Revisar en
+            /night-audit/anomalies de la web FO.
