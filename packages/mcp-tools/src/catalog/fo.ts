@@ -125,6 +125,13 @@ export const generateReportInput = z.object({
 });
 export type GenerateReportInput = z.infer<typeof generateReportInput>;
 
+const forecastDemandInput = z.object({
+  propertyId: z.string().uuid(),
+  horizon: z.number().int().min(7).max(90).default(30),
+  metric: z.enum(['occupancy', 'adr', 'revpar', 'pickup']).default('occupancy'),
+});
+export type ForecastDemandInput = z.infer<typeof forecastDemandInput>;
+
 export interface FoToolMeta {
   name: string;
   description: string;
@@ -211,6 +218,14 @@ export const foToolCatalog = {
     description:
       'Returns a narrative summary of a business date by reading the night-audit snapshots and the live Manager / Revenue / Tax / In-house reports. Read-only; no side effects.',
     inputSchema: generateReportInput,
+    mutating: false,
+    financial: false,
+  },
+  forecast_demand: {
+    name: 'forecast_demand',
+    description:
+      'Forecasts a hotel KPI (occupancy / adr / revpar / pickup) for the next N days (default 30, max 90) using Holt double exponential smoothing on the property MANAGER snapshots history. Read-only; ideal for revenue/manager questions. Returns predicted series with 95% confidence bands plus rmse/mape.',
+    inputSchema: forecastDemandInput,
     mutating: false,
     financial: false,
   },

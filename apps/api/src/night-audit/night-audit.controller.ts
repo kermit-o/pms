@@ -13,12 +13,14 @@ import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
 import {
+  ForecastQuery,
   ListAnomaliesQuery,
   ListRunsQuery,
   ReviewAnomalyDto,
   RunNightAuditDto,
   StateQuery,
 } from './dto';
+import { ForecastService } from './forecast.service';
 import { NightAuditService } from './night-audit.service';
 
 const READ_ROLES = ['tenant_admin', 'front_desk', 'night_auditor'] as const;
@@ -26,7 +28,21 @@ const WRITE_ROLES = ['tenant_admin', 'night_auditor'] as const;
 
 @Controller('night-audit')
 export class NightAuditController {
-  constructor(private readonly service: NightAuditService) {}
+  constructor(
+    private readonly service: NightAuditService,
+    private readonly forecast: ForecastService,
+  ) {}
+
+  @Get('forecast')
+  @Roles(...READ_ROLES)
+  async forecastDemand(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Query() rawQuery: Record<string, string | undefined>,
+  ) {
+    const query = ForecastQuery.parse(rawQuery);
+    return this.forecast.forecast(user, correlationIdOf(req), query);
+  }
 
   @Post('run')
   @Roles(...WRITE_ROLES)

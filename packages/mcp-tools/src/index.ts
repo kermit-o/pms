@@ -26,6 +26,7 @@ export {
   type AddFolioChargeInput,
   type AssignRoomInput,
   type GenerateReportInput,
+  type ForecastDemandInput,
 } from './catalog/fo';
 export {
   hskToolCatalog,
