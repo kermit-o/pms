@@ -41,11 +41,23 @@ function buildService() {
     isMutating: vi.fn().mockImplementation((name: string) => !READ_ONLY.has(name)),
     isFinancial: vi.fn().mockImplementation((name: string) => FINANCIAL.has(name)),
     execute: vi.fn().mockResolvedValue({ ok: true }),
+    tryValidate: vi.fn().mockReturnValue({ ok: true }),
   };
-  const config = {
-    get: vi.fn().mockReturnValue(undefined),
+  // Stub adapter: tests no llaman al modelo real. El service usa el adapter
+  // inyectado y persiste en DB via prisma.withTenant — usamos un noop.
+  const adapter = {
+    name: 'stub' as const,
+    propose: vi.fn(async (_session, _user, _cid, content: string) => {
+      const { stubProposal } = await import('./stub-adapter');
+      return { proposal: stubProposal(content) };
+    }),
   };
-  const service = new CopilotService(resolver as never, config as never);
+  const prisma = {
+    withTenant: vi.fn(async (_ctx, fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ copilotMessage: { create: vi.fn().mockResolvedValue({}) } }),
+    ),
+  };
+  const service = new CopilotService(resolver as never, prisma as never, adapter as never);
   return { service, resolver };
 }
 

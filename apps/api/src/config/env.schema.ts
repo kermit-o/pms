@@ -42,6 +42,11 @@ export const envSchema = z.object({
     .default(3600),
 
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Sprint 6 W1. Driver del copilot — 'anthropic' usa el SDK real, 'stub'
+  // el matcher deterministico (tests + demos sin API key). Si no se
+  // setea, el service hace fallback a stub cuando ANTHROPIC_API_KEY falta.
+  COPILOT_DRIVER: z.enum(['anthropic', 'stub']).optional(),
+  COPILOT_MODEL: z.string().optional(),
 
   // Stripe — pagos y tokenizacion de tarjeta (garantia CARD_ON_FILE).
   // En test/dev: usa sk_test_... + whsec_test_... y la web usa pk_test_...
