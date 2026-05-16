@@ -36,12 +36,16 @@ PROJECT.md §7 marca el moat: cada acción ya es una tool MCP. Sprint 6 conecta 
 
 ## 1. Workstreams
 
+> **Estado:** W1 ✅ código mergeado en `claude/copilot-w1-close` (Anthropic adapter,
+> prompt caching, audit table, métricas, SSE phase events). W2-W5 pendientes.
+
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Anthropic adapter (FO + HSK + NA)                                   │
+│  W1 ✅ Anthropic adapter (FO + HSK + NA)                              │
 │   - apps/api/src/copilot/anthropic-adapter.ts                        │
-│   - Tool calling + prompt caching del catálogo                       │
-│   - Streaming respuesta al cliente para latencia visible             │
+│   - Tool calling + prompt caching del catálogo (ephemeral)           │
+│   - SSE phase events en POST /messages?stream=true                   │
+│   - Audit en tabla copilot_messages + métricas Prometheus            │
 └──────────────────────────────┬───────────────────────────────────────┘
                                │
 ┌──────────────────────────────▼───────────────────────────────────────┐

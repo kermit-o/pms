@@ -80,6 +80,79 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [FEAT] · Cerrar Sprint 6 W1 — Anthropic adapter completo
+
+**Scope:** `apps/api/copilot`, `packages/db`, `infra/grafana`
+**Branch:** `claude/copilot-w1-close`
+**Refs:** commits `f7a847f` (DB), `b3...` (adapter), `3cd9e0b` (metrics + lint),
+`484598e` (SSE), este commit (tests + dashboard + docs)
+
+**Qué cambió.**
+
+- **DB.** Nueva tabla `copilot_messages` (USER, ASSISTANT, TOOL_USE,
+  TOOL_RESULT) con tokens/latency/cache. RLS por tenant. Sin trigger
+  audit_log porque esta tabla *es* el audit trail.
+- **Adapter pattern.** `CopilotAdapter` interface + `StubAdapter` (matcher
+  determinista) + `AnthropicAdapter` real (extraído de `copilot.service`,
+  contrato preservado). `AdapterFactory` resuelve driver según
+  `COPILOT_DRIVER` y presencia de `ANTHROPIC_API_KEY`.
+- **Prompt caching.** `cache_control: { type: 'ephemeral' }` en system
+  prompt + último tool del catálogo (cachea todo lo anterior). Usa
+  `client.beta.messages` porque el SDK 0.32.x expone caching solo en
+  beta. Telemetría incluye `cache_read_tokens` y `cache_write_tokens`.
+- **Métricas Prometheus** (via OTel): `copilot_messages_total{tenant,
+  role, model}`, `copilot_tokens_total{tenant, model, kind}`,
+  `copilot_latency_seconds_*{tenant, model}`. Dashboard
+  `infra/grafana/dashboards/copilot.json` con KPIs.
+- **SSE streaming.** `POST /copilot/sessions/:id/messages?stream=true`
+  devuelve `text/event-stream` con eventos `status`, `tool_call`,
+  `tool_result`, `done`, `error`. Adapter recibe callbacks opcionales
+  invocados durante el agentic loop.
+- **Audit.** `CopilotService` persiste cada turno en `copilot_messages`
+  best-effort (un fallo de DB no bloquea al usuario).
+- **Env nuevas:** `COPILOT_DRIVER` (`anthropic` | `stub`), `COPILOT_MODEL`
+  (default `claude-sonnet-4-6`).
+- **Tests:** 19/19 verdes en copilot (12 service + 6 anthropic-adapter
+  unit + 1 SSE generator). 4 fallos en `reservations.service.spec` son
+  pre-existentes, no introducidos en esta rama.
+- **Drive-by:** removed unused `ForbiddenException` import en
+  `reservations.service.ts` para dejar lint verde (introducido en
+  commit `5c462b0` de la rama anterior).
+
+**Por qué.**
+
+Sprint 6 DoD #1 exigía adapter real con prompt caching, audit y métricas.
+El stub era suficiente para tests pero no para producción: sin caching
+el coste escala con el tamaño del catálogo de tools (>40 tools); sin
+audit no hay trazabilidad legal de qué pidió el operador; sin métricas
+no podemos cerrar SLOs por tenant.
+
+**Archivos clave.**
+
+- `packages/db/prisma/schema.prisma` (`CopilotMessage` + relación en `Tenant`)
+- `packages/db/prisma/migrations/20260608000000_copilot_messages/migration.sql`
+- `apps/api/src/copilot/copilot.types.ts` (interfaces compartidas)
+- `apps/api/src/copilot/anthropic-adapter.ts` (real, con caching)
+- `apps/api/src/copilot/stub-adapter.ts` (determinista)
+- `apps/api/src/copilot/adapter-factory.ts` (DI factory)
+- `apps/api/src/copilot/copilot.service.ts` (refactor, persist, métricas, SSE)
+- `apps/api/src/copilot/copilot.controller.ts` (SSE endpoint)
+- `apps/api/src/copilot/metrics.ts` (OTel counters/histogram)
+- `apps/api/src/config/env.schema.ts` (COPILOT_DRIVER, COPILOT_MODEL)
+- `infra/grafana/dashboards/copilot.json`
+
+**Sigue pendiente** (no bloqueante de W1):
+
+- Token-level streaming del modelo (cambiar `client.beta.messages.create`
+  por `.stream(...)` en el final-text branch). Infra SSE ya está.
+- Live emission de phase events durante el loop (hoy se acumulan y se
+  ceden tras la resolución del turno). Requiere `EventEmitter` o canal
+  async; cambio interno sin alterar contrato SSE.
+- Workstream 2 (Anomaly detection NA), 3 (Voice HSK), 4 (Forecasting),
+  5 (Embedded copilot UI) — próximos tickets de Sprint 6.
+
+---
+
 ## 2026-05-16 · [DOCS] · Sincronizar PROJECT.md con el estado real del repo
 
 **Scope:** docs

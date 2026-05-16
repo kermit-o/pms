@@ -225,4 +225,21 @@ describe('CopilotService', () => {
     expect(resolver.execute).not.toHaveBeenCalled();
     expect(view.pendingTools[0]!.tool).toBe('hsk_assign_task');
   });
+
+  it('sendMessageStream emits status -> done events for stub adapter', async () => {
+    const { service } = buildService();
+    const { sessionId } = service.createSession(user, undefined);
+    const events: Array<{ type: string }> = [];
+    for await (const ev of service.sendMessageStream(
+      user,
+      'corr',
+      sessionId,
+      `consultar disponibilidad de ${PROPERTY_ID} entre 2026-06-10 y 2026-06-12`,
+    )) {
+      events.push(ev);
+    }
+    // Stub no encadena tools internamente, asi que solo veremos status + done.
+    expect(events[0]).toEqual({ type: 'status', phase: 'thinking' });
+    expect(events[events.length - 1]!.type).toBe('done');
+  });
 });
