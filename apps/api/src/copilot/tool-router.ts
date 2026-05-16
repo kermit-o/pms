@@ -11,11 +11,13 @@ import {
   type GenerateReportInput,
   type QueryAvailabilityInput,
   type ListRoomTypesInput,
+  type RecallGuestHistoryInput,
   type SearchAvailabilityByTypeInput,
   foToolCatalog,
 } from '@pms/mcp-tools';
 import type { AuthUser } from '../auth';
 import { FolioService } from '../folio';
+import { MemoryService } from './memory/memory.service';
 import { ForecastService } from '../night-audit/forecast.service';
 import { ReportsService } from '../reports';
 import { ReservationsService } from '../reservations';
@@ -47,6 +49,7 @@ export class FoToolRouter {
     private readonly folio: FolioService,
     private readonly reports: ReportsService,
     private readonly forecast: ForecastService,
+    private readonly memory: MemoryService,
   ) {}
 
   isMutating(name: FoToolName): boolean {
@@ -186,6 +189,14 @@ export class FoToolRouter {
           propertyId: i.propertyId,
           horizon: i.horizon,
           metric: i.metric,
+        });
+      }
+      case 'recall_guest_history': {
+        const i = input as RecallGuestHistoryInput;
+        return this.memory.recall(user, correlationId, {
+          guestId: i.guestId,
+          query: i.query,
+          limit: i.limit,
         });
       }
     }

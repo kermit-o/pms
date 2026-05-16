@@ -52,6 +52,7 @@ model Tenant {
   devicePairings      DevicePairing[]
   cancellationPolicies CancellationPolicy[]
   copilotMessages     CopilotMessage[]
+  guestMemoryChunks   GuestMemoryChunk[]
 
   @@map("tenants")
 }
@@ -285,6 +286,7 @@ model Guest {
   tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   reservations   ReservationGuest[]
   lostFoundItems LostFoundItem[]
+  memoryChunks   GuestMemoryChunk[]
 
   @@index([tenantId])
   @@index([tenantId, email])
@@ -1008,4 +1010,38 @@ enum CopilotMessageRole {
   TOOL_RESULT
 
   @@map("copilot_message_role")
+}
+
+// ----------------------------------------------------------------------------
+// Guest memory (Sprint 7 W2). Chunks de texto del huesped indexados con
+// tsvector. La columna tsv vive en SQL como GENERATED ALWAYS y no se mapea
+// aqui — las queries de ranking van por $queryRaw.
+// ----------------------------------------------------------------------------
+
+model GuestMemoryChunk {
+  id            String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String                @map("tenant_id") @db.Uuid
+  guestId       String                @map("guest_id") @db.Uuid
+  sourceKind    GuestMemorySourceKind @map("source_kind")
+  sourceRef     String?               @map("source_ref")
+  chunkText     String                @map("chunk_text")
+  vectorPending Boolean               @default(true) @map("vector_pending")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  guest  Guest  @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@unique([guestId, sourceKind, sourceRef])
+  @@index([tenantId, guestId])
+  @@map("guest_memory_chunks")
+}
+
+enum GuestMemorySourceKind {
+  CARDEX
+  STAY_NOTE
+  FOLIO_NOTE
+  SPECIAL_REQUEST
+
+  @@map("guest_memory_source_kind")
 }
