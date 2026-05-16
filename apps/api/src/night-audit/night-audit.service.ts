@@ -3,9 +3,12 @@ import { NightAuditRunStatus, NightAuditStep, NightAuditStepStatus, Prisma } fro
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
-import { ListRunsQuery, RunNightAuditDto } from './dto';
+import { AnomalyMetrics } from './anomaly.metrics';
+import { AnomalyService } from './anomaly.service';
+import { ListAnomaliesQuery, ListRunsQuery, RunNightAuditDto } from './dto';
 import type { StepContext, StepRunner } from './step';
 import { CloseDayStep } from './steps/close-day';
+import { DetectAnomaliesStep } from './steps/detect-anomalies';
 import { MarkNoShowsStep } from './steps/mark-no-shows';
 import { PostPackagesStep } from './steps/post-packages';
 import { PostRoomChargesStep } from './steps/post-room-charges';
@@ -41,19 +44,24 @@ import { SnapshotReportsStep } from './steps/snapshot-reports';
 export class NightAuditService {
   private readonly log = new Logger(NightAuditService.name);
 
-  private readonly pipeline: StepRunner[] = [
-    new PostRoomChargesStep(),
-    new PostTaxesStep(),
-    new PostPackagesStep(),
-    new MarkNoShowsStep(),
-    new SnapshotReportsStep(),
-    new CloseDayStep(),
-  ];
+  private readonly pipeline: StepRunner[];
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventbusService,
-  ) {}
+    private readonly anomaly: AnomalyService,
+    private readonly anomalyMetrics: AnomalyMetrics,
+  ) {
+    this.pipeline = [
+      new PostRoomChargesStep(),
+      new PostTaxesStep(),
+      new PostPackagesStep(),
+      new MarkNoShowsStep(),
+      new SnapshotReportsStep(),
+      new DetectAnomaliesStep(this.anomaly, this.anomalyMetrics),
+      new CloseDayStep(),
+    ];
+  }
 
   async run(user: AuthUser, correlationId: string, input: RunNightAuditDto): Promise<RunSummary> {
     const ctx = tenantCtx(user, correlationId);
@@ -294,6 +302,58 @@ export class NightAuditService {
     );
   }
 
+  async listAnomalies(
+    user: AuthUser,
+    correlationId: string,
+    query: ListAnomaliesQuery,
+  ): Promise<AnomalyView[]> {
+    const ctx = tenantCtx(user, correlationId);
+    const where: Prisma.NightAuditAnomalyWhereInput = {};
+    if (query.propertyId) where.propertyId = query.propertyId;
+    if (query.businessDate) where.businessDate = new Date(query.businessDate);
+    else if (query.from || query.to) {
+      where.businessDate = {};
+      if (query.from) (where.businessDate as Prisma.DateTimeFilter).gte = new Date(query.from);
+      if (query.to) (where.businessDate as Prisma.DateTimeFilter).lte = new Date(query.to);
+    }
+    if (query.kind) where.kind = query.kind;
+    if (query.severity) where.severity = query.severity;
+    if (query.reviewed === 'yes') where.reviewedAt = { not: null };
+    if (query.reviewed === 'no') where.reviewedAt = null;
+    const rows = await this.prisma.withTenant(ctx, (tx) =>
+      tx.nightAuditAnomaly.findMany({
+        where,
+        orderBy: [{ businessDate: 'desc' }, { severity: 'desc' }, { createdAt: 'desc' }],
+        take: query.limit,
+      }),
+    );
+    return rows.map(toAnomalyView);
+  }
+
+  async reviewAnomaly(
+    user: AuthUser,
+    correlationId: string,
+    anomalyId: string,
+    notes: string | undefined,
+  ): Promise<AnomalyView> {
+    const ctx = tenantCtx(user, correlationId);
+    const updated = await this.prisma.withTenant(ctx, async (tx) => {
+      const existing = await tx.nightAuditAnomaly.findFirst({ where: { id: anomalyId } });
+      if (!existing) throw new NotFoundException(`anomaly ${anomalyId} not found`);
+      // Idempotente: si ya esta revisada, devolvemos como esta.
+      if (existing.reviewedAt) return existing;
+      return tx.nightAuditAnomaly.update({
+        where: { id: anomalyId },
+        data: {
+          reviewedAt: new Date(),
+          reviewedByUserId: user.sub,
+          reviewNotes: notes ?? null,
+        },
+      });
+    });
+    return toAnomalyView(updated);
+  }
+
   async getState(
     user: AuthUser,
     correlationId: string,
@@ -387,5 +447,47 @@ function toSummary(
     lastError: row.lastError,
     totals: (row.totals as Record<string, unknown> | null) ?? {},
     steps,
+  };
+}
+
+export interface AnomalyView {
+  id: string;
+  propertyId: string;
+  runId: string;
+  businessDate: string;
+  kind: string;
+  severity: string;
+  details: unknown;
+  reviewedAt: string | null;
+  reviewedByUserId: string | null;
+  reviewNotes: string | null;
+  createdAt: string;
+}
+
+function toAnomalyView(row: {
+  id: string;
+  propertyId: string;
+  runId: string;
+  businessDate: Date;
+  kind: string;
+  severity: string;
+  details: Prisma.JsonValue;
+  reviewedAt: Date | null;
+  reviewedByUserId: string | null;
+  reviewNotes: string | null;
+  createdAt: Date;
+}): AnomalyView {
+  return {
+    id: row.id,
+    propertyId: row.propertyId,
+    runId: row.runId,
+    businessDate: row.businessDate.toISOString().slice(0, 10),
+    kind: row.kind,
+    severity: row.severity,
+    details: row.details,
+    reviewedAt: row.reviewedAt?.toISOString() ?? null,
+    reviewedByUserId: row.reviewedByUserId,
+    reviewNotes: row.reviewNotes,
+    createdAt: row.createdAt.toISOString(),
   };
 }

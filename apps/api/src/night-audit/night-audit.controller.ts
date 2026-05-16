@@ -1,8 +1,24 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
-import { ListRunsQuery, RunNightAuditDto, StateQuery } from './dto';
+import {
+  ListAnomaliesQuery,
+  ListRunsQuery,
+  ReviewAnomalyDto,
+  RunNightAuditDto,
+  StateQuery,
+} from './dto';
 import { NightAuditService } from './night-audit.service';
 
 const READ_ROLES = ['tenant_admin', 'front_desk', 'night_auditor'] as const;
@@ -48,6 +64,29 @@ export class NightAuditController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.service.findOne(user, correlationIdOf(req), id);
+  }
+
+  @Get('anomalies')
+  @Roles(...READ_ROLES)
+  async listAnomalies(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Query() rawQuery: Record<string, string | undefined>,
+  ) {
+    const query = ListAnomaliesQuery.parse(rawQuery);
+    return this.service.listAnomalies(user, correlationIdOf(req), query);
+  }
+
+  @Patch('anomalies/:id/review')
+  @Roles(...WRITE_ROLES)
+  async reviewAnomaly(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = ReviewAnomalyDto.parse(body ?? {});
+    return this.service.reviewAnomaly(user, correlationIdOf(req), id, input.notes);
   }
 
   @Get('state')

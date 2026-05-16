@@ -8,6 +8,8 @@ import {
 } from '@pms/db';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../auth';
+import { AnomalyMetrics } from './anomaly.metrics';
+import { AnomalyService } from './anomaly.service';
 import { NightAuditService } from './night-audit.service';
 
 const TENANT_ID = '11111111-1111-1111-1111-111111111111';
@@ -171,6 +173,11 @@ function buildService(opts: BuildOpts = {}) {
     nightAuditSnapshot: {
       upsert: vi.fn().mockResolvedValue({}),
     },
+    nightAuditAnomaly: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    $queryRaw: vi.fn().mockResolvedValue([]),
     businessDayState: {
       findFirst: vi.fn().mockResolvedValue(opts.existingDay ?? null),
       create: vi.fn().mockResolvedValue({}),
@@ -188,6 +195,7 @@ function buildService(opts: BuildOpts = {}) {
             }
           : opts.cashReconciliation,
       ),
+      findUnique: vi.fn().mockResolvedValue(null),
     },
   };
 
@@ -195,7 +203,7 @@ function buildService(opts: BuildOpts = {}) {
     withTenant: vi.fn(async (_ctx, fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
-  const service = new NightAuditService(prisma as never, events as never);
+  const service = new NightAuditService(prisma as never, events as never, new AnomalyService(), new AnomalyMetrics());
   return { service, tx, events, stepRows };
 }
 
@@ -242,6 +250,7 @@ describe('NightAuditService.run', () => {
       'night_audit.step_completed', // POST_PACKAGES
       'night_audit.step_completed', // MARK_NO_SHOWS
       'night_audit.step_completed', // SNAPSHOT_REPORTS
+      'night_audit.step_completed', // DETECT_ANOMALIES
       'night_audit.step_completed', // CLOSE_DAY
       'night_audit.run_completed',
     ]);

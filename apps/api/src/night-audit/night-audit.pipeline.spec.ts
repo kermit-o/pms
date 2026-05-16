@@ -1,6 +1,8 @@
 import { FolioStatus, NightAuditRunStatus, NightAuditStep, Prisma } from '@pms/db';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../auth';
+import { AnomalyMetrics } from './anomaly.metrics';
+import { AnomalyService } from './anomaly.service';
 import { NightAuditService } from './night-audit.service';
 
 /**
@@ -172,6 +174,11 @@ function buildFakes() {
     folio: { update: vi.fn().mockResolvedValue({}) },
     room: { count: vi.fn().mockResolvedValue(10) },
     nightAuditSnapshot: { upsert: vi.fn().mockResolvedValue({}) },
+    nightAuditAnomaly: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    $queryRaw: vi.fn().mockResolvedValue([]),
     businessDayState: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({}),
@@ -192,12 +199,12 @@ function buildFakes() {
     withTenant: vi.fn(async (_ctx, fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
-  const service = new NightAuditService(prisma as never, events as never);
+  const service = new NightAuditService(prisma as never, events as never, new AnomalyService(), new AnomalyMetrics());
   return { service, tx, events, getRunRow: () => runRow };
 }
 
 describe('NightAuditService — full pipeline integration', () => {
-  it('walks all 6 steps end-to-end and reports totals from each step', async () => {
+  it('walks all 7 steps end-to-end and reports totals from each step', async () => {
     const { service, tx, events } = buildFakes();
     const summary = await service.run(user, 'corr', {
       propertyId: PROPERTY_ID,
@@ -209,11 +216,11 @@ describe('NightAuditService — full pipeline integration', () => {
     expect(tx.folioEntry.create).toHaveBeenCalledTimes(3);
     expect(tx.businessDayState.create).toHaveBeenCalledOnce();
 
-    // 1 run_started + 6 step_completed + 1 run_completed.
+    // 1 run_started + 7 step_completed (incluye DETECT_ANOMALIES) + 1 run_completed.
     const types = events.publish.mock.calls.map((c) => c[0]);
     expect(types[0]).toBe('night_audit.run_started');
     expect(types.at(-1)).toBe('night_audit.run_completed');
-    expect(types.filter((t) => t === 'night_audit.step_completed')).toHaveLength(6);
+    expect(types.filter((t) => t === 'night_audit.step_completed')).toHaveLength(7);
 
     // Totals propagated from each step into NightAuditRun.totals.
     expect(summary.totals.roomChargesPosted).toBe(1);
