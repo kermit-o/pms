@@ -183,6 +183,8 @@ Claude Code does NOT say "done" until ALL of these are true:
 - [ ] Migration is forward-only and safe under concurrent writes (expand,
       backfill in code if needed, never destructive in same step).
 - [ ] Commit pushed to the feature branch with a clear message.
+- [ ] **Entry appended to `docs/DELIVERY-LOG.md`** (newest at top, strict
+      format per the log's §1, type from the catalog). No "done" without log.
 
 If something blocks DoD → say so explicitly. Never report green when it isn't.
 
@@ -411,9 +413,11 @@ In order of authority:
 1. Active law / regulation (GDPR, PCI, SES.HOSPEDAJES). Cannot be violated.
 2. This file (`CLAUDE.md`).
 3. `docs/PROJECT.md` — product direction & sprint state.
-4. Existing ADRs in `docs/adr/`. To override, write a new ADR superseding.
-5. The current conversation with the user. If it contradicts the above, ask.
-6. Generic best practices.
+4. `docs/DELIVERY-LOG.md` — what has actually been done. Use it to ground
+   "do we already have X?" questions before implementing anything.
+5. Existing ADRs in `docs/adr/`. To override, write a new ADR superseding.
+6. The current conversation with the user. If it contradicts the above, ask.
+7. Generic best practices.
 
 ---
 
