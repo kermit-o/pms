@@ -38,6 +38,19 @@ export interface AdapterResult {
   telemetry?: AdapterTelemetry;
 }
 
+/**
+ * Hooks opcionales que el service pasa al adapter para visibilidad
+ * incremental durante el agentic loop. Se invocan sincronamente cuando
+ * el adapter detecta un tool_use read-only y cuando completa la
+ * ejecucion. El service los reenvia al SSE.
+ *
+ * En modo no-stream se pasan undefined y el adapter los ignora.
+ */
+export interface AdapterCallbacks {
+  onToolUse?: (tool: string) => void;
+  onToolResult?: (tool: string, ok: boolean) => void;
+}
+
 export interface CopilotAdapter {
   readonly name: 'anthropic' | 'stub';
   propose(
@@ -45,5 +58,6 @@ export interface CopilotAdapter {
     user: { tenantId: string; sub: string; roles: string[] },
     correlationId: string,
     latestUserMessage: string,
+    callbacks?: AdapterCallbacks,
   ): Promise<AdapterResult>;
 }

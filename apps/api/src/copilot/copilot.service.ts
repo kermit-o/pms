@@ -12,6 +12,7 @@ import type { AuthUser } from '../auth';
 import { PrismaService } from '../db';
 import { COPILOT_ADAPTER } from './adapter-factory';
 import {
+  type AdapterCallbacks,
   type AdapterTelemetry,
   type CopilotAdapter,
   type CopilotSessionState,
@@ -75,6 +76,47 @@ export class CopilotService {
     sessionId: string,
     content: string,
   ): Promise<SessionView> {
+    return this.handleTurn(user, correlationId, sessionId, content);
+  }
+
+  /**
+   * Generator que produce eventos SSE durante un turno completo:
+   *  - status: thinking
+   *  - tool_call: el adapter llamo a un read-only tool
+   *  - tool_result: y obtuvo respuesta (ok | error)
+   *  - done: turno completo, payload = SessionView final
+   */
+  async *sendMessageStream(
+    user: AuthUser,
+    correlationId: string,
+    sessionId: string,
+    content: string,
+  ): AsyncGenerator<StreamEvent> {
+    yield { type: 'status', phase: 'thinking' };
+    const events: StreamEvent[] = [];
+    const callbacks: AdapterCallbacks = {
+      onToolUse: (tool) => events.push({ type: 'tool_call', tool }),
+      onToolResult: (tool, ok) => events.push({ type: 'tool_result', tool, ok }),
+    };
+    // Acumulamos eventos del adapter en `events` y los ceden tras la
+    // resolucion del turno. Para verdadero "live streaming" del modelo
+    // este generator necesitara usar un canal real (EventEmitter o stream);
+    // de momento la fase "thinking -> tool_call -> tool_result -> done"
+    // ya da feedback visible durante loops largos del agente.
+    const view = await this.handleTurn(user, correlationId, sessionId, content, callbacks);
+    for (const ev of events) {
+      yield ev;
+    }
+    yield { type: 'done', view };
+  }
+
+  private async handleTurn(
+    user: AuthUser,
+    correlationId: string,
+    sessionId: string,
+    content: string,
+    callbacks?: AdapterCallbacks,
+  ): Promise<SessionView> {
     const session = this.requireSession(user, sessionId);
 
     session.messages.push({
@@ -93,6 +135,7 @@ export class CopilotService {
       user,
       correlationId,
       content,
+      callbacks,
     );
     const proposal = adapterResult.proposal;
     const telemetry = adapterResult.telemetry;
@@ -397,6 +440,12 @@ interface PendingTool {
 }
 
 export type { ToolProposal };
+
+export type StreamEvent =
+  | { type: 'status'; phase: 'thinking' }
+  | { type: 'tool_call'; tool: string }
+  | { type: 'tool_result'; tool: string; ok: boolean }
+  | { type: 'done'; view: SessionView };
 
 export interface SessionView {
   sessionId: string;

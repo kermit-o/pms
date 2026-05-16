@@ -7,6 +7,7 @@ import type { AuthUser } from '../auth';
 import type { Env } from '../config/env.schema';
 import { type AnyToolName, ToolResolver } from './tool-resolver';
 import type {
+  AdapterCallbacks,
   AdapterResult,
   AdapterTelemetry,
   CopilotAdapter,
@@ -58,6 +59,7 @@ export class AnthropicAdapter implements CopilotAdapter {
     user: AuthUser,
     correlationId: string,
     _latestUserMessage: string,
+    callbacks?: AdapterCallbacks,
   ): Promise<AdapterResult> {
     if (!this.apiKey) {
       throw new Error('AnthropicAdapter.propose called without ANTHROPIC_API_KEY');
@@ -145,13 +147,18 @@ export class AnthropicAdapter implements CopilotAdapter {
       }
 
       // Read-only: ejecuta silenciosamente, alimenta el resultado al LLM.
+      // Notifica al observador (SSE) que estamos llamando un tool.
+      callbacks?.onToolUse?.(toolName);
       let toolResultText: string;
+      let toolOk = true;
       try {
         const result = await this.resolver.execute(toolName, toolUse.input, user, correlationId);
         toolResultText = truncateJson(result);
       } catch (err) {
         toolResultText = `ERROR: ${(err as Error).message}`;
+        toolOk = false;
       }
+      callbacks?.onToolResult?.(toolName, toolOk);
 
       conv.push({ role: 'assistant', content: resp.content });
       conv.push({

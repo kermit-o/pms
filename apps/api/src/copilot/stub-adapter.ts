@@ -27,6 +27,7 @@ export class StubAdapter implements CopilotAdapter {
     _correlationId: string,
     latestUserMessage: string,
   ): Promise<AdapterResult> {
+    // El stub no encadena tools internamente; los callbacks se ignoran.
     return { proposal: stubProposal(latestUserMessage) };
   }
 }
