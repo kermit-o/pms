@@ -18,6 +18,8 @@ export {
   HousekeepingTaskType,
   LostFoundStatus,
   CopilotMessageRole,
+  NightAuditAnomalyKind,
+  NightAuditAnomalySeverity,
   GuaranteeType,
   GuaranteeStatus,
 } from '@prisma/client';
@@ -25,6 +27,7 @@ export {
 export type {
   Tenant,
   CopilotMessage,
+  NightAuditAnomaly,
   User,
   Property,
   AuditLog,
