@@ -836,3 +836,44 @@ funcionando idéntico.
 **Desactivarlo.** No hay flag server-side: si el supervisor del hotel no
 quiere voz, puede pedir al user agent que bloquee el permiso de
 micrófono.
+
+### 16.4 Forecasting (Holt) — Sprint 6 W4
+
+**Modelo.** Double exponential smoothing (Holt) sin estacionalidad. Grid
+search alpha/beta minimizando SSE in-sample. Bandas 95% sobre desviación
+estándar de residuales escaladas por √horizonte.
+
+**Métricas soportadas:**
+
+| metric    | Fuente                                                  |
+|-----------|--------------------------------------------------------|
+| occupancy | `night_audit_snapshots[MANAGER].occupancyPct`           |
+| adr       | `night_audit_snapshots[MANAGER].adr`                    |
+| revpar    | `night_audit_snapshots[MANAGER].revpar`                 |
+| pickup    | `reservations` con `DATE(created_at) = arrival_date`   |
+
+**Ventana de entrenamiento:** 365 días (fallback 90 si la propiedad es
+nueva). Si la serie tiene menos de 14 puntos, el servicio devuelve
+`series=[]` con un mensaje pidiendo más historia.
+
+**Endpoint:**
+
+```
+GET /night-audit/forecast?propertyId=...&horizon=30&metric=occupancy
+```
+
+Devuelve `{ series, history, modelFit: { alpha, beta }, rmse, mape, message }`.
+RMSE/MAPE permiten al supervisor calibrar la confianza.
+
+**UI.** `/dashboard/forecast` — selector de property + metric + horizonte
+(7/14/30/60/90), gráfico SVG inline con bandas de confianza, tabla con
+puntos pronosticados.
+
+**MCP tool.** `forecast_demand` está expuesto al copilot (read-only,
+auto-exec). Permite preguntas tipo "qué ocupación esperas el viernes" o
+"calcula ADR del próximo mes".
+
+**Calidad del modelo.** Holt sin estacionalidad infraestima estacionalidad
+semanal (fin de semana). Mejora obvia para V2: añadir componente seasonal
+(Holt-Winters propiamente dicho) cuando tengamos ≥90 días de historia
+realista por hotel piloto.
