@@ -955,3 +955,36 @@ Dashboard o un nuevo SetupIntent → Charge on-session).
 **Trazabilidad.** El `PaymentIntent.id` y `latest_charge` se guardan en
 `folio_entries.attributes.stripePaymentIntentId` y `.stripeChargeId`. El
 audit log del folio capta la creación del entry.
+
+### 16.7 Voice-first Front Office — Sprint 7 W1
+
+**Dónde aparece.** En `/reservations/[id]`, cuando el folio está abierto,
+sobre el bloque de "Añadir cargo / Registrar pago".
+
+**Cómo se usa.** Pulsa el micro, dicta una frase tipo:
+- "Carga 35 a la 305 por minibar" → pre-rellena el form de cargo.
+- "Cobra 50 en efectivo por extras" → pre-rellena el form de pago con
+  paymentMethod=CASH.
+
+Luego revisas y pulsas el botón habitual ("Añadir cargo" / "Registrar
+pago"). **Nada se ejecuta sin tu confirmación** (ADR-020).
+
+**Gramática V1.** Parser regex puro (`apps/web-fo/src/lib/voice-fo-grammar.ts`):
+
+| Frase de ejemplo                              | Intent          |
+|----------------------------------------------|-----------------|
+| `carga 35 a la 305 por limpieza`             | `add_charge`    |
+| `cargo de cincuenta euros desayuno`          | `add_charge`    |
+| `cobra 100 en efectivo`                      | `add_payment`   |
+| `pago de treinta y cinco con tarjeta`        | `add_payment`   |
+
+Si no detecta intent claro, muestra el transcript y deja al operador
+escribir. Los números 0-99 en palabras (`treinta y cinco`) se entienden.
+
+**Privacidad.** Idéntica al W3 HSK — audio procesado en el browser, jamás
+sale del dispositivo. La descripción textual final viaja a la API como
+parte del form normal.
+
+**Walk-in vía voz.** No incluido en V1. El wizard de 3 pasos en
+`/reservations/new` requiere parser más complejo (nombre, fechas, room
+type). Queda como follow-up.

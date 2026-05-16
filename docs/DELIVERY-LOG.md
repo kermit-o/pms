@@ -80,6 +80,62 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [FEAT] · Sprint 7 W1 — Voice-first FO (folio)
+
+**Scope:** `apps/web-fo`, `RUNBOOK.md`
+**Branch:** `claude/s7-w1-voice-fo`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- **Parser.** `apps/web-fo/src/lib/voice-fo-grammar.ts`:
+  `parseVoiceFoCommand(text)` devuelve intent tipado
+  `add_charge | add_payment` o null. Funcion pura. Normaliza acentos,
+  acepta números 0-99 en palabras ES (`treinta y cinco`), euros (`35€`,
+  `35 euros`), describe verbos cobrar/pagar como pago y carga/cargo como
+  cargo, infiere paymentMethod por keywords (`efectivo` → CASH,
+  `tarjeta` → CARD, `transferencia` → BANK_TRANSFER), extrae habitación
+  (`la 305`, `habitacion 7`) y description (`por limpieza`).
+- **UI.** `apps/web-fo/src/components/FolioVoiceButton.tsx` (client):
+  botón de micro + transcript + preview del intent + buttons "Aplicar al
+  cargo" / "Aplicar al pago". Pre-rellena los inputs de los forms
+  server-action existentes vía DOM querySelector + native `value` setter
+  + dispatch input/change. Fallback silencioso si el browser no soporta
+  Web Speech API.
+- **Integración.** Sección folio en `/reservations/[id]` envuelve los
+  forms en `#folio-forms .folio-forms-grid` y monta el botón encima.
+  Server actions intactas.
+- **RUNBOOK §16.7** documenta uso, gramática V1, privacidad y el
+  follow-up de walk-in.
+
+**Por qué.**
+
+Cierra el primer entregable de Sprint 7. Una recepcionista con manos
+ocupadas (teléfono / huésped) dicta el cargo y revisa antes de enviar.
+Audio nunca sale del dispositivo (igual que W3 HSK). Cero cambios al
+backend — los endpoints existentes capturan los inputs pre-rellenados.
+
+**Archivos clave.**
+
+- `apps/web-fo/src/lib/voice-fo-grammar.ts`
+- `apps/web-fo/src/components/FolioVoiceButton.tsx`
+- `apps/web-fo/src/app/reservations/[id]/page.tsx` (import + monta el
+  botón + envuelve los forms)
+- `RUNBOOK.md` §16.7
+
+**Sigue pendiente** (fuera de scope W1):
+
+- Walk-in vía voz en `/reservations/new`: requiere parser de nombre +
+  fechas + room type y un orquestador del wizard de 3 pasos. Lo deferimos
+  a W1.1 cuando alguien lo pida.
+- Tests del parser: web-fo no tiene vitest; añadirlo solo por esto es
+  scope deviation (igual que W3 HSK). El parser es pequeño y type-safe;
+  la cobertura llegará vía e2e Playwright cuando montemos fake media.
+- Voice-first en /folio del cardex (cuando exista UI específica para
+  cargos no asociados a reservation).
+
+---
+
 ## 2026-05-16 · [DOCS] · SPRINT-7-PLAN.md — Discovery formal
 
 **Scope:** docs
