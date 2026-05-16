@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Task } from '@/lib/api';
 import { bootstrap, enqueue, flush, size, subscribe } from '@/lib/offline-queue';
+import { VoiceButton } from './voice-button';
+import type { RoomStatusKeyword } from './voice-keywords';
 
 interface Props {
   task: Task;
@@ -111,6 +113,11 @@ export function TaskActions({ task }: Props) {
       )}
 
       {isInProgress && (
+        <>
+          <VoiceButton
+            onTranscript={(text) => setNotes((prev) => (prev ? `${prev} ${text}` : text))}
+            onStatusKeyword={(status: RoomStatusKeyword) => setResultingRoomStatus(status)}
+          />
         <form
           className="space-y-3"
           onSubmit={(e) => {
@@ -166,6 +173,7 @@ export function TaskActions({ task }: Props) {
             Finalizar y reportar
           </button>
         </form>
+        </>
       )}
 
       {isTerminal && (

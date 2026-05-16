@@ -80,6 +80,57 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [FEAT] · Cerrar Sprint 6 W3 — Voice-first HSK
+
+**Scope:** `apps/web-hsk`, `RUNBOOK.md`
+**Branch:** `claude/hsk-w3-voice`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo `voice-keywords.ts`: parser puro que mapea transcript ES a
+  `RoomStatusKeyword ∈ {CLEAN, DIRTY, INSPECTED, OUT_OF_ORDER}`.
+  Reglas robustas a acentos, género/plural y typos típicos
+  (`inspeccionada` / `inspecionada`); `OUT_OF_ORDER` prioritario sobre
+  `CLEAN` cuando coinciden ambos.
+- Nuevo `voice-button.tsx` (client component): boton flotante grande
+  con Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`,
+  `lang=es-ES`, `continuous=true`, `interimResults=true`). Pulse-aria,
+  feedback con interim transcript, fallback silencioso si el browser
+  no soporta. **Audio nunca sale del dispositivo** (PCI/GDPR ok por
+  diseño, nada que transmitir).
+- `task-actions.tsx` integra el botón cuando la tarea esta `IN_PROGRESS`:
+  cada transcript final se concatena al campo `notas`; si dispara
+  keyword, auto-selecciona el `resultingRoomStatus`.
+- RUNBOOK §16.3 documenta uso, privacidad, soporte de browsers y
+  cómo desactivarlo a nivel user agent.
+
+**Por qué.**
+
+Sprint 6 DoD #3 — manos libres en el carro de limpieza. La camarera
+puede dictar "habitación 305 limpia, falta toalla" sin sacar el guante
+del bolsillo. Audio local cierra la pregunta GDPR (no hay transferencia
+biométrica).
+
+**Archivos clave.**
+
+- `apps/web-hsk/src/app/task/[id]/voice-keywords.ts`
+- `apps/web-hsk/src/app/task/[id]/voice-button.tsx`
+- `apps/web-hsk/src/app/task/[id]/task-actions.tsx`
+- `RUNBOOK.md` §16.3
+
+**Sigue pendiente** (fuera de scope W3):
+
+- E2E Playwright con `--use-fake-ui-for-media-stream` y stream WAV
+  sintético (plan §4.3). El parser es ~30 líneas y typesafe; coverage
+  llegará vía el e2e cuando montemos la infra de fake media. La opción
+  intermedia (añadir vitest a web-hsk solo para este parser) se descartó
+  porque introduciría una nueva devDep contra CLAUDE.md §8.
+- Visualización de waveform real (hoy solo es un pulse). Trivial de
+  añadir con `AnalyserNode` cuando el feedback lo pida.
+
+---
+
 ## 2026-05-16 · [FEAT] · Cerrar Sprint 6 W2 — Anomaly Detection NA
 
 **Scope:** `apps/api/night-audit`, `apps/web-fo`, `packages/db`, `infra/grafana`
