@@ -80,6 +80,53 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [FEAT] · Sprint 7 W4 — Seed sintético multi-hotel
+
+**Scope:** `scripts`, `RUNBOOK.md`
+**Branch:** `claude/s7-w4-seed`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- `scripts/seed-synthetic.ts`: CLI parametrizable que genera N
+  properties × M habitaciones × K reservas/mes × H meses de historia
+  con estacionalidad realista (jul/ago 1.5×, ene/feb 0.55×) y status
+  coherentes con la fecha (CHECKED_OUT pasadas, CHECKED_IN actuales,
+  PENDING/CONFIRMED futuras, ~8% CANCELLED, ~4% NO_SHOW). Folio
+  entries por noche, payment final en CHECKED_OUT. Membership levels
+  Gold/Platinum/VIP en ~25% de huéspedes. Agencia/Empresa en
+  fracciones realistas.
+- LCG determinista (`--seed`) para reproducibilidad.
+- Salvaguardas: aborta contra hosts productivos (`fly.dev`,
+  `flycast`, RDS, Supabase, Neon) salvo `--force-prod`.
+- Todo lo generado lleva `attributes.synthetic = true` para `--reset`
+  selectivo.
+- RUNBOOK §17 documenta uso, flags, qué genera y limpieza.
+
+**Por qué.**
+
+Sprint 7 §7 ordena W4 antes que W2 (memoria semántica) y W3 (CV) porque
+ambos dependen de tener datos realistas. Decisión PO recogida en
+SPRINT-7-PLAN: el sprint procede sin piloto operando — el seed cubre
+esa falta. También sirve para demos comerciales (3 hoteles con 2 años
+de historia se ven creíbles) y regresiones reproducibles.
+
+**Archivos clave.**
+
+- `scripts/seed-synthetic.ts`
+- `RUNBOOK.md` §17
+
+**Sigue pendiente** (fuera de scope W4):
+
+- Variabilidad por dayofweek (fin de semana vs entre semana): hoy la
+  distribución es uniforme dentro del mes.
+- Generar fotos sintéticas lost-found para W3 CV (cuando lleguemos a
+  W3 lo añadimos como `seed-synthetic-photos.ts` o flag opcional).
+- Cardex documentos (DNI/pasaporte sintéticos): hoy solo nombre +
+  email. El SES.HOSPEDAJES sender lo necesitaría en producción.
+
+---
+
 ## 2026-05-16 · [FEAT] · Sprint 7 W1 — Voice-first FO (folio)
 
 **Scope:** `apps/web-fo`, `RUNBOOK.md`
