@@ -204,9 +204,6 @@ function ForecastChart({ history, series, metric }: ChartProps) {
   const upperPath = series
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(offset + i)} ${yScale(p.upper)}`)
     .join(' ');
-  const lowerPath = series
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(offset + i)} ${yScale(p.lower)}`)
-    .join(' ');
   const bandPath = `${upperPath} L ${xScale(offset + series.length - 1)} ${yScale(
     series[series.length - 1]!.lower,
   )} ${series

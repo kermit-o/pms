@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { CopilotSession } from '@/lib/api';
+import { streamCopilotMessage } from '@/lib/copilot-stream';
 
 /**
  * Aubergine FO copilot. The component owns its own session lifecycle:
@@ -20,6 +21,9 @@ export default function CopilotSidebar() {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Trazas en vivo del agentic loop: "Pensando…", "→ list_room_types",
+   *  "← list_room_types ok". Se vacia cuando llega el evento `done`. */
+  const [streamLog, setStreamLog] = useState<string[]>([]);
 
   const ensureSession = useCallback(async (): Promise<string> => {
     if (session) return session.sessionId;
@@ -62,17 +66,32 @@ export default function CopilotSidebar() {
     if (!draft.trim() || busy) return;
     setError(null);
     setBusy(true);
+    setStreamLog([]);
+    const content = draft.trim();
+    setDraft('');
     try {
       const sessionId = await ensureSession();
-      const res = await fetch(`/api/copilot/sessions/${sessionId}/messages`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: draft.trim() }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const updated = (await res.json()) as CopilotSession;
-      setSession(updated);
-      setDraft('');
+      for await (const ev of streamCopilotMessage(sessionId, content)) {
+        switch (ev.type) {
+          case 'status':
+            setStreamLog((l) => [...l, 'Pensando…']);
+            break;
+          case 'tool_call':
+            setStreamLog((l) => [...l, `→ ${ev.tool}`]);
+            break;
+          case 'tool_result':
+            setStreamLog((l) => [...l, `← ${ev.tool} ${ev.ok ? 'ok' : 'error'}`]);
+            break;
+          case 'done':
+            setSession(ev.view);
+            setStreamLog([]);
+            break;
+          case 'error':
+            setError(ev.message);
+            setStreamLog([]);
+            break;
+        }
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -174,6 +193,18 @@ export default function CopilotSidebar() {
                 )}
               </div>
             ))}
+            {streamLog.length > 0 && (
+              <div
+                className="mr-8 rounded-2xl rounded-bl-sm bg-aubergine-100 px-3 py-2 text-xs text-aubergine-700"
+                aria-live="polite"
+              >
+                {streamLog.map((line, i) => (
+                  <div key={i} className="font-mono">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            )}
             {error && (
               <div className="rounded-lg bg-rose-50 p-2 text-xs text-rose-800 ring-1 ring-rose-100">
                 {error}

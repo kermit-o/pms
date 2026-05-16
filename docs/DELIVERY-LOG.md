@@ -80,6 +80,69 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [FEAT] · Cerrar Sprint 6 W5 — Reservation copilot embebido (streaming)
+
+**Scope:** `apps/web-fo`, `RUNBOOK.md`
+**Branch:** `claude/copilot-w5-embedded`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo helper `apps/web-fo/src/lib/copilot-stream.ts`: parser SSE
+  `streamCopilotMessage(sessionId, content)` sobre fetch +
+  ReadableStream (EventSource no soporta POST). Yields eventos
+  tipados `{status|tool_call|tool_result|done|error}` listos para el
+  consumer.
+- Proxy `apps/web-fo/src/app/api/copilot/sessions/[id]/messages/route.ts`
+  ahora detecta `?stream=true` y hace passthrough del cuerpo SSE de la
+  API (con auth bearer del session). Sin stream, conserva el JSON
+  comportamiento previo.
+- `CopilotSidebar.send()` migrado a streaming: muestra una traza viva
+  en el drawer ("Pensando…", "→ tool", "← tool ok") mientras corre el
+  agentic loop; al recibir `done` reemplaza con el `SessionView` final.
+  Atajo ⌘K se mantiene; confirmación inline `PendingToolCard` también.
+- `RUNBOOK.md` §16.5: documentación de dónde aparece el drawer,
+  streaming, confirmación inline y limitaciones (phase events siguen
+  acumulándose por turno; token-level deltas pendientes).
+
+**Por qué.**
+
+Sprint 6 DoD #5. El operador ya tenía el drawer y la confirmación
+inline desde Sprint 5; lo que faltaba era hacerlo visible mientras la
+LLM razona. Importante con Sonnet 4.6 + agentic loop: una pregunta como
+"reserva walk-in para Juan Pérez del 10 al 12 en doble estándar" puede
+encadenar `list_room_types → search_availability_by_type →
+create_reservation` y tarda 5-10s. Sin feedback el operador piensa que
+se colgó.
+
+`CopilotSidebar` ya estaba montado globalmente desde el root layout, por
+lo que `/calendar` y `/reservations/new` heredan el drawer sin trabajo
+extra.
+
+**Archivos clave.**
+
+- `apps/web-fo/src/lib/copilot-stream.ts`
+- `apps/web-fo/src/app/api/copilot/sessions/[id]/messages/route.ts`
+- `apps/web-fo/src/components/CopilotSidebar.tsx`
+- `RUNBOOK.md` §16.5
+
+**Sigue pendiente** (fuera de scope W5):
+
+- Live emission de phase events durante el loop (el server los acumula y
+  los emite tras la resolución; el cliente ya está preparado para
+  consumirlos incrementalmente cuando el server lo haga).
+- Token-level deltas (`event: delta`): el contrato SSE ya los acepta;
+  falta cambiar `client.beta.messages.create` por `.stream(...)` en
+  `AnthropicAdapter`.
+- E2E Playwright que verifica streaming + confirmación inline en
+  `/calendar` y `/reservations/new`.
+
+**Sprint 6 IA V1 completo (W1+W2+W3+W4+W5).** Las 5 ramas siguen sin
+mergear a `main` — pendiente de validación del piloto antes de
+consolidar.
+
+---
+
 ## 2026-05-16 · [FEAT] · Cerrar Sprint 6 W4 — Forecasting (Holt)
 
 **Scope:** `apps/api/night-audit`, `packages/mcp-tools`, `apps/web-fo`,
