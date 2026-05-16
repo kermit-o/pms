@@ -80,6 +80,49 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [DOCS] · Sincronizar PROJECT.md con el estado real del repo
+
+**Scope:** docs
+**Branch:** `claude/adr-023-cdg-region`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- `PROJECT.md §0`: nueva entrada describiendo el track "Commercial-grade"
+  desarrollado en `claude/adr-023-cdg-region` (reservations UI v2 Iter A,
+  calendar v2, wizard 3-step, garantía/cancelación Corte A, groups Fase 1-2,
+  Stripe SetupIntent Fase 1, process docs).
+- Estado del workstream Copilot de Sprint 6 marcado como en curso 🟢, con
+  los workstreams restantes (anomaly/voice/forecast/embedded) declarados
+  pendientes.
+- Branch de desarrollo actual actualizado: `claude/adr-023-cdg-region`
+  (antes apuntaba a `claude/sprint-6-plan`, obsoleto).
+- `§11` (reglas de trabajo): nuevas reglas 6-8 referencian `DELIVERY-LOG.md`
+  y `CLAUDE.md`; numeración corregida (idioma código → 9, idioma docs → 10).
+- Fecha de "Última actualización" → 2026-05-16.
+
+**Por qué.**
+
+`PROJECT.md` estaba congelado en 2026-05-07 declarando como "Fase actual"
+todo Sprint 6 IA V1 sin reflejar el track paralelo que hemos construido
+estas dos semanas. Eso forzaba a Claude Code a tirar de memoria de
+conversación en vez de la fuente de verdad, y a usuarios externos a
+ignorar lo que realmente está disponible en el repo.
+
+**Archivos clave.**
+
+- `PROJECT.md`
+
+**Sigue pendiente.**
+
+- Decidir si la rama `claude/adr-023-cdg-region` se mergea a `main` antes
+  o después de cerrar más workstreams Sprint 6.
+- Reservations UI v2 Iter B (schema fields Agencia/Empresa/VIP).
+- Stripe Fase 2 (cobro off-session no-show).
+- Workstreams Sprint 6: anomaly NA, voice HSK, forecast, embedded copilot.
+
+---
+
 ## 2026-05-16 · [DOCS] · Crear DELIVERY-LOG y anclarlo en CLAUDE.md
 
 **Scope:** docs, raíz
