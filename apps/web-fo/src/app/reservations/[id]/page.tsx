@@ -14,6 +14,7 @@ import {
   listRooms,
   updateGuarantee,
 } from '@/lib/api';
+import { NoShowChargeButton } from '@/components/NoShowChargeButton';
 import { StripeCaptureButton } from '@/components/StripeCaptureButton';
 import type { FolioDetail } from '@/lib/api';
 
@@ -38,6 +39,8 @@ interface ReservationDetail {
   guaranteeAmount: string | null;
   guaranteeReference: string | null;
   guaranteeDeadline: string | null;
+  stripeCardBrand: string | null;
+  stripeCardLast4: string | null;
   groupId: string | null;
   guests: Array<{
     isPrimary: boolean;
@@ -221,6 +224,29 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
         currency={detail.currency}
         onMarkSecured={markGuaranteeSecured}
       />
+
+      {detail.status === 'NO_SHOW' &&
+        detail.guaranteeStatus === 'SECURED' &&
+        detail.stripeCardLast4 && (
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-rose-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">
+              Cobro de no-show
+            </p>
+            <p className="mt-1 text-xs text-aubergine-700/60">
+              Stripe Fase 2 — carga directa a la tarjeta tokenizada. Idempotente:
+              re-pulsar no duplica el cargo.
+            </p>
+            <div className="mt-3">
+              <NoShowChargeButton
+                reservationId={reservationId}
+                defaultAmount={Number(detail.totalAmount) || 0}
+                currency={detail.currency}
+                cardBrand={detail.stripeCardBrand}
+                cardLast4={detail.stripeCardLast4}
+              />
+            </div>
+          </section>
+        )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Section title="Estancia">

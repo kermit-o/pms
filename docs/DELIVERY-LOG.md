@@ -80,6 +80,81 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [INTEGRATION] · Stripe Fase 2 — cobro off-session no-show
+
+**Scope:** `apps/api/payments`, `apps/web-fo`, `RUNBOOK.md`
+**Branch:** `claude/stripe-fase-2-noshow`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- **API.** `StripeService.chargeNoShow(user, cid, reservationId, { amount,
+  description? })`:
+  - Valida amount > 0, reserva existe, tarjeta tokenizada, folio OPEN.
+  - Idempotencia previa: si ya hay folio entry con `idempotencyKey
+    = stripe-no-show-{reservationId}`, devuelve `already_charged` sin
+    tocar Stripe.
+  - Crea `PaymentIntent` con `off_session: true, confirm: true`,
+    `customer` y `payment_method` del Fase 1; pasa `idempotencyKey` a
+    Stripe.
+  - Si `status=succeeded`, postea folio entry CHARGE vía `FolioService.
+    addCharge` (idempotente) y guarda `stripePaymentIntentId` +
+    `stripeChargeId` en `folio_entries.attributes`.
+  - Maneja `authentication_required` y `requires_action` → devuelve
+    `requires_action` para que el operador retome on-session.
+- `PaymentsModule` ahora importa `FolioModule` para resolver
+  `FolioService`.
+- **Endpoint** `POST /payments/stripe/reservations/:id/charge-no-show`
+  con DTO Zod inline (`{ amount: number > 0, description?: string }`),
+  roles `tenant_admin | front_desk`.
+- **UI web-fo.** Nuevo `NoShowChargeButton` (client component) en
+  `/reservations/[id]` cuando `status=NO_SHOW`, `guaranteeStatus=SECURED`
+  y `stripeCardLast4`: muestra brand+last4, input de amount (default =
+  totalAmount), feedback por status (succeeded / already_charged /
+  requires_action / failed). `router.refresh()` tras éxito.
+- **Proxy** `app/api/payments/charge-no-show/[id]/route.ts` + helper
+  `chargeNoShow` y tipo `NoShowChargeResult` en `lib/api.ts`.
+- **RUNBOOK §16.6** documenta endpoint, idempotencia, SCA, refund
+  (manual V2) y trazabilidad.
+- **Tests.** `stripe.service.spec.ts` — 5 casos: amount inválido,
+  already_charged, happy path con args correctos a Stripe, SCA, reserva
+  sin tarjeta. Mock global del SDK.
+
+**Por qué.**
+
+Cierra el corte comercial del módulo de payments. Fase 1 tokeniza la
+tarjeta y deja la reserva SECURED; Fase 2 cierra el ciclo cuando el
+huésped no llega — el hotel deja de comer la pérdida y el recepcionista
+no tiene que llamar al banco. Idempotencia obligatoria por PCI/UX (un
+operador nervioso puede dar doble clic). Refund queda V2 — no es
+bloqueante para piloto y el dashboard de Stripe ya cubre el caso de
+errores.
+
+**Archivos clave.**
+
+- `apps/api/src/payments/stripe.service.ts` (`chargeNoShow`)
+- `apps/api/src/payments/stripe.service.spec.ts` (nuevo, 5 tests)
+- `apps/api/src/payments/stripe.controller.ts` (endpoint + DTO inline)
+- `apps/api/src/payments/index.ts` (`PaymentsModule` importa FolioModule)
+- `apps/web-fo/src/components/NoShowChargeButton.tsx`
+- `apps/web-fo/src/app/reservations/[id]/page.tsx` (sección condicional)
+- `apps/web-fo/src/app/api/payments/charge-no-show/[id]/route.ts`
+- `apps/web-fo/src/lib/api.ts` (helper + tipo)
+- `RUNBOOK.md` §16.6
+
+**Sigue pendiente** (fuera de scope Fase 2):
+
+- Refund automatizado (`refund-no-show`): cuando el huésped reclama,
+  hoy hay que devolver desde el Stripe Dashboard y meter contra-cargo
+  manual. V3.
+- Manejo programático de SCA con un `confirm-no-show-intent` parecido
+  al de Fase 1 cuando `requires_action`. Hoy se redirige al operador a
+  hacerlo on-session.
+- Webhook subscription a `payment_intent.payment_failed` para reflejar
+  fallos asincrónicos (hoy todo es síncrono porque hacemos confirm:true).
+
+---
+
 ## 2026-05-16 · [FEAT] · Reservations UI v2 Iter B — Agencia/Empresa/VIP
 
 **Scope:** `packages/db`, `apps/api/reservations`, `apps/web-fo`

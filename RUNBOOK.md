@@ -917,3 +917,41 @@ real dura segundos, el progreso sí se ve incrementalmente. Mejora a
 **Token-level deltas del LLM.** Aún no expuestos. Requiere usar
 `client.beta.messages.stream()` dentro de `AnthropicAdapter`; el
 contrato SSE ya está listo para recibir un nuevo `event: delta`.
+
+### 16.6 Stripe Fase 2 — cobro off-session no-show
+
+**Cuándo aplica.** Reservas con `status=NO_SHOW`, `guaranteeStatus=SECURED`
+y `stripePaymentMethodId` no nulo (capturado en Fase 1).
+
+**Endpoint:** `POST /payments/stripe/reservations/:id/charge-no-show` con
+body `{ amount: number, description?: string }`. Devuelve:
+
+| status            | Significado                                          |
+|-------------------|-----------------------------------------------------|
+| `succeeded`       | PaymentIntent ok + folio entry creada                |
+| `already_charged` | Idempotente — re-pulsar no duplica                   |
+| `requires_action` | El banco pide SCA — operador toma in-person          |
+| `failed`          | Otro error (`error` con el message de Stripe)        |
+
+**Idempotencia.** El folio entry se posta con
+`idempotencyKey = stripe-no-show-{reservationId}`. Al PaymentIntent se le
+pasa `idempotencyKey = pi-stripe-no-show-{reservationId}` en el request a
+Stripe. Re-llamar el endpoint devuelve `already_charged`.
+
+**Refund.** No implementado en Fase 2. Si hay que devolver, hacerlo desde
+el Stripe Dashboard manualmente y reflejar el contra-cargo en el folio con
+una entrada CHARGE negativa. Refund automatizado queda para V3.
+
+**UI.** En `/reservations/[id]` aparece una sección "Cobro de no-show"
+sólo cuando se cumplen las condiciones. El operador confirma el monto
+(default = total de la reserva).
+
+**3DS / SCA.** Aunque el `SetupIntent` de Fase 1 verificó la tarjeta, el
+banco puede pedir SCA en el cargo off-session (regulación PSD2). Cuando
+ocurre, la API devuelve `requires_action`; la UI explica al operador que
+debe retomar el cobro con el huésped presente (por ahora vía Stripe
+Dashboard o un nuevo SetupIntent → Charge on-session).
+
+**Trazabilidad.** El `PaymentIntent.id` y `latest_charge` se guardan en
+`folio_entries.attributes.stripePaymentIntentId` y `.stripeChargeId`. El
+audit log del folio capta la creación del entry.
