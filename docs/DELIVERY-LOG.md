@@ -80,6 +80,44 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [DOCS] · SPRINT-7-PLAN.md — Discovery formal
+
+**Scope:** docs
+**Branch:** `claude/sprint-7-plan`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo `docs/SPRINT-7-PLAN.md` con 4 workstreams:
+  - **W1** Voice-first FO (cargos/walk-in dictados; reutiliza W3 HSK).
+  - **W2** Memoria semántica huésped (pgvector + RAG + tool MCP
+    `recall_guest_history`).
+  - **W3** Visión por computadora HSK (Claude Vision sobre foto post-clean;
+    persistencia en `housekeeping_tasks.attributes.inspection`).
+  - **W4** Seed sintético multi-hotel (`scripts/seed-synthetic.ts`) con 24
+    meses de historia realista — desbloquea W2/W3 sin esperar al piloto.
+- Decisión PO recogida: Sprint 7 procede **sin gating de piloto real**;
+  donde haga falta historial se genera vía W4.
+- Orden de ejecución sugerido: W1 → W4 → W2 → W3.
+
+**Por qué.**
+
+Sprint 6 cerró código pero los pilotos reales no están operando. Sprint 7
+necesita un plan formal antes de Build (per ciclo: Intake → Discovery →
+Design → Ready → Build). El plan también captura lo que NO entra (otros
+idiomas, audio en servidor, CV propio, GTM) para evitar drift en sesiones
+futuras.
+
+**Archivos clave.**
+
+- `docs/SPRINT-7-PLAN.md`
+
+**Sigue pendiente.**
+
+- Ejecutar W1-W4 en sus branches dedicadas.
+
+---
+
 ## 2026-05-16 · [INTEGRATION] · Stripe Fase 2 — cobro off-session no-show
 
 **Scope:** `apps/api/payments`, `apps/web-fo`, `RUNBOOK.md`
