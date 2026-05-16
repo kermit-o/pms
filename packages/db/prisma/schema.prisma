@@ -50,6 +50,7 @@ model Tenant {
   lostFoundItems      LostFoundItem[]
   devicePairings      DevicePairing[]
   cancellationPolicies CancellationPolicy[]
+  copilotMessages     CopilotMessage[]
 
   @@map("tenants")
 }
@@ -906,4 +907,45 @@ model DevicePairing {
   @@index([tenantId, targetUserId])
   @@index([tenantId, expiresAt])
   @@map("device_pairings")
+}
+
+// ----------------------------------------------------------------------------
+// Copilot messages — audit trail + cost observability. Sprint 6 W1.
+// Una fila por turn: USER, ASSISTANT, TOOL_USE, TOOL_RESULT. Persistido en
+// caliente (cada turno); rotacion via job NA cuando la politica del tenant
+// lo exija. Ver docs/SPRINT-6-PLAN.md §2.2.
+// ----------------------------------------------------------------------------
+
+model CopilotMessage {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  sessionId        String             @map("session_id") @db.Uuid
+  userId           String             @map("user_id") @db.Uuid
+  role             CopilotMessageRole
+  contentText      String?            @map("content_text")
+  toolName         String?            @map("tool_name")
+  toolInput        Json?              @map("tool_input")
+  toolResult       Json?              @map("tool_result")
+  model            String?
+  inputTokens      Int?               @map("input_tokens")
+  outputTokens     Int?               @map("output_tokens")
+  cacheReadTokens  Int?               @map("cache_read_tokens")
+  cacheWriteTokens Int?               @map("cache_write_tokens")
+  latencyMs        Int?               @map("latency_ms")
+  createdAt        DateTime           @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("copilot_messages")
+}
+
+enum CopilotMessageRole {
+  USER
+  ASSISTANT
+  TOOL_USE
+  TOOL_RESULT
+
+  @@map("copilot_message_role")
 }
