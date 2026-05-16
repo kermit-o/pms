@@ -8,6 +8,7 @@ const guestDataShape = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
   nationality: z.string().length(2).optional(),
+  membershipLevel: z.string().max(80).optional(),
 });
 
 const occupancyShape = z.object({
@@ -38,6 +39,8 @@ const baseReservationShape = z.object({
   notes: z.string().max(2000).optional(),
   walkIn: z.boolean().default(false),
   guarantee: guaranteeShape.optional(),
+  agencyName: z.string().max(200).optional(),
+  companyName: z.string().max(200).optional(),
 });
 
 export const UpdateGuaranteeDto = z.object({
@@ -67,6 +70,8 @@ export const PatchReservationDto = z
     ratePlanId: z.string().uuid().optional(),
     occupancy: occupancyShape.optional(),
     notes: z.string().max(2000).optional(),
+    agencyName: z.string().max(200).nullable().optional(),
+    companyName: z.string().max(200).nullable().optional(),
   })
   .refine((v) => !(v.arrival && v.departure) || v.departure > v.arrival, {
     message: 'departure must be after arrival',

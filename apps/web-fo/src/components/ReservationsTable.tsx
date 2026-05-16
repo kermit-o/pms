@@ -83,7 +83,14 @@ export function ReservationsTable({
                   )}
                 </Td>
                 <Td className="text-aubergine-700/70">{r.roomTypeCode ?? '—'}</Td>
-                <Td>{guest}</Td>
+                <Td>
+                  <span>{guest}</span>
+                  {r.primaryGuest?.membershipLevel && (
+                    <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-800 ring-1 ring-amber-200">
+                      {r.primaryGuest.membershipLevel}
+                    </span>
+                  )}
+                </Td>
                 <Td>{r.arrivalDate}</Td>
                 <Td>{r.departureDate}</Td>
                 <Td className="text-right">{nights}</Td>
@@ -99,7 +106,9 @@ export function ReservationsTable({
                 </Td>
                 <Td className="text-aubergine-700/70">{r.ratePlanCode ?? '—'}</Td>
                 <Td className="text-aubergine-700/70">
-                  {r.organizerName ?? <span className="text-aubergine-700/40">—</span>}
+                  {r.agencyName || r.companyName || r.organizerName || (
+                    <span className="text-aubergine-700/40">—</span>
+                  )}
                 </Td>
                 <Td>
                   {r.groupId ? (
