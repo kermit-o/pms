@@ -80,6 +80,50 @@ Una o dos frases.
 
 ---
 
+## 2026-05-17 · [DOCS] · SPRINT-9-PLAN.md — Email, Channel Manager, Onboarding, Anti-abuso
+
+**Scope:** docs
+**Branch:** `claude/sprint-9-plan`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo `docs/SPRINT-9-PLAN.md` con 4 workstreams enfocados a "encender
+  un hotel real sin operador Aubergine":
+  - **W1 Email real**: módulo notifications, provider Postmark V1
+    (REST), plantillas ES/EN (4 V1), consumer NATS idempotente,
+    catálogo de eventos nuevo (`email.send_requested`,
+    `reservation.confirmation_resend_requested`).
+  - **W2 Channel Manager**: provider abstracto + SiteMinder V1 (REST,
+    sin SDK), push avail+rates nightly + on-change, pull OTA bookings
+    via webhook con HMAC. Nueva tabla `channel_sync_runs` y columnas
+    en `properties`.
+  - **W3 Onboarding wizard self-service**: `/onboarding` en web-fo
+    (no app dedicada — scope discipline), endpoints públicos
+    `start/verify/setup`, Keycloak realm seed adaptado de
+    `scripts/keycloak-bootstrap.ts`. `tenants.onboarding_status`.
+  - **W4 Anti-abuso**: Cloudflare Turnstile (cero deps nuevas) en
+    `/book` y `/manage`, verificación server-side en API, IP blocklist
+    por property en `attributes.blockedIps`, ampliar RateLimitGuard
+    para slug+ip.
+- Orden propuesto: W1 → W4 → W3 → W2.
+- Decisión recogida: memoria semántica V1.1 (`openai` dep) sigue
+  bloqueada hasta aprobación PO — no entra S9, se difiere a S10.
+
+**Por qué.**
+
+Cierra el handoff §8 de Sprint 8. Tras S9, un hotel independiente
+puede operar Aubergine end-to-end con venta directa + OTAs sin
+nuestra intervención. Las nuevas deps están justificadas explícitamente
+en el plan: Postmark (1 dep, REST simple) para emails; cero deps para
+Turnstile y Channel Manager (REST nativo).
+
+**Archivos clave.**
+
+- `docs/SPRINT-9-PLAN.md`
+
+---
+
 ## 2026-05-17 · [FEAT] · Sprint 8 W4 — Manage my reservation
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `RUNBOOK.md`,
