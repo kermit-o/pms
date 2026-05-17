@@ -1,0 +1,41 @@
+# fly.toml — pms-web-ibe en Fly.io (region primaria cdg, ADR-023).
+#
+# Deploy desde la raiz del monorepo:
+#   flyctl deploy -c apps/web-ibe/fly.toml --dockerfile apps/web-ibe/Dockerfile
+#
+# Primera vez:
+#   flyctl apps create pms-web-ibe --org aubergine
+#
+# Sin secrets dedicados — el IBE no usa auth. La API publica vive en el mismo
+# private network (pms-api.internal). El dominio publico se configura por
+# DNS hacia esta app (un solo dominio cubre todos los hoteles via slug en URL).
+
+app = "pms-web-ibe"
+primary_region = "cdg"
+kill_signal = "SIGTERM"
+kill_timeout = "15s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3003"
+  NEXT_TELEMETRY_DISABLED = "1"
+  NEXT_PUBLIC_API_URL = "http://pms-api.internal:3000"
+
+[http_service]
+  internal_port = 3003
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"
+
+[deploy]
+  strategy = "rolling"

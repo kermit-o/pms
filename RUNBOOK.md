@@ -1204,3 +1204,43 @@ si aplica).
   (no hay flag específico V1 — `notes` lo registra).
 - `reservation.cancelled v1` con `reason = "Cancelada por el huésped
   desde IBE"` y `policyApplied = <policyName>`.
+
+### 20.7 App pública `apps/web-ibe` — Sprint 8 W2
+
+Next.js 15 standalone, sin auth, mobile-first. Sirve todos los hoteles
+via slug en URL (`/h/<slug>`). Una sola app para N properties.
+
+**Rutas V1:**
+
+| Ruta | Estado |
+|------|--------|
+| `/` | Landing con buscador de hotel |
+| `/h?slug=...` | Redirect a `/h/<slug>` |
+| `/h/<slug>` | Home del hotel + formulario de búsqueda |
+| `/h/<slug>/availability?arrival&departure&adults&children&lang` | Listado de tarifas |
+| `/h/<slug>/book` | (W3, pendiente) |
+| `/h/<slug>/manage` | (W4, pendiente) |
+| `/manage` | Redirector genérico |
+
+**i18n.** ES/EN sin librería externa — diccionario en
+`apps/web-ibe/src/lib/i18n.ts`, locale por `?lang=es|en` con default
+`es`. Migrar a `next-intl` cuando el catálogo crezca.
+
+**SEO.** Schema.org `Hotel` JSON-LD inyectado en `<head>` de cada
+hotel. Falta `LodgingReservation` (cuando exista la página de
+confirmación en W3).
+
+**Performance.** Build de Sprint 8 W2: First Load JS = 109 kB
+(objetivo < 200 kB cumplido). Páginas server-rendered on demand
+(`dynamic = 'force-dynamic'`) porque la disponibilidad varía por
+fecha.
+
+**Deploy.**
+
+```bash
+flyctl deploy -c apps/web-ibe/fly.toml --dockerfile apps/web-ibe/Dockerfile
+```
+
+DNS apuntando al app handle (`pms-web-ibe.fly.dev`). Para custom
+domain `book.<hotel>.es` por property → usar SSR redirect o un
+proxy CDN — diseño en Sprint 9.

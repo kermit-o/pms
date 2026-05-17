@@ -80,6 +80,69 @@ Una o dos frases.
 
 ---
 
+## 2026-05-17 · [FEAT] · Sprint 8 W2 — App pública `web-ibe`
+
+**Scope:** `apps/web-ibe` (nuevo), `RUNBOOK.md`
+**Branch:** `claude/s8-w2-web-ibe`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nueva app `apps/web-ibe`: Next.js 15 standalone, sin auth, mobile-first.
+- **Rutas V1:**
+  - `/` — landing con buscador de hotel por slug.
+  - `/h?slug=…` — redirect a `/h/<slug>`.
+  - `/h/<slug>` — home del hotel + formulario de búsqueda (fechas, PAX,
+    selector ES/EN).
+  - `/h/<slug>/availability?arrival&departure&adults&children&lang` —
+    listado de tarifas con CTA "Reservar" (a W3 cuando esté).
+  - `/manage` + `/h/<slug>/manage` — placeholders W4.
+- **i18n.** `lib/i18n.ts` con diccionario ES/EN sin libs externas.
+  Resuelve locale por `?lang=` con default `es`. Migrar a `next-intl`
+  cuando el catálogo crezca.
+- **SEO.** Schema.org `Hotel` JSON-LD inyectado en la home del hotel.
+- **API client** `lib/api.ts` sin auth — `getProperty`,
+  `searchAvailability`, `getReservation`.
+- **Performance.** Build Next 15: First Load JS = 109 kB (< 200 kB del
+  plan). Páginas con `dynamic = 'force-dynamic'` porque la
+  disponibilidad varía por fecha.
+- **Infra.** `Dockerfile` multi-stage standalone, `fly.toml` apuntando
+  a `pms-api.internal:3000`, port 3003. `next.config.mjs` con `output:
+  'standalone'` y `outputFileTracingRoot` para el monorepo.
+- **RUNBOOK §20.7** documenta rutas, i18n, SEO, performance y deploy.
+
+**Por qué.**
+
+Sprint 8 W2 — la cara visible del IBE. Decisiones: una sola app sirve
+todos los hoteles (multi-tenant por slug en URL); i18n sin lib para
+evitar dep nueva; SSR forzado en availability (no se puede cachear,
+varía por fecha). Build sale dentro del objetivo de Lighthouse.
+
+**Archivos clave.**
+
+- `apps/web-ibe/package.json` + `tsconfig.json` + `next.config.mjs` +
+  `tailwind.config.ts` + `postcss.config.mjs`
+- `apps/web-ibe/src/app/page.tsx` (landing)
+- `apps/web-ibe/src/app/h/[slug]/page.tsx` (hotel home)
+- `apps/web-ibe/src/app/h/[slug]/availability/page.tsx`
+- `apps/web-ibe/src/app/manage/page.tsx` + `apps/web-ibe/src/app/h/page.tsx`
+- `apps/web-ibe/src/lib/i18n.ts` + `apps/web-ibe/src/lib/api.ts`
+- `apps/web-ibe/Dockerfile` + `fly.toml`
+- `RUNBOOK.md` §20.7
+
+**Sigue pendiente** (W3/W4 + follow-ups):
+
+- **W3 Booking flow**: página `/h/<slug>/book`, Stripe Elements
+  on-session, confirmación.
+- **W4 Manage**: lookup por code+lastName, cancelación con política.
+- Schema.org `LodgingReservation` (espera a la página de confirmación).
+- Cookie de locale (hoy solo `?lang=`); proper hreflang en `<head>`.
+- Custom domain por property (`book.<hotel>.es` → diseño Sprint 9).
+- Lighthouse measurement real cuando esté deployado.
+- Tests e2e Playwright del flujo completo (W3 + W4 los necesitan).
+
+---
+
 ## 2026-05-17 · [FEAT] · Sprint 8 W1 — API pública IBE
 
 **Scope:** `packages/db`, `apps/api/public-ibe`, `RUNBOOK.md`
