@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Task } from '@/lib/api';
 import { bootstrap, enqueue, flush, size, subscribe } from '@/lib/offline-queue';
+import { InspectionPanel } from './inspection-panel';
 import { VoiceButton } from './voice-button';
 import type { RoomStatusKeyword } from './voice-keywords';
 
@@ -177,9 +178,12 @@ export function TaskActions({ task }: Props) {
       )}
 
       {isTerminal && (
-        <p className="rounded-xl bg-aubergine-50 p-4 text-center text-sm text-aubergine-700">
-          Tarea {task.status === 'COMPLETED' ? 'completada' : 'cancelada'}.
-        </p>
+        <>
+          <p className="rounded-xl bg-aubergine-50 p-4 text-center text-sm text-aubergine-700">
+            Tarea {task.status === 'COMPLETED' ? 'completada' : 'cancelada'}.
+          </p>
+          {task.status === 'COMPLETED' && <InspectionPanel taskId={task.id} />}
+        </>
       )}
     </div>
   );

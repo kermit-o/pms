@@ -116,6 +116,28 @@ export async function completeTask(
   });
 }
 
+export interface InspectionResult {
+  verdict: 'clean' | 'dirty' | 'damaged';
+  issues: string[];
+  confidence: number;
+  reasoning: string;
+  imageUrl: string | null;
+  hasInlinePhoto: boolean;
+  imageDataUrl: string | null;
+}
+
+export async function inspectTask(
+  accessToken: string | undefined,
+  taskId: string,
+  imageBase64: string,
+): Promise<InspectionResult> {
+  return apiFetch(`/housekeeping/tasks/${taskId}/inspect`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ imageBase64 }),
+  });
+}
+
 export async function reassignTask(
   accessToken: string | undefined,
   taskId: string,

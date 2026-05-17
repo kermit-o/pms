@@ -5,6 +5,10 @@
 > **Documento padre:** [`PROJECT.md`](../PROJECT.md) §10 fase 7 (GTM continuo) + Sprint 6 §11 (handoff).
 > **Predecesores:** Sprint 6 IA V1 cerrado en código (W1-W5). Track commercial-grade
 > (reservations Iter A/B + Stripe Fase 1/2) cerrado.
+>
+> **Estado:** Sprint 7 ✅ código mergeado en sus 4 ramas:
+> `claude/s7-w1-voice-fo`, `claude/s7-w4-seed`, `claude/s7-w2-memory`,
+> `claude/s7-w3-cv`. Sin merge a `main` todavía — pendiente validación PO.
 
 ---
 

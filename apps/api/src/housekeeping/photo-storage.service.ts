@@ -79,12 +79,26 @@ export class PhotoStorageService implements OnModuleInit {
     itemId: string,
     dataUrl: string,
   ): Promise<{ photoUrl: string | null; photoBase64: string | null }> {
+    return this.storeIn('lost-found', tenantId, itemId, dataUrl);
+  }
+
+  /**
+   * Variante generalizada — el caller controla el subdir (p.ej.
+   * 'hsk-inspection' para las fotos post-limpieza del Sprint 7 W3). El
+   * comportamiento es identico a `store`, solo cambia el path en S3.
+   */
+  async storeIn(
+    subdir: string,
+    tenantId: string,
+    itemId: string,
+    dataUrl: string,
+  ): Promise<{ photoUrl: string | null; photoBase64: string | null }> {
     if (this.driver === 'inline') {
       return { photoUrl: null, photoBase64: dataUrl };
     }
 
     const { mime, bytes, ext } = decodeDataUrl(dataUrl);
-    const key = `${tenantId}/lost-found/${itemId}.${ext}`;
+    const key = `${tenantId}/${subdir}/${itemId}.${ext}`;
 
     await this.s3Client!.send(
       new PutObjectCommand({
@@ -92,9 +106,6 @@ export class PhotoStorageService implements OnModuleInit {
         Key: key,
         Body: bytes,
         ContentType: mime,
-        // No ACL public — la URL publica viene del CDN o queda firmada al
-        // serializar. R2 y B2 no soportan ACL legacy; AWS S3 si pero
-        // preferimos URLs firmadas o CDN delante.
       }),
     );
 

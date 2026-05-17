@@ -1098,3 +1098,41 @@ documento). RLS por `tenant_id`. Cuando un huésped ejerce supresión, el
 un hook en `reservations.service.checkOut` que llame
 `ingestForGuest(primaryGuest)` para incorporar la estancia recién
 cerrada al recall.
+
+### 19. CV inspección HSK con Claude Vision — Sprint 7 W3
+
+**Cuándo aplica.** Tras completar una tarea HSK, la camarera o el
+supervisor abre la tarea, sube una foto del cuarto desde el panel
+"Inspección visual" y el sistema decide `clean / dirty / damaged`.
+
+**Endpoint:** `POST /housekeeping/tasks/:id/inspect` con body
+`{ imageBase64: "data:image/...;base64,..." }`. Estados aceptados:
+`IN_PROGRESS` o `COMPLETED` (retries idempotentes — la última inspección
+sobreescribe `attributes.inspection`).
+
+**Modelo:** `claude-sonnet-4-6` (o lo que configure `COPILOT_MODEL`)
+con un único bloque `image` + prompt en español pidiendo JSON estricto
+`{ verdict, issues, confidence, reasoning }`. Sin webhooks, llamada
+síncrona; suele tardar 2-5 s.
+
+**Persistencia:**
+- `housekeeping_tasks.attributes.inspection = { verdict, issues,
+  confidence, reasoning, model, imageUrl, hasInlinePhoto, reviewedAt,
+  reviewedByUserId }`.
+- Si `verdict === 'damaged'` y la tarea tiene `roomId`, la habitación
+  pasa a `OUT_OF_ORDER` server-side.
+- La foto se almacena vía `PhotoStorageService.storeIn('hsk-inspection',
+  …)`. Driver inline (dev) o S3 (prod) según `PHOTO_STORAGE_DRIVER`.
+
+**Privacidad / GDPR.** La foto sí cruza a Anthropic. Documentar al
+hotel como subprocesador del DPA cuando se active. En dev, sin
+`ANTHROPIC_API_KEY`, el endpoint responde 503 y el flujo manual
+(operador marca CLEAN/DIRTY a mano) sigue intacto.
+
+**Desactivarlo.** No hay flag dedicado server-side; basta con quitar
+`ANTHROPIC_API_KEY` o configurar `COPILOT_DRIVER=stub`. El frontend
+muestra el error 503 y el operador continúa con el flujo manual.
+
+**Coste estimado.** Sonnet-4-6 con una imagen 1024×768 + prompt
+corto ≈ 1500 tokens input + 200 output = ~$0.012/inspección. Para 100
+inspecciones/día/hotel ≈ $36/mes.

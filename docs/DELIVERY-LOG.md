@@ -80,6 +80,83 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [FEAT] · Sprint 7 W3 — CV inspección HSK con Claude Vision
+
+**Scope:** `apps/api/housekeeping`, `apps/web-hsk`, `RUNBOOK.md`
+**Branch:** `claude/s7-w3-cv`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- **API.** `InspectionService` nuevo:
+  - Acepta `data:image/...;base64,...`, valida tarea `IN_PROGRESS` o
+    `COMPLETED` (retries idempotentes).
+  - Guarda foto vía `PhotoStorageService.storeIn('hsk-inspection',
+    tenantId, taskId, dataUrl)` — driver inline en dev, S3 en prod.
+  - Llama `@anthropic-ai/sdk` (sin nueva dep — reusa el cliente del
+    copilot) con bloque `image` + prompt ES pidiendo JSON estricto
+    `{verdict, issues, confidence, reasoning}`.
+  - Parser `parseVerdict` strip-fences + valida shape + clamp
+    confidence + filtra issues no-string.
+  - Persiste en `housekeeping_tasks.attributes.inspection`. Si
+    `verdict === 'damaged'` y la tarea tiene `roomId`, marca la
+    habitación `OUT_OF_ORDER`.
+- **PhotoStorageService** ganó `storeIn(subdir, tenantId, id, dataUrl)`
+  generalizado. `store()` antiguo queda como wrapper retrocompatible.
+- **Endpoint** `POST /housekeeping/tasks/:id/inspect` con DTO
+  `InspectTaskDto` (data URL ≥50, ≤6 MB).
+- **HSK PWA.** `InspectionPanel` client component bajo la tarea
+  COMPLETED. Selector de foto (con `capture="environment"` para abrir
+  cámara), preview, llamada al proxy, feedback con verdict + reasoning
+  + lista de issues. Aviso especial cuando `damaged` (habitación OOO).
+- **Proxy** `apps/web-hsk/src/app/api/proxy/tasks/[id]/inspect/route.ts`
+  con auth bearer.
+- **Tests.** `inspection.service.spec.ts` — 6 casos del parser:
+  JSON plano, fences ```json…```, clamp confidence, verdict desconocido,
+  no-JSON, cap issues a 10. 44/44 verde en `src/housekeeping`.
+- **RUNBOOK §19** documenta endpoint, modelo, persistencia, privacidad
+  (foto cruza a Anthropic — subprocesador en DPA), desactivarlo y
+  coste estimado ($0.012/inspección con Sonnet-4-6).
+
+**Por qué.**
+
+Sprint 7 §4 cierra el último entregable del sprint. La camarera no
+tiene que decidir entre "limpia/sucia" subjetivamente — un modelo
+mira la foto y razona. Cuando ve daños reales (sábana rota, fuga,
+mueble roto), la habitación pasa a OOO automáticamente y mantenimiento
+recibe la alerta. ADR-020 mantenido — el modelo solo emite señal, el
+supervisor decide si actúa.
+
+**Archivos clave.**
+
+- `apps/api/src/housekeeping/inspection.service.ts` (+ spec)
+- `apps/api/src/housekeeping/photo-storage.service.ts` (`storeIn`)
+- `apps/api/src/housekeeping/dto.ts` (`InspectTaskDto`)
+- `apps/api/src/housekeeping/tasks.controller.ts` (endpoint)
+- `apps/api/src/housekeeping/housekeeping.module.ts` (provider)
+- `apps/web-hsk/src/app/task/[id]/inspection-panel.tsx`
+- `apps/web-hsk/src/app/task/[id]/task-actions.tsx` (mount)
+- `apps/web-hsk/src/app/api/proxy/tasks/[id]/inspect/route.ts`
+- `apps/web-hsk/src/lib/api.ts` (`inspectTask` + `InspectionResult`)
+- `RUNBOOK.md` §19
+
+**Sigue pendiente** (fuera de scope W3):
+
+- Dataset sintético `infra/test-fixtures/hsk-photos/*` con 50
+  imágenes etiquetadas (el plan §4.4 lo mencionaba). Se difiere al
+  momento en que un e2e de Playwright lo necesite. Hoy las pruebas
+  manuales se hacen con cualquier foto del móvil.
+- Modelo propio (no Claude Vision) cuando el dataset real acumule
+  1000+ inspecciones. ADR del sprint siguiente.
+- Re-inspect (volver a llamar tras corregir) ya funciona — sobreescribe
+  `attributes.inspection`. Documentar UX para hilo de inspecciones si
+  el operador lo pide.
+
+**Sprint 7 completo en código (W1+W2+W3+W4).** Las 4 ramas siguen sin
+merge a `main`.
+
+---
+
 ## 2026-05-16 · [FEAT] · Sprint 7 W2 — Memoria semántica huésped (tsvector V1)
 
 **Scope:** `packages/db`, `packages/mcp-tools`, `apps/api/copilot/memory`,
