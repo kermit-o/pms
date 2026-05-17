@@ -80,6 +80,44 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [DOCS] · SPRINT-8-PLAN.md — Online Booking Engine V1
+
+**Scope:** docs
+**Branch:** `claude/sprint-8-plan`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo `docs/SPRINT-8-PLAN.md` con 4 workstreams centrados en **IBE**:
+  - **W1** API pública (`/public/properties/:slug`, `/availability`,
+    `/reservations`, `/manage`) con rate-limit por IP+slug.
+  - **W2** App `apps/web-ibe` (Next.js 15, mobile-first, ES/EN,
+    schema.org markup, Lighthouse ≥ 90).
+  - **W3** Booking flow + Stripe Elements on-session (PaymentIntent
+    si el hotel exige prepago, SetupIntent + cobro al check-in si no).
+  - **W4** "Manage my reservation" — código + apellido para ver,
+    cancelar con política aplicada, reenviar email.
+- Migración mínima esperada: solo `properties.slug` unique + posible
+  `is_published`.
+- Orden: W1 → W2 → W3 → W4.
+
+**Por qué.**
+
+PROJECT.md §4.4 listaba "Booking engine propio" como V2 post-MVP.
+Decisión PO recogida ("Aubergine es un PMS con implementación de
+sistema de reservas online") lo eleva a entregable Sprint 8 — es lo
+único que falta para que el SaaS sea una alternativa real a Booking.com
+desde la perspectiva del hotelero.
+
+Channel Manager, modelo CV local, onboarding wizard, email service real
+y memoria semántica V1.1 quedan handoff explícito a Sprint 9.
+
+**Archivos clave.**
+
+- `docs/SPRINT-8-PLAN.md`
+
+---
+
 ## 2026-05-16 · [FEAT] · Sprint 7 W3 — CV inspección HSK con Claude Vision
 
 **Scope:** `apps/api/housekeeping`, `apps/web-hsk`, `RUNBOOK.md`
