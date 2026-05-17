@@ -13,10 +13,13 @@ import {
   ReservationSource,
   ReservationStatus,
 } from '@pms/db';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
+import { NotificationsService } from '../notifications';
 import { StripeService } from '../payments/stripe.service';
 import type { AuthUser } from '../auth';
+import type { Env } from '../config/env.schema';
 import type {
   AvailabilityQuery,
   CancelPublicReservationDto,
@@ -53,6 +56,8 @@ export class PublicIbeService {
     private readonly prisma: PrismaService,
     private readonly events: EventbusService,
     private readonly stripe: StripeService,
+    private readonly notifications: NotificationsService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
 
   async getProperty(slug: string): Promise<PublicProperty> {
@@ -178,6 +183,8 @@ export class PublicIbeService {
         where: { id: input.roomTypeId, propertyId: property.id, deletedAt: null },
         select: {
           id: true,
+          code: true,
+          name: true,
           maxOccupancy: true,
           defaultRate: true,
           defaultCurrency: true,
@@ -252,32 +259,50 @@ export class PublicIbeService {
         },
         select: { id: true, code: true, status: true, totalAmount: true, currency: true },
       });
-      return reservation;
+      return { reservation, roomTypeNameOrCode: roomType.name || roomType.code };
     });
+    const roomTypeNameOrCode = result.roomTypeNameOrCode;
+    const reservationOut = result.reservation;
 
     await this.events.publish('reservation.created', ctx, {
-      reservationId: result.id,
+      reservationId: reservationOut.id,
       propertyId: property.id,
-      code: result.code,
+      code: reservationOut.code,
       source: ReservationSource.DIRECT,
-      currency: result.currency,
+      currency: reservationOut.currency,
       arrivalDate: input.arrival,
       departureDate: input.departure,
       roomTypeId: input.roomTypeId,
       ratePlanId: input.ratePlanId ?? null,
       adults: input.occupancy.adults,
       children: input.occupancy.children,
-      totalAmount: result.totalAmount.toString(),
+      totalAmount: reservationOut.totalAmount.toString(),
     });
 
-    this.log.log(`IBE reservation ${result.code} created for property ${slug}`);
-    return {
-      code: result.code,
-      status: result.status,
+    this.log.log(`IBE reservation ${reservationOut.code} created for property ${slug}`);
+
+    // Email de confirmación al huésped (best-effort).
+    await this.dispatchConfirmation({
+      slug,
+      hotelName: property.name,
+      code: reservationOut.code,
+      lastName: input.guest.lastName,
+      guestFirstName: input.guest.firstName,
+      guestEmail: input.guest.email,
       arrival: input.arrival,
       departure: input.departure,
-      totalAmount: result.totalAmount.toString(),
-      currency: result.currency,
+      roomTypeName: roomTypeNameOrCode,
+      totalAmount: reservationOut.totalAmount.toString(),
+      currency: reservationOut.currency,
+    });
+
+    return {
+      code: reservationOut.code,
+      status: reservationOut.status,
+      arrival: input.arrival,
+      departure: input.departure,
+      totalAmount: reservationOut.totalAmount.toString(),
+      currency: reservationOut.currency,
     };
   }
 
@@ -358,6 +383,11 @@ export class PublicIbeService {
           cancellationPolicy: {
             select: { name: true, hoursBeforeArrival: true, penaltyPct: true },
           },
+          guests: {
+            where: { isPrimary: true },
+            take: 1,
+            select: { guest: { select: { firstName: true, email: true } } },
+          },
         },
       });
       if (!existing) throw new NotFoundException('Reservation not found');
@@ -399,6 +429,8 @@ export class PublicIbeService {
         currency: existing.currency,
         policy: policy?.name ?? null,
         cancelledAt,
+        guestFirstName: existing.guests[0]?.guest.firstName ?? null,
+        guestEmail: existing.guests[0]?.guest.email ?? null,
       };
     });
 
@@ -410,6 +442,17 @@ export class PublicIbeService {
       cancelledAt: result.cancelledAt.toISOString(),
       policyApplied: result.policy,
     });
+
+    if (result.guestEmail && result.guestFirstName) {
+      await this.dispatchCancellation({
+        hotelName: property.name,
+        code: result.code,
+        guestFirstName: result.guestFirstName,
+        guestEmail: result.guestEmail,
+        penalty: result.penalty,
+        currency: result.currency,
+      });
+    }
 
     return {
       code: result.code,
@@ -527,6 +570,11 @@ export class PublicIbeService {
         select: {
           id: true,
           code: true,
+          arrivalDate: true,
+          departureDate: true,
+          totalAmount: true,
+          currency: true,
+          roomType: { select: { code: true, name: true } },
           guests: {
             where: { isPrimary: true },
             take: 1,
@@ -536,15 +584,35 @@ export class PublicIbeService {
       }),
     );
     if (!reservation) throw new NotFoundException('Reservation not found');
-    const email = reservation.guests[0]?.guest.email ?? null;
+    const guest = reservation.guests[0]?.guest;
+    const email = guest?.email ?? null;
 
-    // V1: solo logueamos. El catálogo de eventos del eventbus tiene shape
-    // estricto y añadir `reservation.confirmation_resend_requested` es
-    // scope de Sprint 9 (cuando exista el consumer real de email). Por
-    // ahora un log estructurado basta para auditar la intención —
-    // correlationId + ctx + email cubren la traza.
+    // Publicamos evento (catálogo S9 W1) y mandamos email.
+    await this.events.publish('reservation.confirmation_resend_requested', ctx, {
+      reservationId: reservation.id,
+      propertyId: property.id,
+      code: reservation.code,
+      email,
+      source: 'IBE',
+      requestedAt: new Date().toISOString(),
+    });
+    if (email && guest) {
+      await this.dispatchConfirmation({
+        slug,
+        hotelName: property.name,
+        code: reservation.code,
+        lastName: guest.lastName,
+        guestFirstName: guest.firstName,
+        guestEmail: email,
+        arrival: reservation.arrivalDate.toISOString().slice(0, 10),
+        departure: reservation.departureDate.toISOString().slice(0, 10),
+        roomTypeName: reservation.roomType?.name || reservation.roomType?.code || '?',
+        totalAmount: reservation.totalAmount.toString(),
+        currency: reservation.currency,
+      });
+    }
     this.log.log(
-      `Confirmation resend queued reservationId=${reservation.id} code=${reservation.code} email=${email ?? 'none'} tenant=${ctx.tenantId} cid=${ctx.correlationId}`,
+      `Confirmation resend reservationId=${reservation.id} code=${reservation.code} email=${email ?? 'none'}`,
     );
     return { queued: true, email };
   }
@@ -578,6 +646,77 @@ export class PublicIbeService {
       actorId: this.publicActor,
       correlationId: `ibe-${randomBytes(6).toString('hex')}`,
     };
+  }
+
+  // --------------------------------------------------------------------------
+  // Email dispatchers (Sprint 9 W1) — best-effort, jamás bloquean al usuario.
+  // --------------------------------------------------------------------------
+
+  private async dispatchConfirmation(p: {
+    slug: string;
+    hotelName: string;
+    code: string;
+    lastName: string;
+    guestFirstName: string;
+    guestEmail: string;
+    arrival: string;
+    departure: string;
+    roomTypeName: string;
+    totalAmount: string;
+    currency: string;
+  }): Promise<void> {
+    const ibe = this.config.get('IBE_PUBLIC_URL', { infer: true }) ?? '';
+    const manageUrl = ibe
+      ? `${ibe.replace(/\/$/, '')}/h/${encodeURIComponent(p.slug)}/manage?code=${encodeURIComponent(p.code)}&lastName=${encodeURIComponent(p.lastName)}`
+      : '';
+    try {
+      await this.notifications.sendEmail({
+        template: 'reservation_confirmation',
+        to: p.guestEmail,
+        locale: 'es',
+        params: {
+          code: p.code,
+          hotelName: p.hotelName,
+          guestFirstName: p.guestFirstName,
+          arrival: p.arrival,
+          departure: p.departure,
+          roomTypeName: p.roomTypeName,
+          totalAmount: p.totalAmount,
+          currency: p.currency,
+          manageUrl,
+          brand: { name: p.hotelName },
+        },
+      });
+    } catch (err) {
+      this.log.warn(`Email confirmation dispatch failed for ${p.code}: ${(err as Error).message}`);
+    }
+  }
+
+  private async dispatchCancellation(p: {
+    hotelName: string;
+    code: string;
+    guestFirstName: string;
+    guestEmail: string;
+    penalty: string;
+    currency: string;
+  }): Promise<void> {
+    try {
+      await this.notifications.sendEmail({
+        template: 'reservation_cancelled',
+        to: p.guestEmail,
+        locale: 'es',
+        params: {
+          code: p.code,
+          hotelName: p.hotelName,
+          guestFirstName: p.guestFirstName,
+          penalty: p.penalty,
+          currency: p.currency,
+          brand: { name: p.hotelName },
+        },
+      });
+    } catch (err) {
+      this.log.warn(`Email cancellation dispatch failed for ${p.code}: ${(err as Error).message}`);
+    }
   }
 }
 

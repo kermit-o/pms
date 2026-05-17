@@ -1326,3 +1326,71 @@ Sin cobro automatizado de penalización — el back-office (Stripe Fase
 **Sprint 8 IBE V1 completo** (W1 API pública + W2 app web-ibe + W3
 booking + Stripe + W4 manage). Pendiente: email real (S9), captcha en
 abuse, pre-pago full, channel manager.
+
+---
+
+## 21. Email transaccional — Sprint 9 W1
+
+### 21.1 Provider
+
+`NotificationsService` selecciona el provider al arrancar:
+
+- **Live** — si `POSTMARK_SERVER_TOKEN` y `NOTIFICATIONS_FROM` están
+  configurados, envía via Postmark REST (`https://api.postmarkapp.com/email`).
+  **Sin SDK npm** — fetch directo, cero deps nuevas.
+- **Dry-run** — sin token, loguea estructurado y devuelve éxito
+  artificial. Default en dev/test.
+
+### 21.2 Env vars (Fly secrets)
+
+```bash
+flyctl secrets set -a pms-api \
+  POSTMARK_SERVER_TOKEN=... \
+  NOTIFICATIONS_FROM=reservas@aubergine.es \
+  NOTIFICATIONS_REPLY_TO=hola@aubergine.es \
+  IBE_PUBLIC_URL=https://book.aubergine.es \
+  BACKOFFICE_PUBLIC_URL=https://app.aubergine.es
+```
+
+Postmark requiere verificar el `From` (single sender o dominio).
+
+### 21.3 Plantillas V1
+
+| Template                       | Trigger                          | Locales |
+|--------------------------------|----------------------------------|---------|
+| `reservation_confirmation`     | IBE create + resend              | ES, EN  |
+| `reservation_cancelled`        | IBE cancel                       | ES, EN  |
+| `front_desk_new_reservation`   | Pending S10 (front desk inbox)   | ES      |
+
+Render: `{{ key }}` con regex puro, soporta dotted paths (`brand.name`).
+Wrap HTML mínimo (table layout, inline styles, sin assets). Branding
+por hotel via `params.brand.{ name, primaryColor }`.
+
+### 21.4 Idempotencia
+
+Postmark no garantiza dedup. El IBE invoca `sendEmail` inline tras
+crear/cancelar la reserva — re-llamar al endpoint público reenvía el
+mismo email (lo cual es exactamente lo deseado en `resend-confirmation`).
+
+### 21.5 NATS
+
+Eventos publicados (informativos, sin consumer real V1):
+
+- `email.send_requested v1` — para productores que quieran delegar al
+  consumer cuando exista (S10+).
+- `reservation.confirmation_resend_requested v1` — emitido por
+  `PublicIbeService.resendConfirmation`.
+
+El consumer NATS dedicado (que mapea eventos → templates → envío
+desacoplado) llegará en Sprint 10 si el piloto lo justifica. V1 hace
+todo inline.
+
+### 21.6 Branding por hotel
+
+`Property.attributes.email.brand: { name, primaryColor, accentColor }`
+si está definido lo usa el wrapper HTML. Defaults Aubergine.
+
+### 21.7 Apagar el envío
+
+Quitar `POSTMARK_SERVER_TOKEN` → dry-run automático. No requiere
+redeploy si Fly secrets cambia (machine restart sí).

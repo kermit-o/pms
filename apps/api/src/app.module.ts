@@ -17,6 +17,7 @@ import { CashModule } from './cash';
 import { CopilotModule } from './copilot';
 import { HousekeepingModule } from './housekeeping';
 import { NightAuditModule } from './night-audit';
+import { NotificationsModule } from './notifications';
 import { PaymentsModule } from './payments';
 import { PublicIbeModule } from './public-ibe';
 import { ReportsModule } from './reports';
@@ -39,6 +40,7 @@ import { ReportsModule } from './reports';
     SesHospedajesModule,
     CopilotModule,
     NightAuditModule,
+    NotificationsModule,
     PaymentsModule,
     PublicIbeModule,
     ReportsModule,

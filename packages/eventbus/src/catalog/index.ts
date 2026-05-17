@@ -14,6 +14,10 @@ import {
   lostFoundItemRegisteredV1,
 } from './lost-found';
 import {
+  emailSendRequestedV1,
+  reservationConfirmationResendRequestedV1,
+} from './notifications';
+import {
   nightAuditRunCompletedV1,
   nightAuditRunStartedV1,
   nightAuditStepCompletedV1,
@@ -140,6 +144,11 @@ export const catalog = {
     schema: lostFoundItemDisposedV1,
     schemaVersion: 1,
   },
+  'email.send_requested': { schema: emailSendRequestedV1, schemaVersion: 1 },
+  'reservation.confirmation_resend_requested': {
+    schema: reservationConfirmationResendRequestedV1,
+    schemaVersion: 1,
+  },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -246,3 +255,9 @@ export type {
   LostFoundItemDisposedV1Payload,
   LostFoundItemRegisteredV1Payload,
 } from './lost-found';
+
+export { emailSendRequestedV1, reservationConfirmationResendRequestedV1 } from './notifications';
+export type {
+  EmailSendRequestedV1Payload,
+  ReservationConfirmationResendRequestedV1Payload,
+} from './notifications';

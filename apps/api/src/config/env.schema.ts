@@ -63,6 +63,18 @@ export const envSchema = z.object({
   SES_HOSPEDAJES_ENDPOINT: z.string().url().optional(),
   SES_HOSPEDAJES_API_KEY: z.string().optional(),
 
+  // Notifications (Sprint 9 W1). Si POSTMARK_SERVER_TOKEN está, el
+  // provider envía emails reales; sin él, el module entra en modo
+  // dry-run (loguea estructurado y no toca la red). NOTIFICATIONS_FROM
+  // es la dirección remitente verificada en Postmark/SMTP.
+  POSTMARK_SERVER_TOKEN: z.string().optional(),
+  NOTIFICATIONS_FROM: z.string().email().optional(),
+  NOTIFICATIONS_REPLY_TO: z.string().email().optional(),
+  /** Base URL del IBE público (para los enlaces "Gestionar mi reserva" en emails). */
+  IBE_PUBLIC_URL: z.string().url().optional(),
+  /** Base URL del back-office (para los enlaces "Abrir en back-office" en emails al hotel). */
+  BACKOFFICE_PUBLIC_URL: z.string().url().optional(),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])
