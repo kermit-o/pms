@@ -741,3 +741,98 @@ Coste por hotel baja con cada nuevo cliente (la API + Keycloak + NATS son compar
 - Booking engine propio — V2.
 - Federation con AD/LDAP del hotel — V2 si el cliente lo pide.
 - App nativa iOS/Android — la PWA es la app oficial.
+
+---
+
+## 16. Operativa IA (Sprint 6)
+
+Configuración y troubleshooting de las capacidades IA del PMS.
+
+### 16.1 Copilot (Anthropic adapter) — Sprint 6 W1
+
+**Variables de entorno (`pms-api`):**
+
+- `ANTHROPIC_API_KEY` — clave Anthropic Console. Si no está, el copilot
+  cae al stub determinista (suficiente para tests, no para producción).
+- `COPILOT_DRIVER` — fuerza `anthropic` o `stub`. Default: auto según
+  la presencia de la API key.
+- `COPILOT_MODEL` — default `claude-sonnet-4-6`. Para latencia/coste
+  bajos: `claude-haiku-4-5-20251001`.
+
+**Desactivar el copilot temporalmente:**
+
+```bash
+flyctl secrets set -a pms-api COPILOT_DRIVER=stub
+```
+
+El UI sigue funcionando pero el LLM no se invoca. Útil si hay un
+incidente con Anthropic.
+
+**Auditoría legal y observabilidad de coste.** Cada turno se persiste
+en la tabla `copilot_messages` (RLS por `tenant_id`). Para auditar
+qué pidió un usuario:
+
+```sql
+SELECT created_at, role, tool_name, content_text, input_tokens, output_tokens
+FROM copilot_messages
+WHERE tenant_id = '<TENANT>' AND user_id = '<USER>'
+ORDER BY created_at DESC LIMIT 100;
+```
+
+**Métricas Prometheus:** `copilot_messages_total`, `copilot_tokens_total`,
+`copilot_latency_seconds_*`. Dashboard `aubergine-copilot`.
+
+**Privacidad.** El contenido de `copilot_messages.content_text` puede
+incluir PII (nombres de huéspedes mencionados en el prompt). La política
+de retención es 90 días — un job de NA poda lo antiguo. Si un huésped
+ejerce derecho de supresión GDPR, hay que borrar las filas asociadas.
+
+### 16.2 Anomaly Detection NA — Sprint 6 W2
+
+**Cómo funciona.** Tras `SNAPSHOT_REPORTS` el orchestrator corre el step
+`DETECT_ANOMALIES` que evalúa 4 reglas V1 contra `folio_entries`,
+`cash_drawer_reconciliations` y `reservations` del business day:
+
+- `DUPLICATE_CHARGE` (critical) — mismo `idempotency_key`, distinto amount.
+- `CASH_DRAWER_VARIANCE` (high) — |discrepancy| / expected > 5%.
+- `DEEP_DISCOUNT` (medium) — DISCOUNT ≥ 50% del CHARGE del folio.
+- `CANCELLATION_SPREE` (medium) — mismo guest > 3 cancellations.
+
+Las señales se escriben en `night_audit_anomalies` y nunca bloquean el
+cierre (ADR-020).
+
+**Revisión.** El supervisor abre `/night-audit/anomalies` en la web FO,
+filtra por property/fecha/severity, marca cada señal como "revisada" con
+nota libre. Tabla en `night_audit_anomalies.reviewed_at` queda con
+timestamp + `reviewed_by_user_id`.
+
+**Alerta.** `NightAuditAnomalyDetected` dispara cuando hay señales
+HIGH/CRITICAL — sale por Slack `#aubergine-incidentes`, no es page (la
+revisión es asincrónica).
+
+**Re-ejecución del step.** Si el run falla y se reanuda (`resume`), el
+step borra `nightAuditAnomaly.deleteMany({ runId })` antes de detectar
+de nuevo. Idempotente sin tocar señales de otros runs del mismo día.
+
+### 16.3 Voice-first HSK — Sprint 6 W3
+
+**Cómo se usa.** En `/task/[id]` con la tarea `IN_PROGRESS`, la camarera
+ve un botón flotante (esquina inferior derecha) con icono de micrófono.
+Pulsarlo arranca el reconocedor del browser:
+
+- Cada frase final se concatena al campo "notas".
+- Si la frase contiene una palabra clave de estado (`limpia`, `sucia`,
+  `inspeccionada`, `averia`, `fuera de servicio`, `roto`), el formulario
+  cambia automáticamente el "Estado de la habitación".
+
+**Privacidad.** Web Speech API procesa el audio en el browser. Aubergine
+no recibe el audio. La nota textual (después de la conversión) sí se
+envía a la API normal y se persiste en `housekeeping_tasks.notes`.
+
+**Browser support.** Chrome/Edge/Safari en móvil sí. Firefox no soporta
+SpeechRecognition — el botón se oculta y el flujo de teclado sigue
+funcionando idéntico.
+
+**Desactivarlo.** No hay flag server-side: si el supervisor del hotel no
+quiere voz, puede pedir al user agent que bloquee el permiso de
+micrófono.

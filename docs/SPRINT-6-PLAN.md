@@ -39,7 +39,9 @@ PROJECT.md §7 marca el moat: cada acción ya es una tool MCP. Sprint 6 conecta 
 > **Estado:** W1 ✅ código mergeado en `claude/copilot-w1-close` (Anthropic adapter,
 > prompt caching, audit table, métricas, SSE phase events). W2 ✅ código mergeado
 > en `claude/na-w2-anomalies` (detección 4 reglas V1, step DETECT_ANOMALIES,
-> métricas, UI revisión, dashboard, alerta). W3-W5 pendientes.
+> métricas, UI revisión, dashboard, alerta). W3 ✅ código mergeado en
+> `claude/hsk-w3-voice` (Web Speech API en /task/[id], parser de palabras-clave
+> ES, audio nunca sale del browser). W4-W5 pendientes.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
