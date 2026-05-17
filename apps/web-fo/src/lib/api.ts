@@ -940,6 +940,36 @@ export async function reviewNightAuditAnomaly(
   });
 }
 
+export type ForecastMetric = 'occupancy' | 'adr' | 'revpar' | 'pickup';
+
+export interface ForecastPoint {
+  date: string;
+  predicted: number;
+  lower: number;
+  upper: number;
+}
+
+export interface ForecastResult {
+  metric: ForecastMetric;
+  horizon: number;
+  modelFit: { alpha: number; beta: number };
+  rmse: number | null;
+  mape: number | null;
+  series: ForecastPoint[];
+  history: Array<{ date: string; value: number }>;
+  message: string | null;
+}
+
+export async function getForecast(
+  accessToken: string | undefined,
+  query: { propertyId: string; horizon?: number; metric?: ForecastMetric },
+): Promise<ForecastResult> {
+  const params = new URLSearchParams({ propertyId: query.propertyId });
+  if (query.horizon !== undefined) params.set('horizon', String(query.horizon));
+  if (query.metric) params.set('metric', query.metric);
+  return apiFetch(`/night-audit/forecast?${params.toString()}`, { accessToken });
+}
+
 export type NightAuditStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
 
 export interface NightAuditRunSummary {

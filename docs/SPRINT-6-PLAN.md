@@ -41,7 +41,9 @@ PROJECT.md §7 marca el moat: cada acción ya es una tool MCP. Sprint 6 conecta 
 > en `claude/na-w2-anomalies` (detección 4 reglas V1, step DETECT_ANOMALIES,
 > métricas, UI revisión, dashboard, alerta). W3 ✅ código mergeado en
 > `claude/hsk-w3-voice` (Web Speech API en /task/[id], parser de palabras-clave
-> ES, audio nunca sale del browser). W4-W5 pendientes.
+> ES, audio nunca sale del browser). W4 ✅ código mergeado en
+> `claude/na-w4-forecast` (Holt forecasting, endpoint, MCP tool forecast_demand,
+> /dashboard/forecast con gráfico SVG). W5 pendiente.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐

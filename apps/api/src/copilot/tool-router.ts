@@ -6,6 +6,7 @@ import {
   type CheckOutInput,
   type CreateReservationInput,
   type CreateReservationGroupInput,
+  type ForecastDemandInput,
   type FoToolName,
   type GenerateReportInput,
   type QueryAvailabilityInput,
@@ -15,6 +16,7 @@ import {
 } from '@pms/mcp-tools';
 import type { AuthUser } from '../auth';
 import { FolioService } from '../folio';
+import { ForecastService } from '../night-audit/forecast.service';
 import { ReportsService } from '../reports';
 import { ReservationsService } from '../reservations';
 import { RoomsService } from '../rooms';
@@ -44,6 +46,7 @@ export class FoToolRouter {
     private readonly rooms: RoomsService,
     private readonly folio: FolioService,
     private readonly reports: ReportsService,
+    private readonly forecast: ForecastService,
   ) {}
 
   isMutating(name: FoToolName): boolean {
@@ -176,6 +179,14 @@ export class FoToolRouter {
         });
         const summary = renderNarrative(i.businessDate, i.focus, manager);
         return { focus: i.focus, manager, summary };
+      }
+      case 'forecast_demand': {
+        const i = input as ForecastDemandInput;
+        return this.forecast.forecast(user, correlationId, {
+          propertyId: i.propertyId,
+          horizon: i.horizon,
+          metric: i.metric,
+        });
       }
     }
   }

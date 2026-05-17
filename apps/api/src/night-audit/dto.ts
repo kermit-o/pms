@@ -47,3 +47,10 @@ export const ReviewAnomalyDto = z.object({
   notes: z.string().max(500).optional(),
 });
 export type ReviewAnomalyDto = z.infer<typeof ReviewAnomalyDto>;
+
+export const ForecastQuery = z.object({
+  propertyId: z.string().uuid(),
+  horizon: z.coerce.number().int().min(7).max(90).default(30),
+  metric: z.enum(['occupancy', 'adr', 'revpar', 'pickup']).default('occupancy'),
+});
+export type ForecastQuery = z.infer<typeof ForecastQuery>;

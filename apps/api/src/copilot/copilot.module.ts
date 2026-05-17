@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DbModule } from '../db';
 import { FolioModule } from '../folio';
 import { HousekeepingModule } from '../housekeeping';
+import { NightAuditModule } from '../night-audit';
 import { ReportsModule } from '../reports';
 import { ReservationsModule } from '../reservations';
 import { RoomsModule } from '../rooms';
@@ -15,7 +16,15 @@ import { ToolResolver } from './tool-resolver';
 import { FoToolRouter } from './tool-router';
 
 @Module({
-  imports: [DbModule, ReservationsModule, RoomsModule, FolioModule, ReportsModule, HousekeepingModule],
+  imports: [
+    DbModule,
+    ReservationsModule,
+    RoomsModule,
+    FolioModule,
+    ReportsModule,
+    HousekeepingModule,
+    NightAuditModule,
+  ],
   controllers: [CopilotController],
   providers: [
     CopilotService,

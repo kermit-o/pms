@@ -80,6 +80,73 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [FEAT] · Cerrar Sprint 6 W4 — Forecasting (Holt)
+
+**Scope:** `apps/api/night-audit`, `packages/mcp-tools`, `apps/web-fo`,
+`RUNBOOK.md`
+**Branch:** `claude/na-w4-forecast`
+**Refs:** 2 commits en la rama
+
+**Qué cambió.**
+
+- `ForecastService` con Holt double exponential smoothing **sin deps
+  externas** (grid search alpha/beta minimizando SSE in-sample, bandas
+  95% derivadas de σ de residuales × √horizon). Soporta `occupancy`,
+  `adr`, `revpar` (desde `night_audit_snapshots[MANAGER]`) y `pickup`
+  (consulta directa a reservations con created_at = arrival_date).
+  Ventana de training 365d; rechaza series < 14 puntos con mensaje claro.
+- Endpoint `GET /night-audit/forecast?propertyId=&horizon=&metric=`,
+  roles `tenant_admin | front_desk | night_auditor`.
+- MCP tool `forecast_demand` (read-only, auto-exec) en `foToolCatalog`,
+  enrutado en `FoToolRouter`. `CopilotModule` ahora importa
+  `NightAuditModule` para resolver `ForecastService`.
+- UI `apps/web-fo/src/app/dashboard/forecast/page.tsx`: selector
+  property + metric + horizon (7/14/30/60/90), KPIs (RMSE, MAPE),
+  gráfico SVG inline con history + predicted dashed + banda 95%
+  rellena, tabla de puntos. Link "Forecast" añadido al nav.
+- Helper `getForecast` + tipos en `apps/web-fo/src/lib/api.ts`.
+- `RUNBOOK.md` §16.4 documenta modelo, métricas, fuentes de datos,
+  endpoint, UI y limitaciones (sin estacionalidad semanal — Holt-Winters
+  pleno queda para V2).
+
+**Por qué.**
+
+Sprint 6 DoD #4: el revenue manager y la dirección obtienen una primera
+proyección numérica sin abrir un Excel. Holt simple es defendible para
+30 días y razonable hasta 90; resolver Holt-Winters propiamente requiere
+≥90 días de historia real por property, que aún no tenemos en piloto.
+La elección de **no añadir `simple-statistics`** (la dep que sugería el
+plan) evita scope deviation por CLAUDE.md §8: el algoritmo cabe en ~50
+líneas y mantiene `apps/api` libre de dependencias estadísticas
+adicionales hasta que las regresiones o EWMA realmente las pidan.
+
+**Archivos clave.**
+
+- `apps/api/src/night-audit/forecast.service.ts` (+ spec, 4 tests)
+- `apps/api/src/night-audit/night-audit.controller.ts` (`GET /forecast`)
+- `apps/api/src/night-audit/dto.ts` (`ForecastQuery`)
+- `apps/api/src/night-audit/night-audit.module.ts` (provider + export)
+- `packages/mcp-tools/src/catalog/fo.ts` (`forecast_demand` + input
+  schema + tipo `ForecastDemandInput`)
+- `packages/mcp-tools/src/index.ts` (export del tipo)
+- `apps/api/src/copilot/tool-router.ts` (case `forecast_demand`)
+- `apps/api/src/copilot/copilot.module.ts` (`imports: [..., NightAuditModule]`)
+- `apps/web-fo/src/app/dashboard/forecast/page.tsx`
+- `apps/web-fo/src/lib/api.ts` (`getForecast`, tipos)
+- `apps/web-fo/src/app/layout.tsx` (link nav)
+- `RUNBOOK.md` §16.4
+
+**Sigue pendiente** (fuera de scope W4):
+
+- Estacionalidad semanal: Holt-Winters completo cuando ≥90 días de
+  historia real por property.
+- Backtesting con holdout temporal (hoy MAPE/RMSE son in-sample —
+  optimistas). Trivial añadir un parámetro `holdoutDays`.
+- Workstream Sprint 6 restante: W5 (Reservation copilot embebido en
+  `/calendar` y `/reservations/new` con streaming token-by-token).
+
+---
+
 ## 2026-05-16 · [FEAT] · Cerrar Sprint 6 W3 — Voice-first HSK
 
 **Scope:** `apps/web-hsk`, `RUNBOOK.md`
