@@ -45,6 +45,7 @@ model Tenant {
   nightAuditRuns      NightAuditRun[]
   nightAuditRunSteps  NightAuditRunStep[]
   nightAuditSnapshots NightAuditSnapshot[]
+  nightAuditAnomalies NightAuditAnomaly[]
   cashReconciliations CashDrawerReconciliation[]
   housekeepingTasks   HousekeepingTask[]
   lostFoundItems      LostFoundItem[]
@@ -120,6 +121,7 @@ model Property {
   sesSubmissions      SesHospedajesSubmission[]
   nightAuditRuns      NightAuditRun[]
   nightAuditSnapshots NightAuditSnapshot[]
+  nightAuditAnomalies NightAuditAnomaly[]
   cashReconciliations CashDrawerReconciliation[]
   housekeepingTasks   HousekeepingTask[]
   lostFoundItems      LostFoundItem[]
@@ -673,6 +675,7 @@ model NightAuditRun {
   property  Property                @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   steps     NightAuditRunStep[]
   snapshots NightAuditSnapshot[]
+  anomalies NightAuditAnomaly[]
 
   @@unique([propertyId, businessDate])
   @@index([tenantId, propertyId])
@@ -695,6 +698,7 @@ enum NightAuditStep {
   POST_PACKAGES
   MARK_NO_SHOWS
   SNAPSHOT_REPORTS
+  DETECT_ANOMALIES
   CLOSE_DAY
 
   @@map("night_audit_step")
@@ -759,6 +763,54 @@ enum NightAuditReportType {
   TAX
 
   @@map("night_audit_report_type")
+}
+
+// ----------------------------------------------------------------------------
+// Anomalies detected during NA (Sprint 6 W2). Solo señales — ADR-020: nada
+// se auto-corrige; el supervisor revisa y decide. Ver
+// apps/api/src/night-audit/anomaly.service.ts y docs/SPRINT-6-PLAN.md §3.
+// ----------------------------------------------------------------------------
+
+model NightAuditAnomaly {
+  id               String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String                       @map("tenant_id") @db.Uuid
+  propertyId       String                       @map("property_id") @db.Uuid
+  runId            String                       @map("run_id") @db.Uuid
+  businessDate     DateTime                     @map("business_date") @db.Date
+  kind             NightAuditAnomalyKind
+  severity         NightAuditAnomalySeverity
+  details          Json
+  reviewedAt       DateTime?                    @map("reviewed_at")
+  reviewedByUserId String?                      @map("reviewed_by_user_id") @db.Uuid
+  reviewNotes      String?                      @map("review_notes")
+  createdAt        DateTime                     @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  run      NightAuditRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, propertyId, businessDate])
+  @@index([runId])
+  @@map("night_audit_anomalies")
+}
+
+enum NightAuditAnomalyKind {
+  DUPLICATE_CHARGE
+  CASH_DRAWER_VARIANCE
+  DEEP_DISCOUNT
+  CANCELLATION_SPREE
+  RATE_OVERRIDE
+
+  @@map("night_audit_anomaly_kind")
+}
+
+enum NightAuditAnomalySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+
+  @@map("night_audit_anomaly_severity")
 }
 
 // ----------------------------------------------------------------------------

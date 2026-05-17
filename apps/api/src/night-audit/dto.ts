@@ -22,3 +22,28 @@ export const StateQuery = z.object({
   businessDate: isoDate,
 });
 export type StateQuery = z.infer<typeof StateQuery>;
+
+export const ListAnomaliesQuery = z.object({
+  propertyId: z.string().uuid().optional(),
+  businessDate: isoDate.optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  kind: z
+    .enum([
+      'DUPLICATE_CHARGE',
+      'CASH_DRAWER_VARIANCE',
+      'DEEP_DISCOUNT',
+      'CANCELLATION_SPREE',
+      'RATE_OVERRIDE',
+    ])
+    .optional(),
+  severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
+  reviewed: z.enum(['yes', 'no']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+});
+export type ListAnomaliesQuery = z.infer<typeof ListAnomaliesQuery>;
+
+export const ReviewAnomalyDto = z.object({
+  notes: z.string().max(500).optional(),
+});
+export type ReviewAnomalyDto = z.infer<typeof ReviewAnomalyDto>;

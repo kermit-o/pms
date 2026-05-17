@@ -25,6 +25,7 @@ const NAV_ITEMS: Array<{ href: string; label: string }> = [
   { href: '/guests', label: 'Cardex' },
   { href: '/business-day', label: 'Cierre día' },
   { href: '/night-audit', label: 'Night audit' },
+  { href: '/night-audit/anomalies', label: 'Anomalías' },
   { href: '/reports', label: 'Reportes' },
 ];
 

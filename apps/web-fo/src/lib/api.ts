@@ -882,7 +882,63 @@ export type NightAuditStep =
   | 'POST_PACKAGES'
   | 'MARK_NO_SHOWS'
   | 'SNAPSHOT_REPORTS'
+  | 'DETECT_ANOMALIES'
   | 'CLOSE_DAY';
+
+export type NightAuditAnomalyKind =
+  | 'DUPLICATE_CHARGE'
+  | 'CASH_DRAWER_VARIANCE'
+  | 'DEEP_DISCOUNT'
+  | 'CANCELLATION_SPREE'
+  | 'RATE_OVERRIDE';
+export type NightAuditAnomalySeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface NightAuditAnomaly {
+  id: string;
+  propertyId: string;
+  runId: string;
+  businessDate: string;
+  kind: NightAuditAnomalyKind;
+  severity: NightAuditAnomalySeverity;
+  details: unknown;
+  reviewedAt: string | null;
+  reviewedByUserId: string | null;
+  reviewNotes: string | null;
+  createdAt: string;
+}
+
+export async function listNightAuditAnomalies(
+  accessToken: string | undefined,
+  query: {
+    propertyId?: string;
+    businessDate?: string;
+    from?: string;
+    to?: string;
+    kind?: NightAuditAnomalyKind;
+    severity?: NightAuditAnomalySeverity;
+    reviewed?: 'yes' | 'no';
+    limit?: number;
+  } = {},
+): Promise<NightAuditAnomaly[]> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== '') params.set(k, String(v));
+  }
+  const q = params.toString();
+  return apiFetch(`/night-audit/anomalies${q ? `?${q}` : ''}`, { accessToken });
+}
+
+export async function reviewNightAuditAnomaly(
+  accessToken: string | undefined,
+  anomalyId: string,
+  notes: string | undefined,
+): Promise<NightAuditAnomaly> {
+  return apiFetch(`/night-audit/anomalies/${anomalyId}/review`, {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify({ notes: notes ?? '' }),
+  });
+}
 
 export type NightAuditStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
 
