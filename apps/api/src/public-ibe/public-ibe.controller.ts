@@ -13,6 +13,7 @@ import {
   CancelPublicReservationDto,
   CreatePublicReservationDto,
   LookupReservationQuery,
+  PublicSetupIntentDto,
 } from './public-ibe.dto';
 import { PublicIbeService } from './public-ibe.service';
 import { RateLimit, RateLimitGuard } from './rate-limit.guard';
@@ -72,5 +73,27 @@ export class PublicIbeController {
   ) {
     const input = CancelPublicReservationDto.parse(body);
     return this.service.cancelReservation(slug, code, input);
+  }
+
+  @Post('properties/:slug/reservations/:code/setup-intent')
+  @RateLimit({ max: 10, windowMs: 60_000 })
+  async setupIntent(
+    @Param('slug') slug: string,
+    @Param('code') code: string,
+    @Body() body: unknown,
+  ) {
+    const input = PublicSetupIntentDto.parse(body);
+    return this.service.createSetupIntent(slug, code, input.lastName);
+  }
+
+  @Post('properties/:slug/reservations/:code/confirm-setup-intent')
+  @RateLimit({ max: 10, windowMs: 60_000 })
+  async confirmSetupIntent(
+    @Param('slug') slug: string,
+    @Param('code') code: string,
+    @Body() body: unknown,
+  ) {
+    const input = PublicSetupIntentDto.parse(body);
+    return this.service.confirmSetupIntent(slug, code, input.lastName);
   }
 }

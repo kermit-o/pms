@@ -80,6 +80,92 @@ Una o dos frases.
 
 ---
 
+## 2026-05-17 · [FEAT] · Sprint 8 W3 — Booking flow + Stripe SetupIntent
+
+**Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `RUNBOOK.md`
+**Branch:** `claude/s8-w3-booking`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- **API.**
+  - `PublicIbeService.createSetupIntent(slug, code, lastName)` y
+    `confirmSetupIntent(slug, code, lastName)`. Verifican `(code,
+    lastName)`, construyen `AuthUser` sentinel con role vacío y
+    delegan a `StripeService.createSetupIntent` /
+    `confirmSetupIntent` del back-office. Cero duplicación de lógica
+    Stripe.
+  - 2 endpoints públicos nuevos:
+    - `POST /public/ibe/properties/:slug/reservations/:code/setup-intent`
+      (rate 10/min).
+    - `POST /public/ibe/properties/:slug/reservations/:code/confirm-setup-intent`
+      (rate 10/min).
+  - DTO `PublicSetupIntentDto { lastName }`.
+  - `PublicIbeModule` ahora importa `PaymentsModule` para resolver
+    `StripeService`.
+- **Web-ibe.**
+  - Deps añadidas: `@stripe/stripe-js` + `@stripe/react-stripe-js`
+    (ya aprobadas en monorepo via web-fo, no ADR nuevo).
+  - Página `/h/<slug>/book` (server component) con form server
+    action: nombre, apellido, email, phone, nacionalidad,
+    `gdprConsent` obligatorio, `marketingConsent` opcional, comments.
+    Validación inline + redirect con `?error=` para mostrar mensajes.
+  - Página `/h/<slug>/book/<code>?lastName=` con confirmación,
+    schema.org `LodgingReservation`, KPIs (llegada/salida/tipo/total),
+    política de cancelación, y botón opcional "Capturar tarjeta".
+  - Componente cliente `stripe-card-capture.tsx`: modal con Stripe
+    Elements + flow idéntico a web-fo adaptado para auth pública
+    (code+lastName en query).
+  - Proxies `/api/setup-intent` y `/api/confirm-setup-intent` en
+    web-ibe.
+- **Tests.** +2 en `public-ibe.service.spec.ts` (createSetupIntent
+  delega con sentinel; rechaza si code+lastName mismatch). 11/11
+  verde en `src/public-ibe`.
+- **RUNBOOK §20.8** documenta rutas, endpoints, flujo end-to-end,
+  privacidad PCI.
+
+**Por qué.**
+
+Cierra el camino crítico del IBE: el huésped puede reservar y, si
+quiere, asegurar con tarjeta sin que el operador del hotel intervenga.
+PCI SAQ A respetado — el PAN solo va a Stripe Elements en el browser.
+Reutilizamos toda la lógica Stripe del back-office con un sentinel
+user — cero duplicación, cero divergencia entre paths.
+
+**Performance build:** First Load JS = 109 kB en general, 116 kB en
+la página de confirmación con Elements (objetivo <200 kB del plan
+cumplido).
+
+**Archivos clave.**
+
+- `apps/api/src/public-ibe/public-ibe.service.ts`
+  (createSetupIntent + confirmSetupIntent + resolvePublicReservation)
+- `apps/api/src/public-ibe/public-ibe.controller.ts` (2 endpoints)
+- `apps/api/src/public-ibe/public-ibe.dto.ts` (PublicSetupIntentDto)
+- `apps/api/src/public-ibe/index.ts` (PaymentsModule importado)
+- `apps/web-ibe/package.json` (Stripe deps)
+- `apps/web-ibe/src/app/h/[slug]/book/page.tsx` (form + server action)
+- `apps/web-ibe/src/app/h/[slug]/book/[code]/page.tsx` (confirmación)
+- `apps/web-ibe/src/app/h/[slug]/book/[code]/stripe-card-capture.tsx`
+- `apps/web-ibe/src/app/api/setup-intent/route.ts`
+- `apps/web-ibe/src/app/api/confirm-setup-intent/route.ts`
+- `apps/web-ibe/src/lib/api.ts` (createReservation, publicSetupIntent,
+  publicConfirmSetupIntent + tipos)
+- `RUNBOOK.md` §20.8
+
+**Sigue pendiente** (W4 + follow-ups):
+
+- **W4 Manage**: `/h/<slug>/manage` con lookup por code+lastName,
+  vista + cancelación con política.
+- Email real de confirmación (S9 — V1 sigue solo emitiendo evento
+  `reservation.created`).
+- Captcha en `/book` si aparece abuso real en piloto.
+- Pre-pago full (PaymentIntent on-session) cuando el hotel lo exija
+  — V1 solo guarantee.
+- Mensaje de error más rico cuando Stripe pide SCA en setup.
+
+---
+
 ## 2026-05-17 · [FEAT] · Sprint 8 W2 — App pública `web-ibe`
 
 **Scope:** `apps/web-ibe` (nuevo), `RUNBOOK.md`

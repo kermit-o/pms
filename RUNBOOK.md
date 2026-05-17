@@ -1244,3 +1244,45 @@ flyctl deploy -c apps/web-ibe/fly.toml --dockerfile apps/web-ibe/Dockerfile
 DNS apuntando al app handle (`pms-web-ibe.fly.dev`). Para custom
 domain `book.<hotel>.es` por property → usar SSR redirect o un
 proxy CDN — diseño en Sprint 9.
+
+### 20.8 Booking flow + Stripe — Sprint 8 W3
+
+**Rutas web-ibe:**
+
+| Ruta | Descripción |
+|------|------------|
+| `/h/<slug>/book?arrival&departure&adults&children&roomTypeId` | Form datos huésped + GDPR |
+| `/h/<slug>/book/<code>?lastName=` | Confirmación + opcional captura tarjeta |
+| `/api/setup-intent?slug&code&lastName` (POST) | Proxy a API pública |
+| `/api/confirm-setup-intent?slug&code&lastName` (POST) | Proxy a confirm |
+
+**Endpoints API públicos (W3):**
+
+| Método | Ruta | Rate |
+|--------|------|------|
+| POST | `/public/ibe/properties/:slug/reservations/:code/setup-intent` | 10/min |
+| POST | `/public/ibe/properties/:slug/reservations/:code/confirm-setup-intent` | 10/min |
+
+Body `{ lastName }`. Devuelven `{ clientSecret, publishableKey }` y
+`{ status, brand, last4 }` respectivamente.
+
+**Flujo end-to-end:**
+
+1. Huésped llena `/book` con sus datos + GDPR consent.
+2. Server action llama `POST /public/ibe/.../reservations` (W1).
+3. Redirect a `/book/<code>?lastName=...`.
+4. Página de confirmación muestra resumen + botón opcional "Capturar
+   tarjeta".
+5. Al pulsar, se obtiene SetupIntent vía proxy → API pública →
+   `StripeService.createSetupIntent` (reusa back-office) con AuthUser
+   sentinel.
+6. Modal con Stripe Elements (igual que web-fo). Tras
+   `confirmSetup` exitoso, llama `confirm-setup-intent` proxy →
+   `StripeService.confirmSetupIntent` marca reserva SECURED.
+7. UI muestra "✓ Tarjeta guardada · Visa **** 4242".
+
+**Privacidad / PCI.** El PAN nunca toca nuestros servidores (SAQ A).
+El sentinel actor para audit es
+`00000000-0000-0000-0000-000000000000`.
+
+**Schema.org LodgingReservation** inyectado en la confirmación.

@@ -44,3 +44,8 @@ export const CancelPublicReservationDto = z.object({
   acceptPenalty: z.boolean().default(false),
 });
 export type CancelPublicReservationDto = z.infer<typeof CancelPublicReservationDto>;
+
+export const PublicSetupIntentDto = z.object({
+  lastName: z.string().min(1).max(80),
+});
+export type PublicSetupIntentDto = z.infer<typeof PublicSetupIntentDto>;

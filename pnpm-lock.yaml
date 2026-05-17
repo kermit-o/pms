@@ -287,6 +287,12 @@ importers:
 
   apps/web-ibe:
     dependencies:
+      '@stripe/react-stripe-js':
+        specifier: ^3.0.0
+        version: 3.10.0(@stripe/stripe-js@4.10.0)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)
+      '@stripe/stripe-js':
+        specifier: ^4.10.0
+        version: 4.10.0
       next:
         specifier: 15.0.3
         version: 15.0.3(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)
