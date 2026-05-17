@@ -96,3 +96,67 @@ export async function getReservation(
     `/public/ibe/properties/${encodeURIComponent(slug)}/reservations/${encodeURIComponent(code)}?${qs.toString()}`,
   );
 }
+
+export interface CreateReservationInput {
+  arrival: string;
+  departure: string;
+  roomTypeId: string;
+  occupancy: { adults: number; children: number };
+  guest: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    nationality?: string;
+    gdprConsent: true;
+    marketingConsent: boolean;
+  };
+  specialRequests?: string;
+}
+
+export interface CreateReservationResult {
+  code: string;
+  status: string;
+  arrival: string;
+  departure: string;
+  totalAmount: string;
+  currency: string;
+}
+
+export async function createReservation(
+  slug: string,
+  input: CreateReservationInput,
+): Promise<CreateReservationResult> {
+  return fetchJson(`/public/ibe/properties/${encodeURIComponent(slug)}/reservations`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function publicSetupIntent(
+  slug: string,
+  code: string,
+  lastName: string,
+): Promise<{ clientSecret: string; publishableKey: string }> {
+  return fetchJson(
+    `/public/ibe/properties/${encodeURIComponent(slug)}/reservations/${encodeURIComponent(code)}/setup-intent`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ lastName }),
+    },
+  );
+}
+
+export async function publicConfirmSetupIntent(
+  slug: string,
+  code: string,
+  lastName: string,
+): Promise<{ status: string; brand: string | null; last4: string | null }> {
+  return fetchJson(
+    `/public/ibe/properties/${encodeURIComponent(slug)}/reservations/${encodeURIComponent(code)}/confirm-setup-intent`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ lastName }),
+    },
+  );
+}

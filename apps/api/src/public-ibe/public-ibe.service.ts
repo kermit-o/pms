@@ -15,6 +15,8 @@ import {
 } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
+import { StripeService } from '../payments/stripe.service';
+import type { AuthUser } from '../auth';
 import type {
   AvailabilityQuery,
   CancelPublicReservationDto,
@@ -50,6 +52,7 @@ export class PublicIbeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventbusService,
+    private readonly stripe: StripeService,
   ) {}
 
   async getProperty(slug: string): Promise<PublicProperty> {
@@ -415,6 +418,82 @@ export class PublicIbeService {
       currency: result.currency,
       policy: result.policy,
     };
+  }
+
+  /**
+   * Crea (o reusa) un SetupIntent para que el huésped tokenice su tarjeta
+   * desde el IBE como garantía. Reutiliza `StripeService.createSetupIntent`
+   * con un AuthUser sentinel que representa "huésped público desde IBE".
+   * El método del back-office se encarga del resto: crea/reusa Customer +
+   * SetupIntent, marca `guaranteeType = CARD_ON_FILE` y devuelve el
+   * clientSecret + publishableKey para que el browser monte Stripe Elements.
+   */
+  async createSetupIntent(
+    slug: string,
+    code: string,
+    lastName: string,
+  ): Promise<{ clientSecret: string; publishableKey: string }> {
+    const { reservationId, user, correlationId } = await this.resolvePublicReservation(
+      slug,
+      code,
+      lastName,
+    );
+    return this.stripe.createSetupIntent(user, correlationId, reservationId);
+  }
+
+  /**
+   * Fallback al webhook (igual que el back-office): tras confirmSetup en
+   * el browser, el cliente llama aquí para que el server lea el SI de
+   * Stripe y marque la reserva SECURED de forma idempotente.
+   */
+  async confirmSetupIntent(
+    slug: string,
+    code: string,
+    lastName: string,
+  ): Promise<{ status: string; brand: string | null; last4: string | null }> {
+    const { reservationId, user, correlationId } = await this.resolvePublicReservation(
+      slug,
+      code,
+      lastName,
+    );
+    return this.stripe.confirmSetupIntent(user, correlationId, reservationId);
+  }
+
+  /**
+   * Resuelve `(slug, code, lastName)` -> `(reservation, sentinel user, cid)`.
+   * Throws si no encuentra. Reutilizado por los endpoints de Stripe del IBE.
+   */
+  private async resolvePublicReservation(
+    slug: string,
+    code: string,
+    lastName: string,
+  ): Promise<{ reservationId: string; user: AuthUser; correlationId: string }> {
+    const property = await this.findPublishedProperty(slug);
+    const ctx = this.publicCtx(property.tenantId);
+    const reservation = await this.prisma.withTenant(ctx, (tx) =>
+      tx.reservation.findFirst({
+        where: {
+          propertyId: property.id,
+          code,
+          deletedAt: null,
+          guests: {
+            some: {
+              isPrimary: true,
+              guest: { lastName: { equals: lastName, mode: 'insensitive' } },
+            },
+          },
+        },
+        select: { id: true },
+      }),
+    );
+    if (!reservation) throw new NotFoundException('Reservation not found');
+    const user: AuthUser = {
+      sub: this.publicActor,
+      tenantId: property.tenantId,
+      email: 'ibe@public',
+      roles: [],
+    };
+    return { reservationId: reservation.id, user, correlationId: ctx.correlationId };
   }
 
   // --------------------------------------------------------------------------

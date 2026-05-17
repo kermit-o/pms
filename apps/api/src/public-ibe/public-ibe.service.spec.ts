@@ -55,7 +55,17 @@ function buildService(opts: {
     withTenant: vi.fn(async (_ctx, fn: (t: unknown) => Promise<unknown>) => fn(txStub)),
   };
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
-  return { service: new PublicIbeService(prisma as never, events as never), prisma, events, tx: txStub };
+  const stripe = {
+    createSetupIntent: vi.fn().mockResolvedValue({ clientSecret: 'cs', publishableKey: 'pk' }),
+    confirmSetupIntent: vi.fn().mockResolvedValue({ status: 'SECURED', brand: 'visa', last4: '4242' }),
+  };
+  return {
+    service: new PublicIbeService(prisma as never, events as never, stripe as never),
+    prisma,
+    events,
+    stripe,
+    tx: txStub,
+  };
 }
 
 describe('PublicIbeService', () => {
@@ -145,5 +155,23 @@ describe('PublicIbeService', () => {
     await expect(service.getReservation('h', 'HTL-X', 'Pérez')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  it('createSetupIntent delegates to StripeService with sentinel actor', async () => {
+    const { service, stripe } = buildService({
+      reservation: { id: 'res-1' },
+    });
+    const out = await service.createSetupIntent('h', 'HTL-X', 'Pérez');
+    expect(stripe.createSetupIntent).toHaveBeenCalledOnce();
+    const [user, , reservationId] = stripe.createSetupIntent.mock.calls[0]!;
+    expect((user as { tenantId: string }).tenantId).toBe('t-1');
+    expect((user as { sub: string }).sub).toBe('00000000-0000-0000-0000-000000000000');
+    expect(reservationId).toBe('res-1');
+    expect(out).toEqual({ clientSecret: 'cs', publishableKey: 'pk' });
+  });
+
+  it('createSetupIntent rechaza si code+lastName no coinciden', async () => {
+    const { service } = buildService({ reservation: null });
+    await expect(service.createSetupIntent('h', 'X', 'Y')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
