@@ -9,9 +9,15 @@ import {
   type RawBodyRequest,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import { CurrentUser, Roles, Public } from '../auth';
 import type { AuthUser } from '../auth';
 import { StripeService } from './stripe.service';
+
+const ChargeNoShowDto = z.object({
+  amount: z.number().positive(),
+  description: z.string().min(1).max(200).optional(),
+});
 
 const FRONT_DESK_ROLES = ['tenant_admin', 'front_desk'] as const;
 
@@ -45,6 +51,22 @@ export class StripeController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.stripe.confirmSetupIntent(user, correlationIdOf(req), id);
+  }
+
+  /**
+   * Fase 2 — cobro off-session de no-show contra la tarjeta tokenizada
+   * en Fase 1. Idempotente por reservationId (un cargo no-show por reserva).
+   */
+  @Post('reservations/:id/charge-no-show')
+  @Roles(...FRONT_DESK_ROLES)
+  async chargeNoShow(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = ChargeNoShowDto.parse(body);
+    return this.stripe.chargeNoShow(user, correlationIdOf(req), id, input);
   }
 
   /**

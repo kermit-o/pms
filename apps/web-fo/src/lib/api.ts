@@ -235,6 +235,26 @@ export async function createStripeSetupIntent(
   });
 }
 
+export interface NoShowChargeResult {
+  status: 'succeeded' | 'requires_action' | 'already_charged' | 'failed';
+  paymentIntentId: string | null;
+  folioEntryId: string | null;
+  error?: string;
+}
+
+export async function chargeNoShow(
+  accessToken: string | undefined,
+  reservationId: string,
+  amount: number,
+  description?: string,
+): Promise<NoShowChargeResult> {
+  return apiFetch(`/payments/stripe/reservations/${reservationId}/charge-no-show`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ amount, description }),
+  });
+}
+
 export async function updateGuarantee(
   accessToken: string | undefined,
   reservationId: string,

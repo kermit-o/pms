@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -7,7 +8,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
-import { GuaranteeStatus, GuaranteeType } from '@pms/db';
+import { FolioStatus, GuaranteeStatus, GuaranteeType, Prisma } from '@pms/db';
+import { FolioService } from '../folio';
 import { PrismaService } from '../db';
 import type { AuthUser } from '../auth';
 import type { Env } from '../config/env.schema';
@@ -32,6 +34,7 @@ export class StripeService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly folio: FolioService,
     private readonly config: ConfigService<Env, true>,
   ) {
     const secret = this.config.get('STRIPE_SECRET_KEY', { infer: true });
@@ -279,5 +282,163 @@ export class StripeService {
     }
 
     return { ok: true };
+  }
+
+  /**
+   * Stripe Fase 2 — cobro off-session de no-show contra la tarjeta ya
+   * tokenizada en Fase 1. Crea un PaymentIntent con `off_session: true` y
+   * `confirm: true`. Si el banco pide SCA (raro pero posible incluso con
+   * tarjetas previamente verificadas), devolvemos `requires_action` y el
+   * operador debe rehacer la captura on-session.
+   *
+   * Idempotencia: el folio entry se posta con `idempotencyKey =
+   * stripe-no-show-{reservationId}`. Llamadas repetidas devuelven el
+   * mismo entry sin duplicar cargo, y antes de pedir un PaymentIntent
+   * nuevo verificamos si ya existe.
+   *
+   * Decisión de diseño: no guardamos el PaymentIntent.id en la reserva
+   * — vive en `folio_entries.attributes.stripePaymentIntentId`. Si hace
+   * falta consultarlo se busca por idempotencyKey.
+   */
+  async chargeNoShow(
+    user: AuthUser,
+    correlationId: string,
+    reservationId: string,
+    input: { amount: number; description?: string },
+  ): Promise<{
+    status: 'succeeded' | 'requires_action' | 'already_charged' | 'failed';
+    paymentIntentId: string | null;
+    folioEntryId: string | null;
+    error?: string;
+  }> {
+    const stripe = this.requireStripe();
+    if (input.amount <= 0) {
+      throw new BadRequestException('amount must be > 0');
+    }
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId };
+    const idempotencyKey = `stripe-no-show-${reservationId}`;
+
+    const reservation = await this.prisma.withTenant(ctx, (tx) =>
+      tx.reservation.findFirst({
+        where: { id: reservationId, deletedAt: null },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          currency: true,
+          stripeCustomerId: true,
+          stripePaymentMethodId: true,
+          stripeCardBrand: true,
+          stripeCardLast4: true,
+          folio: { select: { id: true, status: true, currency: true } },
+        },
+      }),
+    );
+    if (!reservation) throw new NotFoundException(`Reservation ${reservationId} not found`);
+    if (!reservation.stripePaymentMethodId || !reservation.stripeCustomerId) {
+      throw new BadRequestException(
+        'Reserva sin tarjeta tokenizada. Captura tarjeta (Fase 1) antes de cobrar no-show.',
+      );
+    }
+    if (!reservation.folio || reservation.folio.status !== FolioStatus.OPEN) {
+      throw new ConflictException('Folio cerrado o inexistente — no se puede cargar.');
+    }
+
+    // Si ya hay un cargo con esta idempotencyKey, no llamamos a Stripe.
+    const existing = await this.prisma.withTenant(ctx, (tx) =>
+      tx.folioEntry.findFirst({
+        where: { folioId: reservation.folio!.id, idempotencyKey },
+        select: { id: true, attributes: true },
+      }),
+    );
+    if (existing) {
+      const attrs = (existing.attributes ?? {}) as { stripePaymentIntentId?: string };
+      return {
+        status: 'already_charged',
+        paymentIntentId: attrs.stripePaymentIntentId ?? null,
+        folioEntryId: existing.id,
+      };
+    }
+
+    const amountCents = Math.round(input.amount * 100);
+    const currency = (reservation.folio.currency ?? 'EUR').toLowerCase();
+    const description = input.description ?? `No-show ${reservation.code}`;
+    let pi: Stripe.PaymentIntent;
+    try {
+      pi = await stripe.paymentIntents.create(
+        {
+          amount: amountCents,
+          currency,
+          customer: reservation.stripeCustomerId,
+          payment_method: reservation.stripePaymentMethodId,
+          off_session: true,
+          confirm: true,
+          description,
+          metadata: {
+            reservationId: reservation.id,
+            reservationCode: reservation.code,
+            tenantId: user.tenantId,
+            kind: 'no_show_charge',
+          },
+        },
+        { idempotencyKey: `pi-${idempotencyKey}` },
+      );
+    } catch (err) {
+      const e = err as Stripe.errors.StripeError;
+      // El SDK lanza cuando el cargo falla — el PI viene en err.payment_intent.
+      const piFromErr = (e as { payment_intent?: Stripe.PaymentIntent }).payment_intent;
+      const isAuthRequired =
+        e?.code === 'authentication_required' ||
+        piFromErr?.status === 'requires_action' ||
+        piFromErr?.status === 'requires_payment_method';
+      this.log.warn(`No-show charge failed ${reservationId}: ${e.code} ${e.message}`);
+      return {
+        status: isAuthRequired ? 'requires_action' : 'failed',
+        paymentIntentId: piFromErr?.id ?? null,
+        folioEntryId: null,
+        error: e.message,
+      };
+    }
+
+    if (pi.status !== 'succeeded') {
+      return {
+        status: pi.status === 'requires_action' ? 'requires_action' : 'failed',
+        paymentIntentId: pi.id,
+        folioEntryId: null,
+        error: `PaymentIntent status=${pi.status}`,
+      };
+    }
+
+    // Post folio entry vía FolioService (idempotente por idempotencyKey).
+    const charge = await this.folio.addCharge(user, correlationId, reservation.folio.id, {
+      description: `${description} (Stripe ${reservation.stripeCardBrand ?? ''} ****${
+        reservation.stripeCardLast4 ?? ''
+      })`,
+      amount: input.amount,
+      currency: reservation.folio.currency,
+      type: 'CHARGE',
+      idempotencyKey,
+    });
+
+    // Guardamos la referencia al PaymentIntent en attributes del entry.
+    await this.prisma.withTenant(ctx, (tx) =>
+      tx.folioEntry.update({
+        where: { id: charge.entryId },
+        data: {
+          attributes: {
+            stripePaymentIntentId: pi.id,
+            stripeChargeId: pi.latest_charge as string | null,
+            kind: 'no_show_charge',
+          } as Prisma.InputJsonValue,
+        },
+      }),
+    );
+
+    this.log.log(`No-show charge OK ${reservationId} ${pi.id} ${input.amount} ${currency}`);
+    return {
+      status: 'succeeded',
+      paymentIntentId: pi.id,
+      folioEntryId: charge.entryId,
+    };
   }
 }
