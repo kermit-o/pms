@@ -1,0 +1,98 @@
+/**
+ * Cliente del API público IBE (Sprint 8 W2).
+ *
+ * Sin auth — todas las llamadas a `/public/ibe/*` pasan tal cual. El
+ * server component fetchea desde el server (no expone CORS al cliente).
+ */
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+
+export class IbeApiError extends Error {
+  constructor(
+    public status: number,
+    public body: string,
+  ) {
+    super(`IBE API ${status}: ${body}`);
+  }
+}
+
+export interface IbeProperty {
+  slug: string;
+  name: string;
+  timezone: string;
+  currency: string;
+  locale: string;
+}
+
+export interface IbeRoomTypeAvailability {
+  roomTypeId: string;
+  code: string;
+  name: string;
+  available: number;
+  totalRooms: number;
+  maxOccupancy: number;
+  pricePerNight: string;
+  totalForStay: string;
+  currency: string;
+  nights: number;
+}
+
+export interface IbeAvailabilityResponse {
+  property: IbeProperty;
+  results: IbeRoomTypeAvailability[];
+}
+
+export interface IbeReservationView {
+  code: string;
+  status: string;
+  arrival: string;
+  departure: string;
+  totalAmount: string;
+  currency: string;
+  roomType: { code: string; name: string };
+  guest: { firstName: string; lastName: string; email: string | null };
+  cancellable: boolean;
+  cancellationPolicy: string | null;
+}
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    cache: 'no-store',
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
+  });
+  if (!res.ok) throw new IbeApiError(res.status, await res.text());
+  return (await res.json()) as T;
+}
+
+export async function getProperty(slug: string): Promise<IbeProperty> {
+  return fetchJson(`/public/ibe/properties/${encodeURIComponent(slug)}`);
+}
+
+export async function searchAvailability(
+  slug: string,
+  query: { arrival: string; departure: string; adults: number; children: number },
+): Promise<IbeAvailabilityResponse> {
+  const qs = new URLSearchParams({
+    arrival: query.arrival,
+    departure: query.departure,
+    adults: String(query.adults),
+    children: String(query.children),
+  });
+  return fetchJson(
+    `/public/ibe/properties/${encodeURIComponent(slug)}/availability?${qs.toString()}`,
+  );
+}
+
+export async function getReservation(
+  slug: string,
+  code: string,
+  lastName: string,
+): Promise<IbeReservationView> {
+  const qs = new URLSearchParams({ lastName });
+  return fetchJson(
+    `/public/ibe/properties/${encodeURIComponent(slug)}/reservations/${encodeURIComponent(code)}?${qs.toString()}`,
+  );
+}
