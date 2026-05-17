@@ -271,6 +271,10 @@ model Guest {
   // GDPR
   gdprConsent            Boolean       @default(false) @map("gdpr_consent")
   marketingConsent       Boolean       @default(false) @map("marketing_consent")
+  // Loyalty (Iter B). String libre por ahora: "Gold", "Platinum", "VIP" o lo
+  // que el hotel use. Cuando varios hoteles converjan en una taxonomia
+  // comun, se puede normalizar a enum.
+  membershipLevel        String?       @map("membership_level")
   // Extensible (loyalty, preferencias)
   notes                  String?
   attributes             Json?
@@ -386,6 +390,10 @@ model Reservation {
   // Especiales
   specialRequests    String?           @map("special_requests")
   notes              String?
+  // Comercial (Iter B): agencia y empresa del booking, string denormalizado.
+  // Catalogo con FK llegara cuando el revenue manager lo justifique.
+  agencyName         String?           @map("agency_name")
+  companyName        String?           @map("company_name")
   // Lifecycle timestamps
   checkedInAt        DateTime?         @map("checked_in_at")
   checkedOutAt       DateTime?         @map("checked_out_at")

@@ -162,6 +162,8 @@ export class ReservationsService {
           source,
           specialRequests: input.specialRequests ?? null,
           notes: input.notes ?? null,
+          agencyName: input.agencyName ?? null,
+          companyName: input.companyName ?? null,
           checkedInAt: walkIn ? new Date() : null,
           guaranteeType,
           guaranteeStatus,
@@ -554,7 +556,9 @@ export class ReservationsService {
       input.roomTypeId === undefined &&
       input.ratePlanId === undefined &&
       input.occupancy === undefined &&
-      input.notes === undefined
+      input.notes === undefined &&
+      input.agencyName === undefined &&
+      input.companyName === undefined
     ) {
       throw new BadRequestException('no fields to update');
     }
@@ -637,6 +641,8 @@ export class ReservationsService {
               }
             : {}),
           ...(input.notes !== undefined ? { notes: input.notes } : {}),
+          ...(input.agencyName !== undefined ? { agencyName: input.agencyName } : {}),
+          ...(input.companyName !== undefined ? { companyName: input.companyName } : {}),
         },
         select: { id: true, propertyId: true, code: true },
       });
@@ -648,6 +654,8 @@ export class ReservationsService {
       if (input.ratePlanId !== undefined) changes.ratePlanId = input.ratePlanId;
       if (input.occupancy) changes.occupancy = input.occupancy;
       if (input.notes !== undefined) changes.notes = input.notes;
+      if (input.agencyName !== undefined) changes.agencyName = input.agencyName;
+      if (input.companyName !== undefined) changes.companyName = input.companyName;
 
       return { updated, changes };
     });
@@ -1363,6 +1371,7 @@ async function ensureAdHocGuest(
       email: input.guestData.email ?? null,
       phone: input.guestData.phone ?? null,
       nationality: input.guestData.nationality ?? null,
+      membershipLevel: input.guestData.membershipLevel ?? null,
     },
     select: { id: true },
   });
@@ -1389,6 +1398,8 @@ const RESERVATION_RICH_LIST_SELECT = {
   ratePlanId: true,
   groupId: true,
   guaranteeStatus: true,
+  agencyName: true,
+  companyName: true,
   room: { select: { number: true, floor: true } },
   roomType: { select: { code: true, name: true } },
   ratePlan: { select: { code: true } },
@@ -1399,7 +1410,14 @@ const RESERVATION_RICH_LIST_SELECT = {
     take: 1,
     select: {
       guest: {
-        select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+          membershipLevel: true,
+        },
       },
     },
   },
@@ -1411,6 +1429,8 @@ const RESERVATION_DETAIL_SELECT = {
   source: true,
   specialRequests: true,
   notes: true,
+  agencyName: true,
+  companyName: true,
   checkedInAt: true,
   checkedOutAt: true,
   cancelledAt: true,
@@ -1441,6 +1461,7 @@ const RESERVATION_DETAIL_SELECT = {
           email: true,
           phone: true,
           nationality: true,
+          membershipLevel: true,
         },
       },
     },
@@ -1476,6 +1497,8 @@ export interface ReservationRichListItem extends ReservationListItem {
   groupName: string | null;
   organizerName: string | null;
   guaranteeStatus: import('@pms/db').GuaranteeStatus;
+  agencyName: string | null;
+  companyName: string | null;
   roomNumber: string | null;
   roomFloor: string | null;
   roomTypeCode: string | null;
@@ -1486,6 +1509,7 @@ export interface ReservationRichListItem extends ReservationListItem {
     lastName: string;
     email: string | null;
     phone: string | null;
+    membershipLevel: string | null;
   } | null;
   folioBalance: string | null;
 }
@@ -1509,6 +1533,8 @@ export type ReservationDetail = ReservationListItem & {
   source: ReservationSource;
   specialRequests: string | null;
   notes: string | null;
+  agencyName: string | null;
+  companyName: string | null;
   checkedInAt: string | null;
   checkedOutAt: string | null;
   cancelledAt: string | null;
@@ -1537,6 +1563,7 @@ export type ReservationDetail = ReservationListItem & {
       email: string | null;
       phone: string | null;
       nationality: string | null;
+      membershipLevel: string | null;
     };
   }>;
   folio: {
@@ -1575,6 +1602,8 @@ function toRichListItem(row: ReservationRichListRow): ReservationRichListItem {
     groupName: row.group?.name ?? null,
     organizerName: row.group?.organizerName ?? null,
     guaranteeStatus: row.guaranteeStatus,
+    agencyName: row.agencyName,
+    companyName: row.companyName,
     roomNumber: row.room?.number ?? null,
     roomFloor: row.room?.floor ?? null,
     roomTypeCode: row.roomType?.code ?? null,
@@ -1586,6 +1615,7 @@ function toRichListItem(row: ReservationRichListRow): ReservationRichListItem {
           lastName: primary.lastName,
           email: primary.email,
           phone: primary.phone,
+          membershipLevel: primary.membershipLevel ?? null,
         }
       : null,
     folioBalance: row.folio?.balance?.toString() ?? null,
@@ -1599,6 +1629,8 @@ function toDetail(row: ReservationDetailRow): ReservationDetail {
     source: row.source,
     specialRequests: row.specialRequests,
     notes: row.notes,
+    agencyName: row.agencyName,
+    companyName: row.companyName,
     checkedInAt: row.checkedInAt?.toISOString() ?? null,
     checkedOutAt: row.checkedOutAt?.toISOString() ?? null,
     cancelledAt: row.cancelledAt?.toISOString() ?? null,

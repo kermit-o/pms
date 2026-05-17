@@ -80,6 +80,65 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [FEAT] · Reservations UI v2 Iter B — Agencia/Empresa/VIP
+
+**Scope:** `packages/db`, `apps/api/reservations`, `apps/web-fo`
+**Branch:** `claude/reservations-iter-b`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- **DB.** Migration `20260610000000_reservation_agency_guest_vip`:
+  - `reservations.agency_name` y `reservations.company_name` (TEXT
+    NULL, string denormalizado V1 — catálogo con FK queda para cuando
+    el revenue manager lo justifique).
+  - `guests.membership_level` (TEXT NULL, libre: "Gold", "Platinum",
+    "VIP" o lo que use el hotel).
+  - Índices parciales `WHERE col IS NOT NULL` para no pesar en
+    propiedades sin uso.
+- **API.**
+  - `CreateReservationDto` acepta `agencyName`, `companyName`.
+  - `PatchReservationDto` acepta los dos como nullable.
+  - `guestDataShape` acepta `membershipLevel`.
+  - `RESERVATION_RICH_LIST_SELECT` y `RESERVATION_DETAIL_SELECT` devuelven
+    los nuevos campos + `primaryGuest.membershipLevel`.
+  - `toRichListItem` y `toDetail` propagan al view.
+- **UI.**
+  - Columna "Huésped" muestra badge ámbar uppercase con el
+    `membershipLevel` cuando lo hay (Gold/Platinum/VIP/etc.).
+  - Columna "Agencia / Empresa" prioriza `agencyName || companyName ||
+    organizerName` (antes solo mostraba `organizerName`).
+
+**Por qué.**
+
+PROJECT.md §0 listaba "Iter B (campos Agencia/Empresa/VIP) pendiente" en
+el track commercial-grade. Con los campos vacíos las columnas Iter A
+quedaban descriptivas pero sin datos — esto cierra esa promesa visual
+y permite filtrar/buscar por agencia o nivel VIP cuando la UI lo pida.
+
+**Archivos clave.**
+
+- `packages/db/prisma/schema.prisma` (`Reservation` + `Guest`)
+- `packages/db/prisma/migrations/20260610000000_reservation_agency_guest_vip/migration.sql`
+- `apps/api/src/reservations/dto.ts` (CreateReservationDto + Patch + guestData)
+- `apps/api/src/reservations/reservations.service.ts` (selects, mappers,
+  patch, create, guest ad-hoc)
+- `apps/web-fo/src/lib/api.ts` (tipos)
+- `apps/web-fo/src/components/ReservationsTable.tsx`
+
+**Sigue pendiente** (fuera de scope Iter B):
+
+- Filtros por agencia/empresa/membership en `ReservationsFilters` y
+  smart-search regex. Trivial de añadir cuando el operador lo pida.
+- Catálogo `agencies` y `companies` con FKs cuando el revenue manager
+  necesite analytics agregadas.
+- `membershipLevel` como enum normalizado cuando varios hoteles
+  converjan en taxonomía común.
+- Próximo del track commercial-grade: **Stripe Fase 2** (cobro
+  off-session no-show con `PaymentIntent` sobre el `stripePaymentMethodId`).
+
+---
+
 ## 2026-05-16 · [FEAT] · Cerrar Sprint 6 W5 — Reservation copilot embebido (streaming)
 
 **Scope:** `apps/web-fo`, `RUNBOOK.md`

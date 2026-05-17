@@ -261,6 +261,8 @@ export interface ReservationRichListItem extends ReservationListItem {
   groupName: string | null;
   organizerName: string | null;
   guaranteeStatus: 'PENDING' | 'SECURED' | 'EXPIRED' | 'FAILED' | 'RELEASED';
+  agencyName: string | null;
+  companyName: string | null;
   roomNumber: string | null;
   roomFloor: string | null;
   roomTypeCode: string | null;
@@ -271,6 +273,7 @@ export interface ReservationRichListItem extends ReservationListItem {
     lastName: string;
     email: string | null;
     phone: string | null;
+    membershipLevel: string | null;
   } | null;
   folioBalance: string | null;
 }
