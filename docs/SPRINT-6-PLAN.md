@@ -43,7 +43,10 @@ PROJECT.md §7 marca el moat: cada acción ya es una tool MCP. Sprint 6 conecta 
 > `claude/hsk-w3-voice` (Web Speech API en /task/[id], parser de palabras-clave
 > ES, audio nunca sale del browser). W4 ✅ código mergeado en
 > `claude/na-w4-forecast` (Holt forecasting, endpoint, MCP tool forecast_demand,
-> /dashboard/forecast con gráfico SVG). W5 pendiente.
+> /dashboard/forecast con gráfico SVG). W5 ✅ código mergeado en
+> `claude/copilot-w5-embedded` (streaming SSE end-to-end con parser
+> fetch+ReadableStream, traza viva en el drawer, proxy passthrough).
+> **Sprint 6 IA V1 completo.**
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐

@@ -877,3 +877,43 @@ auto-exec). Permite preguntas tipo "qué ocupación esperas el viernes" o
 semanal (fin de semana). Mejora obvia para V2: añadir componente seasonal
 (Holt-Winters propiamente dicho) cuando tengamos ≥90 días de historia
 realista por hotel piloto.
+
+### 16.5 Reservation copilot embebido — Sprint 6 W5
+
+**Dónde aparece.** El drawer del copilot (`CopilotSidebar`) se monta
+globalmente desde `apps/web-fo/src/app/layout.tsx` cuando hay sesión.
+Disponible en `/calendar`, `/reservations/new` y cualquier otra ruta.
+
+**Atajo.** ⌘K / Ctrl+K abre/cierra el drawer.
+
+**Streaming.** Cada turno usa
+`POST /api/copilot/sessions/:id/messages?stream=true`, que la API expone
+como `text/event-stream`. El cliente parsea los frames SSE con
+`apps/web-fo/src/lib/copilot-stream.ts` y muestra una traza viva:
+
+```
+Pensando…
+→ list_room_types
+← list_room_types ok
+→ search_availability_by_type
+← search_availability_by_type ok
+```
+
+Esto da feedback durante el agentic loop (potencialmente largo con
+varios read-only tools encadenados). Cuando llega `event: done`, el
+log se vacía y se renderiza el `SessionView` final.
+
+**Confirmación inline.** Para tools mutating, el último mensaje
+contiene un `PendingToolCard` con los args + "Aprobar" / "Rechazar".
+La aprobación llama a `POST /confirm-tool` (no stream). Si el tool
+aprobado es `create_reservation`, el drawer redirige al detalle.
+
+**Limitación conocida.** Los phase events del adapter se acumulan y se
+emiten al final del turno (limitación del W1 streaming generator);
+visualmente parecen llegar de golpe en sesiones cortas. Cuando el loop
+real dura segundos, el progreso sí se ve incrementalmente. Mejora a
+**EventEmitter real** queda como follow-up.
+
+**Token-level deltas del LLM.** Aún no expuestos. Requiere usar
+`client.beta.messages.stream()` dentro de `AnthropicAdapter`; el
+contrato SSE ya está listo para recibir un nuevo `event: delta`.
