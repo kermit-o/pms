@@ -59,11 +59,26 @@ function buildService(opts: {
     createSetupIntent: vi.fn().mockResolvedValue({ clientSecret: 'cs', publishableKey: 'pk' }),
     confirmSetupIntent: vi.fn().mockResolvedValue({ status: 'SECURED', brand: 'visa', last4: '4242' }),
   };
+  const notifications = {
+    sendEmail: vi.fn().mockResolvedValue({ ok: true, messageId: 'm1' }),
+  };
+  const config = {
+    get: vi.fn().mockImplementation((key: string) =>
+      key === 'IBE_PUBLIC_URL' ? 'https://book.aubergine.test' : undefined,
+    ),
+  };
   return {
-    service: new PublicIbeService(prisma as never, events as never, stripe as never),
+    service: new PublicIbeService(
+      prisma as never,
+      events as never,
+      stripe as never,
+      notifications as never,
+      config as never,
+    ),
     prisma,
     events,
     stripe,
+    notifications,
     tx: txStub,
   };
 }

@@ -80,6 +80,80 @@ Una o dos frases.
 
 ---
 
+## 2026-05-17 · [FEAT] · Sprint 9 W1 — Email transaccional real
+
+**Scope:** `packages/eventbus`, `apps/api/notifications`,
+`apps/api/public-ibe`, `RUNBOOK.md`
+**Branch:** `claude/s9-w1-email`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- **Eventbus.** Catálogo `notifications.ts` con 2 eventos nuevos:
+  `email.send_requested v1` y `reservation.confirmation_resend_requested v1`.
+  Registrados en `catalog/index.ts` + exports.
+- **Módulo `notifications`** (Global):
+  - `NotificationsService.sendEmail({ template, to, params, locale })`.
+  - Provider Postmark via fetch REST (sin SDK — cero deps nuevas).
+  - Fallback `DryRunProvider` si no hay `POSTMARK_SERVER_TOKEN` o
+    `NOTIFICATIONS_FROM`. Loguea estructurado.
+  - 3 plantillas V1 (`reservation_confirmation`, `reservation_cancelled`,
+    `front_desk_new_reservation`), ES + EN para las dos primeras.
+  - Render con interpolación `{{ key }}` regex puro, soporta dotted
+    paths (`brand.name`). Wrap HTML responsive mínimo (table layout,
+    inline styles).
+  - Branding por hotel via `params.brand.{name, primaryColor}`.
+- **PublicIbeService** dispatch inline tras
+  `createReservation` (confirmación al huésped), `cancelReservation`
+  (email cancelación) y `resendConfirmation` (re-envía la
+  confirmación + publica `reservation.confirmation_resend_requested`).
+- **Env nuevas:** `POSTMARK_SERVER_TOKEN`, `NOTIFICATIONS_FROM`,
+  `NOTIFICATIONS_REPLY_TO`, `IBE_PUBLIC_URL`, `BACKOFFICE_PUBLIC_URL`.
+- **Tests.** `notifications.service.spec.ts` (5: dry_run, live ok,
+  Postmark error, template interpolation, locale fallback ES);
+  spec de `public-ibe.service` actualizado al nuevo constructor.
+  16/16 verde.
+- **RUNBOOK §21** documenta provider, env, plantillas, idempotencia,
+  branding y cómo apagar.
+
+**Por qué.**
+
+Cierra el gap más urgente del IBE V1 (Sprint 8): el huésped no
+recibía nada. Decisión clave: **sin nuevas deps npm** — la API REST
+de Postmark se llama con fetch. Mantiene el espíritu CLAUDE.md §8
+(añadir dep requiere ADR). Mismo patrón que Turnstile y Channel
+Manager planeados para W4/W2.
+
+**Decisión registrada.** El consumer NATS dedicado para emails
+(desacoplado del productor) se difiere a Sprint 10. V1 hace dispatch
+inline tras el `events.publish`. Los productores quedan acoplados a
+`NotificationsService` por ahora — refactor a consumer NATS es no-op
+para los productores (`events.publish` ya queda con el evento
+`email.send_requested`).
+
+**Archivos clave.**
+
+- `packages/eventbus/src/catalog/notifications.ts`
+- `packages/eventbus/src/catalog/index.ts` (registro + exports)
+- `apps/api/src/notifications/notifications.service.ts` + spec
+- `apps/api/src/notifications/templates/index.ts`
+- `apps/api/src/notifications/index.ts` (`NotificationsModule` global)
+- `apps/api/src/app.module.ts` (registro)
+- `apps/api/src/config/env.schema.ts` (5 env nuevas)
+- `apps/api/src/public-ibe/public-ibe.service.ts` (dispatch + spec)
+- `RUNBOOK.md` §21
+
+**Sigue pendiente** (W2/W3/W4 + follow-ups):
+
+- Consumer NATS dedicado para `email.send_requested` (S10).
+- Plantilla `front_desk_new_reservation` activa (hoy compila pero
+  ningún hook la dispara — pendiente configurar email del hotel).
+- W2 Channel Manager.
+- W3 Onboarding wizard.
+- W4 Anti-abuso (Turnstile, IP blocklist).
+
+---
+
 ## 2026-05-17 · [DOCS] · SPRINT-9-PLAN.md — Email, Channel Manager, Onboarding, Anti-abuso
 
 **Scope:** docs
