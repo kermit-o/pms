@@ -1065,3 +1065,36 @@ con `attributes.synthetic = true` del tenant indicado.
 
 Mismo `--seed` produce la misma secuencia de huéspedes y reservas (LCG
 determinista). Útil para regresiones de UI.
+
+### 18. Memoria semántica del huésped — Sprint 7 W2
+
+`guest_memory_chunks` materializa trozos de texto del huésped (cardex,
+estancias, folio notes, solicitudes especiales) y permite al copilot
+responder "¿qué pidió Pérez la última vez?", "¿tiene alergias?",
+"¿prefiere alguna habitación?".
+
+**V1 sin embeddings reales (decisión scope):** retrieval con tsvector
+en español + ts_rank de Postgres. La columna `vector_pending = true`
+deja el camino abierto a V1.1 con `pgvector` + embeddings reales cuando
+se apruebe la dep `openai` (o equivalente).
+
+**Tool MCP** `recall_guest_history(guestId, query, limit)`. Read-only,
+auto-exec. Output `{ chunks: [{ sourceKind, sourceRef, text, score }], ingested }`.
+
+**Ingesta.** Lazy — la primera vez que `recall` ve `count = 0` para un
+guestId, llama a `ingestForGuest(guestId)` que lee cardex + 10 últimas
+reservas + folio entries y materializa chunks idempotentes. Re-ingesta
+re-escribe (deleteMany + createMany) — no acumula obsoletos.
+
+**Cardex extra-fields.** Si `guest.attributes.preferences` o `.allergies`
+están seteados (JSON), se incluyen como líneas dedicadas en el chunk
+CARDEX. Útil para que el copilot las recupere con queries directas.
+
+**Privacidad / GDPR.** Los chunks contienen PII (nombres, alergias,
+documento). RLS por `tenant_id`. Cuando un huésped ejerce supresión, el
+`onDelete: CASCADE` de `guests` borra automáticamente sus chunks.
+
+**Cuándo re-ingestar.** Hoy lazy on-demand. Para V1.1 conviene añadir
+un hook en `reservations.service.checkOut` que llame
+`ingestForGuest(primaryGuest)` para incorporar la estancia recién
+cerrada al recall.

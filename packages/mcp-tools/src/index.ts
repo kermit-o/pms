@@ -27,6 +27,7 @@ export {
   type AssignRoomInput,
   type GenerateReportInput,
   type ForecastDemandInput,
+  type RecallGuestHistoryInput,
 } from './catalog/fo';
 export {
   hskToolCatalog,

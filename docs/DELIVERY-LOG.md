@@ -80,6 +80,81 @@ Una o dos frases.
 
 ---
 
+## 2026-05-16 · [FEAT] · Sprint 7 W2 — Memoria semántica huésped (tsvector V1)
+
+**Scope:** `packages/db`, `packages/mcp-tools`, `apps/api/copilot/memory`,
+`RUNBOOK.md`
+**Branch:** `claude/s7-w2-memory`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- **DB.** Migration `20260611000000_guest_memory_chunks`:
+  - Enum `guest_memory_source_kind` (CARDEX, STAY_NOTE, FOLIO_NOTE,
+    SPECIAL_REQUEST).
+  - Tabla `guest_memory_chunks` con `chunk_text TEXT`, columna generada
+    `tsv TSVECTOR (to_tsvector('spanish', chunk_text))` stored, GIN
+    index. `vector_pending BOOL DEFAULT TRUE` deja la columna para
+    embeddings reales V1.1.
+  - Unique `(guest_id, source_kind, source_ref)` idempotente.
+  - RLS por `tenant_id`.
+- **Servicio** `apps/api/src/copilot/memory/memory.service.ts`:
+  - `ingestForGuest`: lee cardex (datos básicos, doc, membership,
+    notas, `attributes.preferences/allergies`) + últimas 10 reservas
+    con folio entries y solicitudes especiales. DeleteMany + createMany
+    para reescribir limpio.
+  - `recall(guestId, query, limit)`: `ts_rank` sobre
+    `plainto_tsquery('spanish', query)`. Auto-ingesta lazy si no hay
+    chunks aún. Devuelve `{ chunks: [{sourceKind, sourceRef, text,
+    score}], ingested }`.
+- **Tool MCP** `recall_guest_history` (read-only, auto-exec) en
+  `foToolCatalog`. Tipo `RecallGuestHistoryInput` exportado.
+- **`FoToolRouter`** ruta `recall_guest_history` al `MemoryService`.
+  `CopilotModule` registra `MemoryService` como provider.
+- **Tests** `memory.service.spec.ts` — 5 casos: lazy ingest + query,
+  skip ingest si ya hay chunks, no matches, ingesta produce los 4 kinds,
+  ingesta mínima (solo cardex) si guest sin estancias.
+- **RUNBOOK §18** documenta V1 vs V1.1, ingesta lazy, privacidad GDPR.
+
+**Por qué.**
+
+Sprint 7 §3 entrega memoria persistente del huésped para el copilot.
+**Deviación intencionada del plan:** retrieval con tsvector en lugar de
+`pgvector + text-embedding-3-small`. Razón — añadir `openai` como dep
+requiere ADR + aprobación PO (CLAUDE.md §8). El esqueleto y contrato
+quedan idénticos: tabla, ingesta, tool, prompt; solo cambia el motor de
+ranking. `vector_pending` marca el camino a V1.1 cuando se apruebe la
+dep, y la migración será expand-only.
+
+**Archivos clave.**
+
+- `packages/db/prisma/migrations/20260611000000_guest_memory_chunks/migration.sql`
+- `packages/db/prisma/schema.prisma` (`GuestMemoryChunk` + enum +
+  back-relations en Tenant y Guest)
+- `packages/db/src/index.ts` (exports)
+- `apps/api/src/copilot/memory/memory.service.ts` + spec
+- `apps/api/src/copilot/tool-router.ts` (case `recall_guest_history`)
+- `apps/api/src/copilot/copilot.module.ts` (provider)
+- `packages/mcp-tools/src/catalog/fo.ts` (tool entry + input schema)
+- `packages/mcp-tools/src/index.ts` (export del tipo)
+- `RUNBOOK.md` §18
+
+**Sigue pendiente** (fuera de scope W2 V1):
+
+- **V1.1: embeddings reales.** Añadir `openai` (o Voyage) como dep
+  con ADR; popular columna `embedding vector(1536)` en ingesta y usar
+  pgvector KNN como segundo ranker (híbrido tsvector + cosine).
+- Hook automático en `reservations.service.checkOut` para re-ingestar
+  tras cerrar estancia. Hoy la re-ingesta solo ocurre lazy al recall.
+- Prompt del copilot Anthropic: añadir hint para que llame
+  `recall_guest_history` cuando el operador pregunte por preferencias /
+  alergias / históricos del huésped. Hoy disponible pero el LLM debe
+  descubrirlo del catálogo.
+- Tool `find_guests_by_name(query)` para encadenar `recall` cuando el
+  operador usa nombre en vez de UUID.
+
+---
+
 ## 2026-05-16 · [FEAT] · Sprint 7 W4 — Seed sintético multi-hotel
 
 **Scope:** `scripts`, `RUNBOOK.md`

@@ -18,6 +18,7 @@ export {
   HousekeepingTaskType,
   LostFoundStatus,
   CopilotMessageRole,
+  GuestMemorySourceKind,
   NightAuditAnomalyKind,
   NightAuditAnomalySeverity,
   GuaranteeType,
@@ -27,6 +28,7 @@ export {
 export type {
   Tenant,
   CopilotMessage,
+  GuestMemoryChunk,
   NightAuditAnomaly,
   User,
   Property,

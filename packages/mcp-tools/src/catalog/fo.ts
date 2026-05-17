@@ -132,6 +132,13 @@ const forecastDemandInput = z.object({
 });
 export type ForecastDemandInput = z.infer<typeof forecastDemandInput>;
 
+const recallGuestHistoryInput = z.object({
+  guestId: z.string().uuid(),
+  query: z.string().min(1).max(200),
+  limit: z.number().int().min(1).max(10).default(5),
+});
+export type RecallGuestHistoryInput = z.infer<typeof recallGuestHistoryInput>;
+
 export interface FoToolMeta {
   name: string;
   description: string;
@@ -226,6 +233,14 @@ export const foToolCatalog = {
     description:
       'Forecasts a hotel KPI (occupancy / adr / revpar / pickup) for the next N days (default 30, max 90) using Holt double exponential smoothing on the property MANAGER snapshots history. Read-only; ideal for revenue/manager questions. Returns predicted series with 95% confidence bands plus rmse/mape.',
     inputSchema: forecastDemandInput,
+    mutating: false,
+    financial: false,
+  },
+  recall_guest_history: {
+    name: 'recall_guest_history',
+    description:
+      'Recalls relevant notes / preferences / past stays of a guest matching a free-text query (Spanish full-text search over cardex + stay notes + folio entries). Use when the operator asks "qué pidió Pérez la última vez", "tiene alergias", "qué tipo de habitación suele preferir". Read-only.',
+    inputSchema: recallGuestHistoryInput,
     mutating: false,
     financial: false,
   },
