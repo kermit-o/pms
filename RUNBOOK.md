@@ -988,3 +988,80 @@ parte del form normal.
 **Walk-in vía voz.** No incluido en V1. El wizard de 3 pasos en
 `/reservations/new` requiere parser más complejo (nombre, fechas, room
 type). Queda como follow-up.
+
+---
+
+## 17. Datos sintéticos para demos y testing — Sprint 7 W4
+
+`scripts/seed-synthetic.ts` genera uno o varios hoteles ficticios con
+catálogo de habitaciones, tarifas, huéspedes y reservas históricas
+realistas. Útil mientras no haya piloto operando.
+
+### 17.1 Salvaguardas
+
+El script aborta si detecta una conexión productiva (`fly.dev`,
+`flycast`, `rds.amazonaws`, `supabase.co`, `neon.tech` en la URL, o
+`NODE_ENV=production`). Para forzar (jamás recomendado): `--force-prod`.
+
+Todo lo creado lleva `attributes.synthetic = true`, así que es
+borrable selectivamente sin tocar datos reales.
+
+### 17.2 Uso
+
+```bash
+DIRECT_URL="postgres://pms:pms@localhost:5432/pms" \
+  pnpm tsx scripts/seed-synthetic.ts \
+    --tenant 33333333-3333-3333-3333-333333333333 \
+    --properties 3 \
+    --rooms-per-property 40 \
+    --history-months 24 \
+    --reservations-per-month 200
+```
+
+Flags relevantes:
+
+| Flag                        | Default                                | Notas                       |
+|----------------------------|----------------------------------------|-----------------------------|
+| `--tenant <uuid>`           | `333…333`                              | Crea el tenant si no existe |
+| `--properties <N>`          | `1`                                    |                             |
+| `--rooms-per-property <N>`  | `30`                                   |                             |
+| `--history-months <N>`      | `12`                                   |                             |
+| `--reservations-per-month`  | `100`                                  | Por property                |
+| `--reset`                   | off                                    | Borra sintéticos antes      |
+| `--seed <int>`              | `42`                                   | Reproducibilidad LCG        |
+| `--no-confirm`              | off                                    | Salta el delay inicial      |
+
+### 17.3 Qué genera
+
+- **Tenant** `Synthetic Hotels` (idempotente por UUID).
+- **Properties** con código `SYN01`, `SYN02`, … en ciudades ES.
+- **Room types**: IND, DBL, TWN, SUP, JSU, SUI con shares realistas
+  (45% DBL, 20% IND, etc.).
+- **Habitaciones** distribuidas en plantas, status `CLEAN`.
+- **Rate plan** `BAR` por property.
+- **Huéspedes** con nombres ES (50 por property), mix de
+  nacionalidades, ~25% con `membershipLevel ∈ {Gold, Platinum, VIP}`,
+  email único `*.synthetic.test`.
+- **Reservas** mes a mes con estacionalidad (jul/ago 1.5×, ene/feb
+  0.55×, etc.). Status realista según fecha (CHECKED_OUT pasadas,
+  CHECKED_IN actuales, PENDING/CONFIRMED futuras, ~8% CANCELLED, ~4%
+  NO_SHOW).
+- **Folio entries** por noche para reservas activas/pasadas, con
+  payment final para CHECKED_OUT.
+- **Agencia/Empresa** en una fracción (`AGENT` source → agencyName,
+  10% companyName aleatorio).
+
+### 17.4 Limpieza
+
+```bash
+pnpm tsx scripts/seed-synthetic.ts --reset --properties 0 --no-confirm \
+  --tenant 33333333-3333-3333-3333-333333333333
+```
+
+Borra folio entries, reservation guests, folios, reservas y huéspedes
+con `attributes.synthetic = true` del tenant indicado.
+
+### 17.5 Reproducibilidad
+
+Mismo `--seed` produce la misma secuencia de huéspedes y reservas (LCG
+determinista). Útil para regresiones de UI.
