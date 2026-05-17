@@ -101,16 +101,20 @@ enum UserStatus {
 // ----------------------------------------------------------------------------
 
 model Property {
-  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId  String    @map("tenant_id") @db.Uuid
-  code      String
-  name      String
-  timezone  String    @default("Europe/Madrid")
-  currency  String    @default("EUR")
-  locale    String    @default("es-ES")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  code        String
+  name        String
+  timezone    String    @default("Europe/Madrid")
+  currency    String    @default("EUR")
+  locale      String    @default("es-ES")
+  // IBE (Sprint 8): slug opaco para venta directa. unique cuando no es null.
+  // publishedAt = NULL significa "no expuesto al IBE público".
+  publicSlug  String?   @unique @map("public_slug")
+  publishedAt DateTime? @map("published_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
 
   tenant              Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roomTypes           RoomType[]

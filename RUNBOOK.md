@@ -1136,3 +1136,71 @@ muestra el error 503 y el operador continúa con el flujo manual.
 **Coste estimado.** Sonnet-4-6 con una imagen 1024×768 + prompt
 corto ≈ 1500 tokens input + 200 output = ~$0.012/inspección. Para 100
 inspecciones/día/hotel ≈ $36/mes.
+
+---
+
+## 20. Online Booking Engine (IBE) — Sprint 8 W1 API pública
+
+### 20.1 Publicación
+
+Cada `Property` gana `public_slug` (TEXT, unique) y `published_at`
+(TIMESTAMPTZ). El IBE solo expone properties con `published_at IS NOT NULL`.
+
+Para publicar un hotel:
+
+```sql
+UPDATE properties
+SET public_slug = 'hotel-berenjena', published_at = now()
+WHERE id = '<property-uuid>';
+```
+
+Para despublicar (apaga el IBE para ese property):
+
+```sql
+UPDATE properties SET published_at = NULL WHERE id = '<property-uuid>';
+```
+
+### 20.2 Endpoints
+
+Base path: `/public/ibe`. Sin auth. Rate-limit in-memory por IP+ruta.
+
+| Método | Ruta                                              | Rate (V1)       |
+|--------|--------------------------------------------------|-----------------|
+| GET    | `/properties/:slug`                              | 60/min          |
+| GET    | `/properties/:slug/availability?arrival&departure&adults&children` | 30/min |
+| POST   | `/properties/:slug/reservations`                 | 5/hora          |
+| GET    | `/properties/:slug/reservations/:code?lastName=` | 20/min          |
+| POST   | `/properties/:slug/reservations/:code/cancel`    | 5/hora          |
+
+Body de `POST reservations` valida con Zod: arrival/departure ISO,
+roomTypeId, occupancy, guest con `gdprConsent: true` obligatorio,
+`marketingConsent` opcional. Crea Reservation + Folio + Guest con
+`source = DIRECT` y `notes = 'Reserva creada desde IBE público'`.
+
+### 20.3 Identidad / audit
+
+Sin auth, el `actorId` del contexto es la constante
+`00000000-0000-0000-0000-000000000000` ("huésped público IBE"). El
+correlationId se genera por request (`ibe-<rand>`) para trazar.
+
+### 20.4 Rate limit
+
+`RateLimitGuard` propio (sin nueva dep). Buckets in-memory por
+`route|ip`. Suficiente para piloto; reemplazar por `@nestjs/throttler`
++ Redis cuando haya multi-instancia real.
+
+### 20.5 Cancelación
+
+`computePenalty` lee `CancellationPolicy.hoursBeforeArrival` y
+`penaltyPct`. Si no hay política → 0 (gratis). Si la penalización > 0
+y el body no envía `acceptPenalty: true`, responde 409 con el monto;
+el huésped reintenta con la confirmación. La penalización NO se cobra
+automáticamente — el operador la cobra desde back-office (Stripe Fase 2
+si aplica).
+
+### 20.6 Eventos
+
+- `reservation.created v1` con `source = DIRECT` cuando viene del IBE
+  (no hay flag específico V1 — `notes` lo registra).
+- `reservation.cancelled v1` con `reason = "Cancelada por el huésped
+  desde IBE"` y `policyApplied = <policyName>`.
