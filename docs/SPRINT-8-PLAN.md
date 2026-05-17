@@ -6,6 +6,10 @@
 > propio) + Sprint 7 §8 (handoff).
 > **Predecesores:** Sprint 7 cerrado en código (W1-W4). Track commercial-grade
 > + Sprint 6 IA V1 cerrados.
+>
+> **Estado:** Sprint 8 ✅ código en sus 4 ramas:
+> `claude/s8-w1-public-api`, `claude/s8-w2-web-ibe`, `claude/s8-w3-booking`,
+> `claude/s8-w4-manage`. Sin merge a `main` — pendiente validación PO.
 
 ---
 

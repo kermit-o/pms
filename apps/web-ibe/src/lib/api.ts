@@ -160,3 +160,40 @@ export async function publicConfirmSetupIntent(
     },
   );
 }
+
+export interface CancelResult {
+  code: string;
+  status: 'CANCELLED';
+  penalty: string;
+  currency: string;
+  policy: string | null;
+}
+
+export async function cancelReservation(
+  slug: string,
+  code: string,
+  lastName: string,
+  acceptPenalty: boolean,
+): Promise<CancelResult> {
+  return fetchJson(
+    `/public/ibe/properties/${encodeURIComponent(slug)}/reservations/${encodeURIComponent(code)}/cancel`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ lastName, acceptPenalty }),
+    },
+  );
+}
+
+export async function resendConfirmation(
+  slug: string,
+  code: string,
+  lastName: string,
+): Promise<{ queued: true; email: string | null }> {
+  return fetchJson(
+    `/public/ibe/properties/${encodeURIComponent(slug)}/reservations/${encodeURIComponent(code)}/resend-confirmation`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ lastName }),
+    },
+  );
+}

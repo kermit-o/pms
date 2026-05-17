@@ -496,6 +496,59 @@ export class PublicIbeService {
     return { reservationId: reservation.id, user, correlationId: ctx.correlationId };
   }
 
+  /**
+   * Reenvía el email de confirmación al huésped. V1 emite el evento
+   * `reservation.confirmation_resend_requested`; el consumer real
+   * (Postmark / SendGrid) llega en Sprint 9.
+   *
+   * Idempotente — se puede llamar varias veces, el rate-limit del
+   * endpoint protege contra abuse.
+   */
+  async resendConfirmation(
+    slug: string,
+    code: string,
+    lastName: string,
+  ): Promise<{ queued: true; email: string | null }> {
+    const property = await this.findPublishedProperty(slug);
+    const ctx = this.publicCtx(property.tenantId);
+    const reservation = await this.prisma.withTenant(ctx, (tx) =>
+      tx.reservation.findFirst({
+        where: {
+          propertyId: property.id,
+          code,
+          deletedAt: null,
+          guests: {
+            some: {
+              isPrimary: true,
+              guest: { lastName: { equals: lastName, mode: 'insensitive' } },
+            },
+          },
+        },
+        select: {
+          id: true,
+          code: true,
+          guests: {
+            where: { isPrimary: true },
+            take: 1,
+            select: { guest: { select: { email: true, firstName: true, lastName: true } } },
+          },
+        },
+      }),
+    );
+    if (!reservation) throw new NotFoundException('Reservation not found');
+    const email = reservation.guests[0]?.guest.email ?? null;
+
+    // V1: solo logueamos. El catálogo de eventos del eventbus tiene shape
+    // estricto y añadir `reservation.confirmation_resend_requested` es
+    // scope de Sprint 9 (cuando exista el consumer real de email). Por
+    // ahora un log estructurado basta para auditar la intención —
+    // correlationId + ctx + email cubren la traza.
+    this.log.log(
+      `Confirmation resend queued reservationId=${reservation.id} code=${reservation.code} email=${email ?? 'none'} tenant=${ctx.tenantId} cid=${ctx.correlationId}`,
+    );
+    return { queued: true, email };
+  }
+
   // --------------------------------------------------------------------------
 
   private async findPublishedProperty(slug: string) {

@@ -1286,3 +1286,43 @@ El sentinel actor para audit es
 `00000000-0000-0000-0000-000000000000`.
 
 **Schema.org LodgingReservation** inyectado en la confirmación.
+
+### 20.9 Manage my reservation — Sprint 8 W4
+
+**Endpoint nuevo (API):**
+
+| Método | Ruta | Rate |
+|--------|------|------|
+| POST | `/public/ibe/properties/:slug/reservations/:code/resend-confirmation` | 3/hora |
+
+Body `{ lastName }`. Verifica `(code, lastName)`. V1 sólo loguea
+estructurado — el consumer real de email (Postmark/SendGrid) llega en
+Sprint 9. Devuelve `{ queued: true, email }`.
+
+**Ruta web-ibe:**
+
+| Ruta | Descripción |
+|------|------------|
+| `/h/<slug>/manage` | Form lookup (code + apellido). Si vienen via query, muestra detalle |
+
+Flujo:
+
+1. El huésped abre `/h/<slug>/manage`, introduce code + apellido.
+2. Server action redirige a `?code=…&lastName=…`.
+3. Vista carga `getReservation`. Muestra estado, fechas, tipo, total,
+   política de cancelación.
+4. Acciones:
+   - **Reenviar email** — server action llama `resend-confirmation`.
+   - **Cancelar** (solo si la reserva es cancelable). Mostramos checkbox
+     "Acepto la penalización si aplica". Si la API responde 409
+     pidiendo `acceptPenalty=true`, el banner amber lo indica y el
+     huésped reintenta.
+5. Banners: `cancelled` (con monto), `cancel_needs_accept`,
+   `cancel_fail`, `resent`, `resend_fail`, `lookup_fail`.
+
+Sin cobro automatizado de penalización — el back-office (Stripe Fase
+2) lo ejecuta cuando aplique.
+
+**Sprint 8 IBE V1 completo** (W1 API pública + W2 app web-ibe + W3
+booking + Stripe + W4 manage). Pendiente: email real (S9), captcha en
+abuse, pre-pago full, channel manager.
