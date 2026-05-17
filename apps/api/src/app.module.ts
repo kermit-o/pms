@@ -18,6 +18,7 @@ import { CopilotModule } from './copilot';
 import { HousekeepingModule } from './housekeeping';
 import { NightAuditModule } from './night-audit';
 import { PaymentsModule } from './payments';
+import { PublicIbeModule } from './public-ibe';
 import { ReportsModule } from './reports';
 
 @Module({
@@ -39,6 +40,7 @@ import { ReportsModule } from './reports';
     CopilotModule,
     NightAuditModule,
     PaymentsModule,
+    PublicIbeModule,
     ReportsModule,
     CashModule,
     HousekeepingModule,

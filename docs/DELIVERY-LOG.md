@@ -80,6 +80,95 @@ Una o dos frases.
 
 ---
 
+## 2026-05-17 · [FEAT] · Sprint 8 W1 — API pública IBE
+
+**Scope:** `packages/db`, `apps/api/public-ibe`, `RUNBOOK.md`
+**Branch:** `claude/s8-w1-public-api`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- **DB.** Migration `20260612000000_property_public_slug`:
+  `properties.public_slug` (TEXT, unique partial) + `published_at`
+  (TIMESTAMPTZ). El IBE solo expone properties con `published_at IS NOT
+  NULL`. El slug es opaco (no expone tenantId/propertyId).
+- **Módulo nuevo** `apps/api/src/public-ibe`:
+  - `PublicIbeService` con 5 acciones:
+    - `getProperty(slug)`: metadata pública.
+    - `searchAvailability(slug, query)`: disponibilidad por room type
+      reusando la lógica de availability del back-office.
+    - `createReservation(slug, body)`: crea Reservation + Folio +
+      Guest. Valida occupancy ≤ maxOccupancy, GDPR consent obligatorio.
+      `source = DIRECT`, `notes = 'Reserva creada desde IBE público'`.
+    - `getReservation(slug, code, lastName)`: verificación débil
+      (code + lastName) con `mode: 'insensitive'`.
+    - `cancelReservation(slug, code, body)`: aplica política. Si hay
+      penalización > 0 y `acceptPenalty=false`, responde 409 con el
+      monto.
+  - `RateLimitGuard` in-memory (sin nueva dep `@nestjs/throttler`).
+    Decorator `@RateLimit({ max, windowMs })` por endpoint.
+  - `PublicIbeController` con `@Public()` + guard global + decoradores.
+  - DTOs Zod: `AvailabilityQuery`, `CreatePublicReservationDto`,
+    `LookupReservationQuery`, `CancelPublicReservationDto`.
+- **Sentinel actor** `00000000-0000-0000-0000-000000000000` para audit.
+  Correlation id por request (`ibe-<rand>`).
+- **Eventos emitidos.** `reservation.created` con source=DIRECT y
+  payload completo; `reservation.cancelled` con
+  `reason = "Cancelada por el huésped desde IBE"` y `policyApplied`.
+- **Cálculo de penalización V1.** Usa
+  `CancellationPolicy.hoursBeforeArrival` + `penaltyPct`. Sin política
+  → 0. La penalización NO se cobra automáticamente — el operador la
+  resuelve desde back-office (Stripe Fase 2 si aplica).
+- **Tests.** 9 casos: rate-limit guard (no decorator, max calls,
+  separación por IP); service (slug no publicado, arrival inválido,
+  search ok con overlap, createReservation valida GDPR, persistencia +
+  event, lookup mismatch).
+- **RUNBOOK §20** documenta publicación, endpoints + rate-limits,
+  identidad/audit, política de cancelación y eventos.
+
+**Por qué.**
+
+Sprint 8 W1 — la base para la app `web-ibe` (W2/W3/W4). Sin esta API
+pública el huésped final no tiene punto de entrada. Decisiones de
+diseño orientadas a producción: slug opaco para que el hotel decida
+cuándo expone, gating por `published_at`, rate-limit defensivo, GDPR
+explícito, sentinel actor para audit limpio.
+
+**Desviaciones del plan.**
+
+- Rate-limit con guard in-memory en lugar de `@nestjs/throttler` (la
+  dep requiere ADR + aprobación PO). Cuando se valide piloto con
+  tráfico real, migrar a throttler + Redis.
+- No incluye refactor de `RoomsService.searchAvailabilityByType` —
+  duplico la lógica de disponibilidad dentro de `PublicIbeService`
+  para no tocar paths autenticados. Si el patrón se repite en W2/W3,
+  extraer a un helper compartido.
+
+**Archivos clave.**
+
+- `packages/db/prisma/migrations/20260612000000_property_public_slug/migration.sql`
+- `packages/db/prisma/schema.prisma` (Property: publicSlug + publishedAt)
+- `apps/api/src/public-ibe/public-ibe.service.ts` (+ spec)
+- `apps/api/src/public-ibe/public-ibe.controller.ts`
+- `apps/api/src/public-ibe/public-ibe.dto.ts`
+- `apps/api/src/public-ibe/public-ibe.types.ts`
+- `apps/api/src/public-ibe/rate-limit.guard.ts` (+ spec)
+- `apps/api/src/public-ibe/index.ts` (módulo)
+- `apps/api/src/app.module.ts` (registro)
+- `RUNBOOK.md` §20
+
+**Sigue pendiente** (W2/W3/W4 + follow-ups):
+
+- App `apps/web-ibe` (W2).
+- Booking flow + Stripe Elements (W3).
+- Manage my reservation (W4).
+- Email service real (handoff Sprint 9 — V1 emite eventos, no envía).
+- Captcha / Turnstile si hay abuso en piloto.
+- Migrar rate-limit a `@nestjs/throttler` cuando haya multi-instancia.
+- Extraer helper de disponibilidad compartido si W2/W3 lo necesitan.
+
+---
+
 ## 2026-05-16 · [DOCS] · SPRINT-8-PLAN.md — Online Booking Engine V1
 
 **Scope:** docs
