@@ -14,6 +14,7 @@ import {
   listRooms,
   updateGuarantee,
 } from '@/lib/api';
+import { FolioVoiceButton } from '@/components/FolioVoiceButton';
 import { NoShowChargeButton } from '@/components/NoShowChargeButton';
 import { StripeCaptureButton } from '@/components/StripeCaptureButton';
 import type { FolioDetail } from '@/lib/api';
@@ -365,7 +366,9 @@ function FolioPanel({
       </div>
 
       {isOpen && (
-        <div className="mt-6 grid gap-6 md:grid-cols-2">
+        <div id="folio-forms" className="space-y-4">
+          <FolioVoiceButton formScopeSelector="#folio-forms .folio-forms-grid" />
+          <div className="folio-forms-grid mt-2 grid gap-6 md:grid-cols-2">
           <form action={addCharge} className="space-y-3 rounded-xl bg-aubergine-50/40 p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
               Añadir cargo
@@ -404,6 +407,7 @@ function FolioPanel({
               Registrar pago
             </button>
           </form>
+          </div>
         </div>
       )}
 
