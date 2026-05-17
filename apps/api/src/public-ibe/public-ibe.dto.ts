@@ -49,3 +49,8 @@ export const PublicSetupIntentDto = z.object({
   lastName: z.string().min(1).max(80),
 });
 export type PublicSetupIntentDto = z.infer<typeof PublicSetupIntentDto>;
+
+export const ResendConfirmationDto = z.object({
+  lastName: z.string().min(1).max(80),
+});
+export type ResendConfirmationDto = z.infer<typeof ResendConfirmationDto>;

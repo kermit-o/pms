@@ -14,6 +14,7 @@ import {
   CreatePublicReservationDto,
   LookupReservationQuery,
   PublicSetupIntentDto,
+  ResendConfirmationDto,
 } from './public-ibe.dto';
 import { PublicIbeService } from './public-ibe.service';
 import { RateLimit, RateLimitGuard } from './rate-limit.guard';
@@ -95,5 +96,16 @@ export class PublicIbeController {
   ) {
     const input = PublicSetupIntentDto.parse(body);
     return this.service.confirmSetupIntent(slug, code, input.lastName);
+  }
+
+  @Post('properties/:slug/reservations/:code/resend-confirmation')
+  @RateLimit({ max: 3, windowMs: 60 * 60_000 })
+  async resendConfirmation(
+    @Param('slug') slug: string,
+    @Param('code') code: string,
+    @Body() body: unknown,
+  ) {
+    const input = ResendConfirmationDto.parse(body);
+    return this.service.resendConfirmation(slug, code, input.lastName);
   }
 }

@@ -80,6 +80,82 @@ Una o dos frases.
 
 ---
 
+## 2026-05-17 · [FEAT] · Sprint 8 W4 — Manage my reservation
+
+**Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `RUNBOOK.md`,
+`docs/SPRINT-8-PLAN.md`
+**Branch:** `claude/s8-w4-manage`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- **API.**
+  - `PublicIbeService.resendConfirmation(slug, code, lastName)`:
+    verifica `(code, lastName)`, retorna `{ queued: true, email }`. V1
+    loguea estructurado (`reservationId code email tenant cid`) — el
+    consumer real de email vive en Sprint 9.
+  - Endpoint `POST /public/ibe/properties/:slug/reservations/:code/resend-confirmation`
+    (rate 3/hora — abuse defensivo).
+  - DTO `ResendConfirmationDto { lastName }`.
+- **Web-ibe `/h/<slug>/manage`** (server component + server actions):
+  - Sin code+lastName en query → form lookup.
+  - Con code+lastName → llamada a `getReservation` y vista detallada
+    con estado, fechas, tipo, total, política de cancelación.
+  - **Reenviar email** (server action → `resend-confirmation`).
+  - **Cancelar** (cuando la reserva es cancelable): checkbox "acepto
+    penalización", botón rojo. Si la API responde 409 pidiendo
+    `acceptPenalty=true`, muestra banner ámbar y el huésped reintenta.
+  - Banners: cancelled (con monto), cancel_needs_accept, cancel_fail,
+    resent, resend_fail, lookup_fail. Estado coloreado por status.
+- **Helpers web-ibe**: `cancelReservation` + `resendConfirmation`.
+- **RUNBOOK §20.9** con flujo, endpoint, rate-limit, follow-ups.
+
+**Por qué.**
+
+Cierra el ciclo huésped del IBE. Lookup débil (code + apellido) es
+estándar en hotelería — el rate-limit es el cinturón. Cancelación con
+política aplicada server-side y double-opt-in (`acceptPenalty=true`)
+respeta ADR-020 (nada se ejecuta sin confirmación del usuario).
+
+**Build:** First Load JS = 109 kB para `/manage` (mismo bundle del
+resto del IBE).
+
+**Decisión registrada (deviación leve del plan).**
+
+El plan §6 mencionaba emitir un evento NATS `email.send` v1 para el
+reenvío. Como el catálogo de eventos de `eventbus` está estrictamente
+tipado y añadir un evento nuevo requiere tocar `packages/eventbus`
+(scope deviation cross-paquete), V1 sólo loguea. El log estructurado
+cubre auditoría hasta que S9 introduzca el catálogo de email events
+con su consumer.
+
+**Archivos clave.**
+
+- `apps/api/src/public-ibe/public-ibe.service.ts` (resendConfirmation +
+  fix de findPublishedProperty perdido en edit anterior)
+- `apps/api/src/public-ibe/public-ibe.controller.ts` (endpoint)
+- `apps/api/src/public-ibe/public-ibe.dto.ts` (ResendConfirmationDto)
+- `apps/web-ibe/src/app/h/[slug]/manage/page.tsx`
+- `apps/web-ibe/src/lib/api.ts` (cancelReservation, resendConfirmation)
+- `RUNBOOK.md` §20.9
+- `docs/SPRINT-8-PLAN.md` (estado actualizado)
+
+**Sprint 8 IBE V1 completo (W1+W2+W3+W4).** Ninguna rama mergeada a
+`main` — pendiente validación PO.
+
+**Sigue pendiente** (handoff a Sprint 9 — sección §8 del plan):
+
+- Channel Manager (push avail/rates a Booking.com / Expedia).
+- Email service real (Postmark / SendGrid) con plantillas
+  multidioma. V1 sólo emite log; W4 ya tiene el endpoint listo.
+- Captcha (Turnstile) en `/book` y `/manage` si hay abuso real.
+- Onboarding wizard self-service.
+- Pre-pago full (PaymentIntent on-session).
+- Custom domain por property.
+- Memoria semántica V1.1 (pgvector + openai).
+
+---
+
 ## 2026-05-17 · [FEAT] · Sprint 8 W3 — Booking flow + Stripe SetupIntent
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `RUNBOOK.md`
