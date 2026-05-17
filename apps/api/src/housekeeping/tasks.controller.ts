@@ -6,11 +6,13 @@ import {
   CancelTaskDto,
   CompleteTaskDto,
   CreateTaskDto,
+  InspectTaskDto,
   ListTasksQuery,
   ReassignTaskDto,
   SuggestAssignmentsQuery,
   SummaryQuery,
 } from './dto';
+import { InspectionService } from './inspection.service';
 import { HousekeepingTasksService } from './tasks.service';
 
 const READ_ROLES = [
@@ -24,7 +26,22 @@ const WRITE_ROLES = ['tenant_admin', 'housekeeping_supervisor', 'housekeeper'] a
 
 @Controller('housekeeping/tasks')
 export class HousekeepingTasksController {
-  constructor(private readonly tasks: HousekeepingTasksService) {}
+  constructor(
+    private readonly tasks: HousekeepingTasksService,
+    private readonly inspection: InspectionService,
+  ) {}
+
+  @Post(':id/inspect')
+  @Roles(...WRITE_ROLES)
+  async inspect(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = InspectTaskDto.parse(body);
+    return this.inspection.inspect(user, correlationIdOf(req), id, input.imageBase64);
+  }
 
   @Get()
   @Roles(...READ_ROLES)
