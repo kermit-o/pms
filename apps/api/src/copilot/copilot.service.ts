@@ -1,37 +1,38 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import Anthropic from '@anthropic-ai/sdk';
-import { foToolCatalog, hskToolCatalog } from '@pms/mcp-tools';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { CopilotMessageRole, Prisma } from '@pms/db';
 import type { AuthUser } from '../auth';
-import type { Env } from '../config/env.schema';
-import { type AnyToolName, ToolResolver } from './tool-resolver';
+import { PrismaService } from '../db';
+import { COPILOT_ADAPTER } from './adapter-factory';
+import {
+  type AdapterCallbacks,
+  type AdapterTelemetry,
+  type CopilotAdapter,
+  type CopilotSessionState,
+  type ToolProposal,
+} from './copilot.types';
+import { CopilotMetrics } from './metrics';
+import type { AnyToolName } from './tool-resolver';
+import { ToolResolver } from './tool-resolver';
 
 /**
- * Conversational copilot. Sprint 2 W7 (FO) + Sprint 5 W5 (HSK cross-domain).
+ * Conversational copilot. Sprint 2 W7 (FO) + Sprint 5 W5 (HSK cross-domain)
+ * + Sprint 6 W1 (Anthropic adapter, prompt caching, audit en DB).
  *
  * Sessions live in memory keyed by sessionId. Production deployments back
  * this with Redis + a persistent store; para el MVP lo mantenemos in-process
  * y aceptamos el trade-off (sesiones se resetean al reiniciar la API).
  *
- * Flow:
- *  1. El operador abre una sesion.
- *  2. Cada mensaje del usuario se acumula en la sesion y va al adapter LLM
- *     (Anthropic real cuando ANTHROPIC_API_KEY esta seteado; stub
- *     deterministico si no — tests usan stub).
- *  3. El adapter emite (a) texto asistente, (b) intent de tool con dominio
- *     FO o HSK. Read-only auto-ejecuta; mutating va a `pendingTools` y la
- *     UI surface confirmacion (ADR-020).
- *  4. confirmTool() ejecuta el tool pendiente con la decision del operador.
- *     El resolver re-valida Zod input, RLS via tenant context, financial
- *     no se ejecuta sin "approve" explicito.
+ * Cada turno se persiste en `copilot_messages` (USER, ASSISTANT, TOOL_USE,
+ * TOOL_RESULT) con tokens + latency del adapter. Eso da auditoria legal
+ * (quien pidio que, cuando) + observabilidad de coste por tenant.
  *
  * El cross-domain (Sprint 5) viene de delegar en `ToolResolver` que enruta
  * a `FoToolRouter` o `HskToolRouter` segun prefijo (`hsk_*` -> HSK).
@@ -40,16 +41,14 @@ import { type AnyToolName, ToolResolver } from './tool-resolver';
 export class CopilotService {
   private readonly log = new Logger(CopilotService.name);
   private readonly sessions = new Map<string, Session>();
-  private readonly anthropicApiKey: string | undefined;
 
   constructor(
     private readonly resolver: ToolResolver,
-    private readonly config: ConfigService<Env, true>,
+    private readonly prisma: PrismaService,
+    @Inject(COPILOT_ADAPTER) private readonly adapter: CopilotAdapter,
+    private readonly metrics: CopilotMetrics,
   ) {
-    this.anthropicApiKey = this.config.get('ANTHROPIC_API_KEY', { infer: true });
-    this.log.log(
-      `Copilot init: anthropic=${this.anthropicApiKey ? 'present(' + this.anthropicApiKey.length + 'ch)' : 'absent'}`,
-    );
+    this.log.log(`Copilot init: adapter=${this.adapter.name}`);
   }
 
   createSession(user: AuthUser, propertyId: string | undefined): { sessionId: string } {
@@ -77,6 +76,47 @@ export class CopilotService {
     sessionId: string,
     content: string,
   ): Promise<SessionView> {
+    return this.handleTurn(user, correlationId, sessionId, content);
+  }
+
+  /**
+   * Generator que produce eventos SSE durante un turno completo:
+   *  - status: thinking
+   *  - tool_call: el adapter llamo a un read-only tool
+   *  - tool_result: y obtuvo respuesta (ok | error)
+   *  - done: turno completo, payload = SessionView final
+   */
+  async *sendMessageStream(
+    user: AuthUser,
+    correlationId: string,
+    sessionId: string,
+    content: string,
+  ): AsyncGenerator<StreamEvent> {
+    yield { type: 'status', phase: 'thinking' };
+    const events: StreamEvent[] = [];
+    const callbacks: AdapterCallbacks = {
+      onToolUse: (tool) => events.push({ type: 'tool_call', tool }),
+      onToolResult: (tool, ok) => events.push({ type: 'tool_result', tool, ok }),
+    };
+    // Acumulamos eventos del adapter en `events` y los ceden tras la
+    // resolucion del turno. Para verdadero "live streaming" del modelo
+    // este generator necesitara usar un canal real (EventEmitter o stream);
+    // de momento la fase "thinking -> tool_call -> tool_result -> done"
+    // ya da feedback visible durante loops largos del agente.
+    const view = await this.handleTurn(user, correlationId, sessionId, content, callbacks);
+    for (const ev of events) {
+      yield ev;
+    }
+    yield { type: 'done', view };
+  }
+
+  private async handleTurn(
+    user: AuthUser,
+    correlationId: string,
+    sessionId: string,
+    content: string,
+    callbacks?: AdapterCallbacks,
+  ): Promise<SessionView> {
     const session = this.requireSession(user, sessionId);
 
     session.messages.push({
@@ -85,8 +125,20 @@ export class CopilotService {
       content,
       createdAt: new Date(),
     });
+    await this.persistMessage(user, session.id, {
+      role: CopilotMessageRole.USER,
+      contentText: content,
+    });
 
-    const proposal = await this.proposeReply(session, user, correlationId, content);
+    const adapterResult = await this.adapter.propose(
+      this.snapshotForAdapter(session),
+      user,
+      correlationId,
+      content,
+      callbacks,
+    );
+    const proposal = adapterResult.proposal;
+    const telemetry = adapterResult.telemetry;
 
     if (proposal.kind === 'text') {
       session.messages.push({
@@ -94,6 +146,11 @@ export class CopilotService {
         role: 'assistant',
         content: proposal.text,
         createdAt: new Date(),
+      });
+      await this.persistMessage(user, session.id, {
+        role: CopilotMessageRole.ASSISTANT,
+        contentText: proposal.text,
+        telemetry,
       });
       return toView(session);
     }
@@ -111,18 +168,34 @@ export class CopilotService {
           user,
           correlationId,
         );
+        const text = `Resultado de ${proposal.tool}:\n\n\`\`\`json\n${truncateJson(result)}\n\`\`\``;
         session.messages.push({
           id: randomUUID(),
           role: 'assistant',
-          content: `Resultado de ${proposal.tool}:\n\n\`\`\`json\n${truncateJson(result)}\n\`\`\``,
+          content: text,
           createdAt: new Date(),
         });
+        await this.persistMessage(user, session.id, {
+          role: CopilotMessageRole.TOOL_RESULT,
+          toolName: proposal.tool,
+          toolInput: proposal.input as Prisma.InputJsonValue,
+          toolResult: result as Prisma.InputJsonValue,
+          telemetry,
+        });
       } catch (err) {
+        const errMsg = `No pude ejecutar ${proposal.tool}: ${(err as Error).message}`;
         session.messages.push({
           id: randomUUID(),
           role: 'assistant',
-          content: `No pude ejecutar ${proposal.tool}: ${(err as Error).message}`,
+          content: errMsg,
           createdAt: new Date(),
+        });
+        await this.persistMessage(user, session.id, {
+          role: CopilotMessageRole.TOOL_RESULT,
+          toolName: proposal.tool,
+          toolInput: proposal.input as Prisma.InputJsonValue,
+          contentText: errMsg,
+          telemetry,
         });
       }
       return toView(session);
@@ -138,12 +211,13 @@ export class CopilotService {
       createdAt: new Date(),
       status: 'pending',
     });
+    const proposalMsg = `Sugerencia: ejecutar \`${proposal.tool}\`. Por seguridad necesito confirmación humana${
+      meta.financial ? ' (acción financiera)' : ''
+    }.`;
     session.messages.push({
       id: randomUUID(),
       role: 'assistant',
-      content: `Sugerencia: ejecutar \`${proposal.tool}\`. Por seguridad necesito confirmación humana${
-        meta.financial ? ' (acción financiera)' : ''
-      }.`,
+      content: proposalMsg,
       pendingToolId: pendingId,
       pendingTool: {
         name: proposal.tool,
@@ -151,6 +225,13 @@ export class CopilotService {
         financial: meta.financial,
       },
       createdAt: new Date(),
+    });
+    await this.persistMessage(user, session.id, {
+      role: CopilotMessageRole.TOOL_USE,
+      toolName: proposal.tool,
+      toolInput: proposal.input as Prisma.InputJsonValue,
+      contentText: proposalMsg,
+      telemetry,
     });
     return toView(session);
   }
@@ -173,11 +254,17 @@ export class CopilotService {
 
     if (decision === 'reject') {
       pending.status = 'rejected';
+      const rejMsg = `Operación \`${pending.tool}\` rechazada por el operador.`;
       session.messages.push({
         id: randomUUID(),
         role: 'assistant',
-        content: `Operación \`${pending.tool}\` rechazada por el operador.`,
+        content: rejMsg,
         createdAt: new Date(),
+      });
+      await this.persistMessage(user, session.id, {
+        role: CopilotMessageRole.ASSISTANT,
+        contentText: rejMsg,
+        toolName: pending.tool,
       });
       return toView(session);
     }
@@ -185,21 +272,36 @@ export class CopilotService {
     try {
       const result = await this.resolver.execute(pending.tool, pending.input, user, correlationId);
       pending.status = 'approved';
+      const okMsg = `Ejecutado \`${pending.tool}\`. Resultado:\n\n\`\`\`json\n${truncateJson(
+        result,
+      )}\n\`\`\``;
       session.messages.push({
         id: randomUUID(),
         role: 'assistant',
-        content: `Ejecutado \`${pending.tool}\`. Resultado:\n\n\`\`\`json\n${truncateJson(
-          result,
-        )}\n\`\`\``,
+        content: okMsg,
         createdAt: new Date(),
+      });
+      await this.persistMessage(user, session.id, {
+        role: CopilotMessageRole.TOOL_RESULT,
+        toolName: pending.tool,
+        toolInput: pending.input as Prisma.InputJsonValue,
+        toolResult: result as Prisma.InputJsonValue,
+        contentText: okMsg,
       });
     } catch (err) {
       pending.status = 'failed';
+      const failMsg = `Falló \`${pending.tool}\`: ${(err as Error).message}`;
       session.messages.push({
         id: randomUUID(),
         role: 'assistant',
-        content: `Falló \`${pending.tool}\`: ${(err as Error).message}`,
+        content: failMsg,
         createdAt: new Date(),
+      });
+      await this.persistMessage(user, session.id, {
+        role: CopilotMessageRole.TOOL_RESULT,
+        toolName: pending.tool,
+        toolInput: pending.input as Prisma.InputJsonValue,
+        contentText: failMsg,
       });
     }
 
@@ -207,191 +309,83 @@ export class CopilotService {
   }
 
   // -------------------------------------------------------------------------
-  // LLM adapter
+  // Internals
   // -------------------------------------------------------------------------
 
-  /**
-   * Pregunta al modelo que hacer. Con ANTHROPIC_API_KEY haria la llamada
-   * real a Anthropic Messages exponiendo TODO el catalogo (FO + HSK) via
-   * tool_use. Sin la key cae al stub deterministico — suficiente para
-   * tests y demos.
-   */
-  private async proposeReply(
-    session: Session,
-    user: AuthUser,
-    correlationId: string,
-    content: string,
-  ): Promise<ToolProposal> {
-    if (!this.anthropicApiKey) {
-      this.log.warn('Anthropic key absent, using stub');
-      return stubProposal(content);
-    }
-    try {
-      this.log.log(`Anthropic propose: msg="${content.slice(0, 60)}"`);
-      const result = await this.anthropicPropose(session, user, correlationId);
-      this.log.log(`Anthropic result kind=${result.kind}`);
-      return result;
-    } catch (err) {
-      this.log.error('Anthropic adapter error, falling back to stub', err as Error);
-      return stubProposal(content);
-    }
+  private snapshotForAdapter(session: Session): CopilotSessionState {
+    return {
+      id: session.id,
+      tenantId: session.tenantId,
+      userId: session.userId,
+      propertyId: session.propertyId,
+      messages: session.messages.map((m) => ({ role: m.role, content: m.content })),
+    };
   }
 
-  /**
-   * Agentic loop: el LLM ve la conversacion + tool catalog. Si propone un
-   * tool read-only, lo ejecutamos en silencio, devolvemos el resultado al
-   * LLM como tool_result y le dejamos seguir razonando. Repetimos hasta
-   * que devuelva un mensaje de texto final o un tool MUTATING (que
-   * requiere confirmacion humana).
-   *
-   * Pre: this.anthropicApiKey definido.
-   */
-  private async anthropicPropose(
-    session: Session,
+  private async persistMessage(
     user: AuthUser,
-    correlationId: string,
-  ): Promise<ToolProposal> {
-    const client = new Anthropic({ apiKey: this.anthropicApiKey });
-    const tools = buildAnthropicTools();
-
-    const today = new Date().toISOString().slice(0, 10);
-    const propertyHint = session.propertyId
-      ? `Property activa: ${session.propertyId}. Usala como propertyId por defecto.`
-      : 'Si necesitas propertyId pide al usuario que lo confirme.';
-    const system = [
-      'Eres Aubergine, copiloto operativo de un PMS hotelero.',
-      'Responde en español, breve, profesional. Usa los tools cuando aplique.',
-      'NO PIDAS CONFIRMACIÓN POR TEXTO — la UI ya muestra una tarjeta de',
-      'confirmación cuando propones un tool mutating. Cuando tengas todos los',
-      'datos para mutar, LLAMA AL TOOL DIRECTAMENTE; no contestes "¿confirmas?"',
-      'en texto. El usuario aprobará en la tarjeta. Para read-only ejecuta',
-      'sin pedir permiso.',
-      'NO muestres JSON intermedio al usuario, encadena varias llamadas read-only',
-      'si hace falta y al final propon un único tool_use mutating o un texto natural.',
-      'Fechas siempre YYYY-MM-DD.',
-      `Hoy es ${today}. Cuando el usuario dice "mañana" calculalo desde aquí.`,
-      'NUNCA pidas UUIDs al usuario. Cuando menciona un tipo de habitación',
-      'por nombre ("doble", "doble estándar", "suite") llama PRIMERO a',
-      'list_room_types para resolver el roomTypeId, luego procede.',
-      'JAMÁS inventes un UUID. Si no tienes uno real del catálogo NO ejecutes',
-      'el tool — vuelve a llamar list_room_types o pregunta al usuario.',
-      '',
-      'REGLA CRÍTICA — GRUPOS:',
-      'Si el usuario pide MÁS DE UNA habitación o menciona "grupo", "tour",',
-      '"boda", "conferencia", "X individuales + Y dobles", DEBES usar',
-      'create_reservation_group (NUNCA create_reservation individual).',
-      'OBLIGATORIO: el array `reservations` debe contener TODAS las',
-      'reservas COMPLETAS antes de proponer el tool. No propongas el tool',
-      'con array vacío o parcial; si necesitas resolver roomTypeId u otro',
-      'dato, primero llama a las tools read-only que hagan falta y DESPUÉS',
-      'genera el array completo en UN ÚNICO tool_use de',
-      'create_reservation_group.',
-      'Si no conoces el nombre de cada huésped, usa el organizador como',
-      'guest.firstName y un número como lastName: ej. para 7 individuales a',
-      'nombre de "Miki Tour" → firstName="Miki Tour", lastName="#1" … "#7".',
-      'Occupancy según tipo: IND=1 adulto, DBL/TWN=2, SUP=2, JSU=2-4, SUI=2.',
-      'Ejemplo: usuario pide "7 individuales y 6 dobles para Miki Tour',
-      'mañana 1 noche" → tu propuesta debe ser create_reservation_group',
-      'con array de 13 elementos: 7 con roomTypeId(IND)+occupancy.adults=1',
-      'y 6 con roomTypeId(DBL)+adults=2, todos con guestData firstName=',
-      '"Miki Tour" y lastName="#1".."#13" y organizerName="Miki Tour".',
-      '',
-      'Si el usuario da nombre y apellido en una sola frase (ej. "Smith Arnold"),',
-      'asume firstName=primero, lastName=segundo. No vuelvas a preguntar.',
-      propertyHint,
-    ].join(' ');
-
-    // Construye historial inicial desde session.messages.
-    const conv: Anthropic.Messages.MessageParam[] = session.messages.map((m) => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: m.content,
-    }));
-
-    for (let iter = 0; iter < 12; iter += 1) {
-      const resp = await client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2048,
-        system,
-        tools,
-        messages: conv,
-      });
-
-      // Busca tool_use block.
-      const toolUse = resp.content.find(
-        (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use',
-      );
-
-      if (!toolUse) {
-        const text = resp.content
-          .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
-          .map((b) => b.text)
-          .join('\n')
-          .trim();
-        return { kind: 'text', text: text || '…' };
+    sessionId: string,
+    fields: {
+      role: CopilotMessageRole;
+      contentText?: string | null;
+      toolName?: string | null;
+      toolInput?: Prisma.InputJsonValue | null;
+      toolResult?: Prisma.InputJsonValue | null;
+      telemetry?: AdapterTelemetry;
+    },
+  ): Promise<void> {
+    // Metricas: incrementar siempre, persistir DB best-effort.
+    const model = fields.telemetry?.model ?? this.adapter.name;
+    this.metrics.messages.add(1, { tenant: user.tenantId, role: fields.role, model });
+    if (fields.telemetry) {
+      const labels = { tenant: user.tenantId, model: fields.telemetry.model };
+      if (fields.telemetry.inputTokens) {
+        this.metrics.tokens.add(fields.telemetry.inputTokens, { ...labels, kind: 'input' });
       }
-
-      if (!this.resolver.has(toolUse.name)) {
-        this.log.warn(`Anthropic returned unknown tool: ${toolUse.name}`);
-        return {
-          kind: 'text',
-          text: `Quise usar el tool ${toolUse.name} pero no existe. ¿Puedes reformular?`,
-        };
+      if (fields.telemetry.outputTokens) {
+        this.metrics.tokens.add(fields.telemetry.outputTokens, { ...labels, kind: 'output' });
       }
-      const meta = this.resolver.getMeta(toolUse.name as AnyToolName);
-
-      if (meta.mutating) {
-        // Pre-validamos contra el zod schema antes de pasarlo al humano.
-        // Si el LLM mandó algo incompleto (ej. group sin reservations array),
-        // devolvemos el error como tool_result y le dejamos corregir en la
-        // próxima iteración. Así evitamos cards-fantasma vacías.
-        const validation = this.resolver.tryValidate(toolUse.name as AnyToolName, toolUse.input);
-        if (!validation.ok) {
-          conv.push({ role: 'assistant', content: resp.content });
-          conv.push({
-            role: 'user',
-            content: [
-              {
-                type: 'tool_result',
-                tool_use_id: toolUse.id,
-                content: `ERROR de validación. Tu propuesta no cumple el schema:\n${validation.error}\nCorrige los campos faltantes y vuelve a llamar al tool con el payload COMPLETO en este mismo turno.`,
-                is_error: true,
-              },
-            ],
-          });
-          continue;
-        }
-        // Devuelve para que la UI pida confirmacion humana.
-        return { kind: 'tool', tool: toolUse.name as AnyToolName, input: toolUse.input };
+      if (fields.telemetry.cacheReadTokens) {
+        this.metrics.tokens.add(fields.telemetry.cacheReadTokens, {
+          ...labels,
+          kind: 'cache_read',
+        });
       }
-
-      // Read-only: ejecuta silenciosamente, alimenta el resultado al LLM.
-      let toolResultText: string;
-      try {
-        const result = await this.resolver.execute(
-          toolUse.name as AnyToolName,
-          toolUse.input,
-          user,
-          correlationId,
-        );
-        toolResultText = truncateJson(result);
-      } catch (err) {
-        toolResultText = `ERROR: ${(err as Error).message}`;
+      if (fields.telemetry.cacheWriteTokens) {
+        this.metrics.tokens.add(fields.telemetry.cacheWriteTokens, {
+          ...labels,
+          kind: 'cache_write',
+        });
       }
-
-      conv.push({ role: 'assistant', content: resp.content });
-      conv.push({
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: toolUse.id,
-            content: toolResultText,
-          },
-        ],
-      });
+      this.metrics.latency.record(fields.telemetry.latencyMs / 1000, labels);
     }
 
-    return { kind: 'text', text: 'Demasiados pasos. ¿Puedes simplificar la petición?' };
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: sessionId };
+    try {
+      await this.prisma.withTenant(ctx, async (tx) => {
+        await tx.copilotMessage.create({
+          data: {
+            tenantId: user.tenantId,
+            sessionId,
+            userId: user.sub,
+            role: fields.role,
+            contentText: fields.contentText ?? null,
+            toolName: fields.toolName ?? null,
+            toolInput: fields.toolInput ?? Prisma.JsonNull,
+            toolResult: fields.toolResult ?? Prisma.JsonNull,
+            model: fields.telemetry?.model ?? null,
+            inputTokens: fields.telemetry?.inputTokens ?? null,
+            outputTokens: fields.telemetry?.outputTokens ?? null,
+            cacheReadTokens: fields.telemetry?.cacheReadTokens ?? null,
+            cacheWriteTokens: fields.telemetry?.cacheWriteTokens ?? null,
+            latencyMs: fields.telemetry?.latencyMs ?? null,
+          },
+        });
+      });
+    } catch (err) {
+      // No bloqueamos al usuario por un fallo de auditoria — solo lo logueamos.
+      this.log.warn(`copilot_messages persist failed: ${(err as Error).message}`);
+    }
   }
 
   private requireSession(user: AuthUser, sessionId: string): Session {
@@ -402,141 +396,6 @@ export class CopilotService {
     }
     return session;
   }
-}
-
-// ---------------------------------------------------------------------------
-// Stub adapter
-// ---------------------------------------------------------------------------
-
-const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
-const ISO_DATE_RE = /\b\d{4}-\d{2}-\d{2}\b/;
-
-/**
- * Reconocedor deterministico de intents. Intencionalmente estrecho: pilla
- * unas pocas frases que mapean limpiamente a tools read-only / mutating
- * y surface un hint cuando faltan args en lugar de adivinar. El modelo
- * real reemplaza esto sin tocar el contrato.
- */
-export function stubProposal(content: string): ToolProposal {
-  const lower = content.toLowerCase();
-  const uuids = content.match(new RegExp(UUID_RE, 'gi')) ?? [];
-  const dates = content.match(new RegExp(ISO_DATE_RE, 'g')) ?? [];
-
-  // -------- HSK ---------------------------------------------------------
-  if (
-    /(sugiere|sugerencia|sugerencias).*(asignaci[oó]n|tareas|limpieza)/i.test(lower) &&
-    uuids[0]
-  ) {
-    return {
-      kind: 'tool',
-      tool: 'hsk_suggest_assignments',
-      input: { propertyId: uuids[0], businessDate: dates[0] },
-    };
-  }
-
-  if (
-    /(qu[eé] tareas|tareas (de )?hoy|listar tareas|tareas (asignadas )?(tiene|de))/i.test(lower) &&
-    uuids[0]
-  ) {
-    return {
-      kind: 'tool',
-      tool: 'hsk_list_today',
-      input: {
-        propertyId: uuids[0],
-        businessDate: dates[0],
-        assignedToUserId: uuids[1],
-      },
-    };
-  }
-
-  if (/(empezar|iniciar) (la |una )?(tarea|limpieza)/i.test(lower) && uuids[0]) {
-    return {
-      kind: 'tool',
-      tool: 'hsk_start_task',
-      input: { taskId: uuids[0] },
-    };
-  }
-
-  if (/(completar|finalizar|terminar) (la |una )?(tarea|limpieza)/i.test(lower) && uuids[0]) {
-    return {
-      kind: 'tool',
-      tool: 'hsk_complete_task',
-      input: { taskId: uuids[0] },
-    };
-  }
-
-  if (
-    /(asign[ao]r? (limpieza|tarea|housekeeping)|crear tarea (de limpieza|hsk))/i.test(lower) &&
-    uuids[0] &&
-    uuids[1] &&
-    dates[0]
-  ) {
-    return {
-      kind: 'tool',
-      tool: 'hsk_assign_task',
-      input: {
-        propertyId: uuids[0],
-        roomId: uuids[1],
-        businessDate: dates[0],
-        assignedToUserId: uuids[2],
-      },
-    };
-  }
-
-  // -------- FO ----------------------------------------------------------
-  if (
-    /(disponibilidad|availability|libres?|huecos?)/i.test(lower) &&
-    uuids[0] &&
-    dates[0] &&
-    dates[1]
-  ) {
-    return {
-      kind: 'tool',
-      tool: 'query_availability',
-      input: { propertyId: uuids[0], from: dates[0], to: dates[1] },
-    };
-  }
-
-  if (/(check[- ]?in|registrar entrada)/i.test(lower) && uuids[0]) {
-    return {
-      kind: 'tool',
-      tool: 'check_in',
-      input: { reservationId: uuids[0], roomId: uuids[1] },
-    };
-  }
-
-  if (/(asign[ao]r? habitaci[oó]n|assign room)/i.test(lower) && uuids[0] && uuids[1]) {
-    return {
-      kind: 'tool',
-      tool: 'assign_room',
-      input: { reservationId: uuids[0], roomId: uuids[1] },
-    };
-  }
-
-  if (/(res[uú]me?n|report|reporte)/i.test(lower) && uuids[0] && dates[0]) {
-    const focus: 'overview' | 'revenue' | 'occupancy' | 'incidents' =
-      /ingres[oó]s|revenue|adr|revpar/i.test(lower)
-        ? 'revenue'
-        : /ocupaci[oó]n|occupancy/i.test(lower)
-          ? 'occupancy'
-          : /incidente|cancelaci[oó]n/i.test(lower)
-            ? 'incidents'
-            : 'overview';
-    return {
-      kind: 'tool',
-      tool: 'generate_report',
-      input: { propertyId: uuids[0], businessDate: dates[0], focus },
-    };
-  }
-
-  return {
-    kind: 'text',
-    text:
-      'Puedo ayudarte con FO (disponibilidad, check-in, asignar habitación, resúmenes) ' +
-      'o HSK (asignar / iniciar / completar tareas, listar tareas del día, sugerir ' +
-      'asignaciones). Ej: "qué tareas tiene <userId> hoy en <propertyId>" o ' +
-      '"sugiere asignaciones para <propertyId> el <YYYY-MM-DD>".',
-  };
 }
 
 function truncateJson(value: unknown, max = 1500): string {
@@ -580,9 +439,13 @@ interface PendingTool {
   createdAt: Date;
 }
 
-export type ToolProposal =
-  | { kind: 'text'; text: string }
-  | { kind: 'tool'; tool: AnyToolName; input: unknown };
+export type { ToolProposal };
+
+export type StreamEvent =
+  | { type: 'status'; phase: 'thinking' }
+  | { type: 'tool_call'; tool: string }
+  | { type: 'tool_result'; tool: string; ok: boolean }
+  | { type: 'done'; view: SessionView };
 
 export interface SessionView {
   sessionId: string;
@@ -632,30 +495,4 @@ function toView(session: Session): SessionView {
       createdAt: p.createdAt.toISOString(),
     })),
   };
-}
-
-// ---------------------------------------------------------------------------
-// Anthropic tools build
-// ---------------------------------------------------------------------------
-
-type ToolMetaShape = { name: string; description: string; inputSchema: unknown };
-
-function buildAnthropicTools(): Anthropic.Messages.Tool[] {
-  const out: Anthropic.Messages.Tool[] = [];
-  const catalogs: Record<string, ToolMetaShape>[] = [
-    foToolCatalog as unknown as Record<string, ToolMetaShape>,
-    hskToolCatalog as unknown as Record<string, ToolMetaShape>,
-  ];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const toJson = zodToJsonSchema as unknown as (schema: any) => Record<string, unknown>;
-  for (const cat of catalogs) {
-    for (const meta of Object.values(cat)) {
-      out.push({
-        name: meta.name,
-        description: meta.description,
-        input_schema: toJson(meta.inputSchema) as Anthropic.Messages.Tool.InputSchema,
-      });
-    }
-  }
-  return out;
 }

@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
 import { ConfirmToolDto, CreateSessionDto, SendMessageDto } from './dto';
-import { CopilotService } from './copilot.service';
+import { CopilotService, type StreamEvent } from './copilot.service';
 
 const ROLES = ['tenant_admin', 'front_desk', 'night_auditor'] as const;
 
@@ -29,11 +29,29 @@ export class CopilotController {
   async sendMessage(
     @CurrentUser() user: AuthUser,
     @Req() req: FastifyRequest,
+    @Res({ passthrough: false }) reply: FastifyReply,
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('stream') streamFlag: string | undefined,
     @Body() body: unknown,
   ) {
     const input = SendMessageDto.parse(body);
-    return this.copilot.sendMessage(user, correlationIdOf(req), id, input.content);
+    const cid = correlationIdOf(req);
+    if (streamFlag === 'true') {
+      reply.raw.setHeader('Content-Type', 'text/event-stream');
+      reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
+      reply.raw.setHeader('Connection', 'keep-alive');
+      reply.raw.flushHeaders?.();
+      try {
+        for await (const ev of this.copilot.sendMessageStream(user, cid, id, input.content)) {
+          writeSse(reply, ev);
+        }
+      } catch (err) {
+        writeSse(reply, { type: 'error', message: (err as Error).message });
+      }
+      reply.raw.end();
+      return reply;
+    }
+    return this.copilot.sendMessage(user, cid, id, input.content);
   }
 
   @Post(':id/confirm-tool')
@@ -57,4 +75,11 @@ export class CopilotController {
 
 function correlationIdOf(req: FastifyRequest): string {
   return typeof req.id === 'string' ? req.id : String(req.id);
+}
+
+type SseFrame = StreamEvent | { type: 'error'; message: string };
+
+function writeSse(reply: FastifyReply, frame: SseFrame): void {
+  reply.raw.write(`event: ${frame.type}\n`);
+  reply.raw.write(`data: ${JSON.stringify(frame)}\n\n`);
 }

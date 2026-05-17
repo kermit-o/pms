@@ -17,12 +17,14 @@ export {
   HousekeepingTaskStatus,
   HousekeepingTaskType,
   LostFoundStatus,
+  CopilotMessageRole,
   GuaranteeType,
   GuaranteeStatus,
 } from '@prisma/client';
 
 export type {
   Tenant,
+  CopilotMessage,
   User,
   Property,
   AuditLog,

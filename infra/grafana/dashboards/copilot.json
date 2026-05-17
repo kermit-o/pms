@@ -1,0 +1,114 @@
+{
+  "title": "Aubergine — Copilot",
+  "uid": "aubergine-copilot",
+  "tags": ["aubergine", "copilot", "ai"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "tenant",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(copilot_messages_total, tenant)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false
+      },
+      {
+        "name": "model",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(copilot_messages_total{tenant=~\"$tenant\"}, model)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Mensajes/min",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(copilot_messages_total{tenant=~\"$tenant\", model=~\"$model\"}[5m])) * 60"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "P95 latencia (s)",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(copilot_latency_seconds_bucket{tenant=~\"$tenant\", model=~\"$model\"}[5m])))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Tokens input / día",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(increase(copilot_tokens_total{tenant=~\"$tenant\", model=~\"$model\", kind=\"input\"}[24h]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Cache read tokens / día",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(increase(copilot_tokens_total{tenant=~\"$tenant\", model=~\"$model\", kind=\"cache_read\"}[24h]))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Mensajes por rol",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (role) (rate(copilot_messages_total{tenant=~\"$tenant\", model=~\"$model\"}[5m]))",
+          "legendFormat": "{{role}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Tokens por kind (rate)",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (kind) (rate(copilot_tokens_total{tenant=~\"$tenant\", model=~\"$model\"}[5m]))",
+          "legendFormat": "{{kind}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latencia (p50 / p95 / p99)",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(copilot_latency_seconds_bucket{tenant=~\"$tenant\", model=~\"$model\"}[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(copilot_latency_seconds_bucket{tenant=~\"$tenant\", model=~\"$model\"}[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(copilot_latency_seconds_bucket{tenant=~\"$tenant\", model=~\"$model\"}[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    }
+  ]
+}

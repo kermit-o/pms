@@ -41,11 +41,33 @@ function buildService() {
     isMutating: vi.fn().mockImplementation((name: string) => !READ_ONLY.has(name)),
     isFinancial: vi.fn().mockImplementation((name: string) => FINANCIAL.has(name)),
     execute: vi.fn().mockResolvedValue({ ok: true }),
+    tryValidate: vi.fn().mockReturnValue({ ok: true }),
   };
-  const config = {
-    get: vi.fn().mockReturnValue(undefined),
+  // Stub adapter: tests no llaman al modelo real. El service usa el adapter
+  // inyectado y persiste en DB via prisma.withTenant — usamos un noop.
+  const adapter = {
+    name: 'stub' as const,
+    propose: vi.fn(async (_session, _user, _cid, content: string) => {
+      const { stubProposal } = await import('./stub-adapter');
+      return { proposal: stubProposal(content) };
+    }),
   };
-  const service = new CopilotService(resolver as never, config as never);
+  const prisma = {
+    withTenant: vi.fn(async (_ctx, fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ copilotMessage: { create: vi.fn().mockResolvedValue({}) } }),
+    ),
+  };
+  const metrics = {
+    messages: { add: vi.fn() },
+    tokens: { add: vi.fn() },
+    latency: { record: vi.fn() },
+  };
+  const service = new CopilotService(
+    resolver as never,
+    prisma as never,
+    adapter as never,
+    metrics as never,
+  );
   return { service, resolver };
 }
 
@@ -202,5 +224,22 @@ describe('CopilotService', () => {
     );
     expect(resolver.execute).not.toHaveBeenCalled();
     expect(view.pendingTools[0]!.tool).toBe('hsk_assign_task');
+  });
+
+  it('sendMessageStream emits status -> done events for stub adapter', async () => {
+    const { service } = buildService();
+    const { sessionId } = service.createSession(user, undefined);
+    const events: Array<{ type: string }> = [];
+    for await (const ev of service.sendMessageStream(
+      user,
+      'corr',
+      sessionId,
+      `consultar disponibilidad de ${PROPERTY_ID} entre 2026-06-10 y 2026-06-12`,
+    )) {
+      events.push(ev);
+    }
+    // Stub no encadena tools internamente, asi que solo veremos status + done.
+    expect(events[0]).toEqual({ type: 'status', phase: 'thinking' });
+    expect(events[events.length - 1]!.type).toBe('done');
   });
 });
