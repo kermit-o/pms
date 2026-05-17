@@ -17,6 +17,7 @@ import { CashModule } from './cash';
 import { CopilotModule } from './copilot';
 import { HousekeepingModule } from './housekeeping';
 import { NightAuditModule } from './night-audit';
+import { PaymentsModule } from './payments';
 import { ReportsModule } from './reports';
 
 @Module({
@@ -37,6 +38,7 @@ import { ReportsModule } from './reports';
     SesHospedajesModule,
     CopilotModule,
     NightAuditModule,
+    PaymentsModule,
     ReportsModule,
     CashModule,
     HousekeepingModule,

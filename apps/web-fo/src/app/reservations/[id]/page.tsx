@@ -1,20 +1,29 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
+import { redirect } from 'next/navigation';
 import {
   ApiError,
   addFolioCharge,
   addFolioPayment,
   apiFetch,
+  assignRoom,
+  checkOutReservation,
   closeFolio,
   getFolio,
+  listRooms,
+  updateGuarantee,
 } from '@/lib/api';
+import { StripeCaptureButton } from '@/components/StripeCaptureButton';
 import type { FolioDetail } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
 interface ReservationDetail {
   id: string;
+  propertyId: string;
+  roomTypeId: string;
+  roomId: string | null;
   code: string;
   status: string;
   arrivalDate: string;
@@ -24,6 +33,12 @@ interface ReservationDetail {
   totalAmount: string;
   currency: string;
   notes: string | null;
+  guaranteeType: 'NONE' | 'CARD_ON_FILE' | 'DEPOSIT' | 'CORPORATE' | 'HOTEL_GUARANTEE';
+  guaranteeStatus: 'PENDING' | 'SECURED' | 'EXPIRED' | 'FAILED' | 'RELEASED';
+  guaranteeAmount: string | null;
+  guaranteeReference: string | null;
+  guaranteeDeadline: string | null;
+  groupId: string | null;
   guests: Array<{
     isPrimary: boolean;
     guest: { id: string; firstName: string; lastName: string; email: string | null };
@@ -122,13 +137,49 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
     revalidatePath(`/reservations/${reservationId}`);
   }
 
+  async function markGuaranteeSecured(formData: FormData) {
+    'use server';
+    const session = await auth();
+    const reference = formData.get('reference')?.toString().trim() || undefined;
+    await updateGuarantee(session?.accessToken, reservationId, {
+      status: 'SECURED',
+      reference,
+    });
+    revalidatePath(`/reservations/${reservationId}`);
+  }
+
+  async function doCheckOut() {
+    'use server';
+    const session = await auth();
+    if (!detail) throw new Error('No reservation');
+
+    // Si la reserva no tiene habitacion asignada, asignar una libre del mismo
+    // roomType. UX: walk-in puede haberse creado sin habitacion (Sprint 2 W3).
+    if (!detail.roomId) {
+      const rooms = await listRooms(session?.accessToken, {
+        propertyId: detail.propertyId,
+      });
+      const free = rooms.find(
+        (r) => r.roomTypeId === detail.roomTypeId && r.status === 'CLEAN' && !r.isOutOfOrder,
+      );
+      if (!free) {
+        throw new Error('No hay habitaciones libres del tipo de la reserva');
+      }
+      await assignRoom(session?.accessToken, reservationId, free.id);
+    }
+
+    await checkOutReservation(session?.accessToken, reservationId);
+    revalidatePath(`/reservations/${reservationId}`);
+    redirect(`/reservations/${reservationId}`);
+  }
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-10">
       <Link href="/reservations" className="text-sm text-aubergine-500 hover:underline">
         ← Volver a reservas
       </Link>
 
-      <header className="flex items-end justify-between">
+      <header className="flex items-end justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
             Aubergine · Reservas
@@ -139,7 +190,37 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
             {detail.departureDate}
           </p>
         </div>
+        {detail.status === 'CHECKED_IN' && (
+          <form action={doCheckOut}>
+            <button
+              type="submit"
+              className="rounded-lg bg-aubergine-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-aubergine-800"
+            >
+              Check-out
+            </button>
+          </form>
+        )}
       </header>
+
+      {detail.groupId && (
+        <Link
+          href={`/reservations/groups/${detail.groupId}`}
+          className="block rounded-xl bg-indigo-50 px-4 py-3 text-sm text-indigo-900 ring-1 ring-indigo-200 hover:bg-indigo-100"
+        >
+          📎 Esta reserva pertenece a un grupo · ver y editar grupo →
+        </Link>
+      )}
+
+      <GuaranteeCard
+        reservationId={reservationId}
+        type={detail.guaranteeType}
+        status={detail.guaranteeStatus}
+        amount={detail.guaranteeAmount}
+        reference={detail.guaranteeReference}
+        deadline={detail.guaranteeDeadline}
+        currency={detail.currency}
+        onMarkSecured={markGuaranteeSecured}
+      />
 
       <div className="grid gap-6 md:grid-cols-2">
         <Section title="Estancia">
@@ -395,5 +476,105 @@ function Select({
         {children}
       </select>
     </label>
+  );
+}
+
+function GuaranteeCard({
+  reservationId,
+  type,
+  status,
+  amount,
+  reference,
+  deadline,
+  currency,
+  onMarkSecured,
+}: {
+  reservationId: string;
+  type: 'NONE' | 'CARD_ON_FILE' | 'DEPOSIT' | 'CORPORATE' | 'HOTEL_GUARANTEE';
+  status: 'PENDING' | 'SECURED' | 'EXPIRED' | 'FAILED' | 'RELEASED';
+  amount: string | null;
+  reference: string | null;
+  deadline: string | null;
+  currency: string;
+  onMarkSecured: (fd: FormData) => Promise<void>;
+}) {
+  const typeLabel: Record<typeof type, string> = {
+    NONE: 'Sin garantía (walk-in / mostrador)',
+    CARD_ON_FILE: 'Tarjeta en archivo (CCG)',
+    DEPOSIT: 'Depósito / Prepago',
+    CORPORATE: 'Cuenta empresa',
+    HOTEL_GUARANTEE: 'Hotel garantiza (VIP)',
+  };
+  const statusStyles: Record<typeof status, string> = {
+    PENDING: 'bg-amber-100 text-amber-800 ring-amber-200',
+    SECURED: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
+    EXPIRED: 'bg-rose-100 text-rose-800 ring-rose-200',
+    FAILED: 'bg-rose-100 text-rose-800 ring-rose-200',
+    RELEASED: 'bg-aubergine-100 text-aubergine-800 ring-aubergine-200',
+  };
+
+  const isNone = type === 'NONE';
+  const canMarkSecured = !isNone && (status === 'PENDING' || status === 'FAILED');
+  // Stripe captura tarjeta y fija el tipo a CARD_ON_FILE server-side, así que
+  // también lo permitimos cuando no hay tipo asignado todavía.
+  const canCaptureCard =
+    (status === 'PENDING' || status === 'FAILED') &&
+    (type === 'CARD_ON_FILE' || type === 'NONE');
+
+  return (
+    <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
+          Garantía
+        </p>
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${statusStyles[status]}`}
+        >
+          {status.toLowerCase()}
+        </span>
+        <span className="text-sm text-aubergine-700">{typeLabel[type]}</span>
+        {amount && (
+          <span className="text-sm text-aubergine-700/70">
+            · {amount} {currency}
+          </span>
+        )}
+        {reference && (
+          <span className="text-sm text-aubergine-700/70">· ref {reference}</span>
+        )}
+      </div>
+      {status === 'PENDING' && deadline && (
+        <p className="mt-2 text-xs text-amber-700">
+          Confirmar antes de {new Date(deadline).toLocaleString('es-ES')}
+        </p>
+      )}
+      {canCaptureCard && (
+        <div className="mt-3">
+          <StripeCaptureButton reservationId={reservationId} />
+          <p className="mt-1 text-[10px] text-aubergine-700/60">
+            Tokeniza la tarjeta con Stripe (PCI-safe).
+            {isNone && ' Al capturar, el tipo cambia a Tarjeta en archivo (CCG).'}
+            {' '}O marca manual abajo si la tomas por teléfono.
+          </p>
+        </div>
+      )}
+      {canMarkSecured && (
+        <form action={onMarkSecured} className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="text-xs text-aubergine-700">
+            Referencia (últimos 4, voucher…)
+            <input
+              name="reference"
+              type="text"
+              className="ml-2 rounded border border-aubergine-100 px-2 py-1 text-sm"
+            />
+          </label>
+          <button
+            type="submit"
+            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+          >
+            Marcar garantía OK
+          </button>
+        </form>
+      )}
+    </section>
   );
 }

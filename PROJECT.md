@@ -20,10 +20,19 @@
 - **Sprint 2 (MVP FO completo) ✅ mergeado a `main` (PR #6).** Producto: **Aubergine**. Alcance per §4.1 íntegro: reservas CRUD/walk-in/group bookings, check-in/out, folio con cargos/pagos/close + idempotencia, cardex GDPR, rooms availability matrix, business-day locking, SES.HOSPEDAJES sender con retries + DLQ. UI Next.js 15 con 19 rutas (login OIDC, dashboard, calendar, reservations, guests, rooms, business-day, compliance/ses) + copiloto conversacional con MCP tools y confirmación humana (ADR-020). 89/89 unit tests + 5 Playwright smoke specs. Plan en [`docs/SPRINT-2-PLAN.md`](./docs/SPRINT-2-PLAN.md).
 - **Sprint 3 (MVP Night Audit) ✅ mergeado a `main` (PR #7).** Cierre nocturno orquestado e idempotente con 6 steps (`POST_ROOM_CHARGES → POST_TAXES → POST_PACKAGES → MARK_NO_SHOWS → SNAPSHOT_REPORTS → CLOSE_DAY`), 5 reportes core (Manager / Revenue / Tax / In-house / Arrivals-Departures) con generators reusables + snapshot inmutable + export CSV, reconciliación de cajas que gates el cierre, `generate_report` MCP tool, RUNBOOK §12 con playbook del auditor. 128/128 unit tests, 9 e2e smoke specs, 3 migraciones nuevas. Plan en [`docs/SPRINT-3-PLAN.md`](./docs/SPRINT-3-PLAN.md).
 - **Sprint 4 (MVP Housekeeping) ✅ mergeado a `main` (PR #8).** Alcance per §4.3 íntegro: state machine PENDING → IN_PROGRESS → COMPLETED + CANCELLED, idempotencia por `(property, businessDate, room, taskType)`, Lost & Found con foto base64, panel supervisor con KPIs + reasignación, **PWA mobile-first** en `apps/web-hsk` con cola offline IndexedDB, login QR (HMAC HS256 dual issuer), 4 MCP HSK tools, 9 series Prometheus, RUNBOOK §13. 160/160 unit tests, 3 migraciones nuevas. Plan en [`docs/SPRINT-4-PLAN.md`](./docs/SPRINT-4-PLAN.md), UAT en [`docs/SPRINT-4-UAT.md`](./docs/SPRINT-4-UAT.md). **MVP completo (FO + NA + HSK).**
-- **Sprint 5 (Piloto en producción + polish + IA V1 stretch) ✅ código mergeado a `main` (PRs #9–#21).** ADR-023 → infra productiva en Fly.io región `mad` con réplica DR en `fra` (Postgres + NATS JetStream + Keycloak + Webs FO/HSK). Onboarding via `scripts/import-piloto.ts`. Polish: QR SVG inline, fotos lost-found a S3 con URL firmada, Copilot conversacional cross-domain (FO + HSK) via `ToolResolver`. Stretch IA V1: tool `hsk_suggest_assignments` con heurística greedy interpretable. Observabilidad: 2 dashboards Grafana (api-health + housekeeping) + 8 alert rules + Alertmanager routing. RUNBOOK §13 (HSK), §14 (incident response con 8 playbooks), §15 (onboarding nuevo hotel 5–10d). 172/172 unit tests. Coste estimado piloto: ~90 €/mes/hotel. **Pendiente operacional:** smoke deploy real a Fly + UAT ≥ 14 días con el primer hotel piloto. Plan en [`docs/SPRINT-5-PLAN.md`](./docs/SPRINT-5-PLAN.md).
+- **Sprint 5 (Piloto en producción + polish + IA V1 stretch) ✅ código mergeado a `main` (PRs #9–#21).** ADR-023 → infra productiva en Fly.io región `cdg` (París; `mad` retirado por Fly en 2025, ver addendum del ADR) con réplica DR en `fra` (Postgres + NATS JetStream + Keycloak + Webs FO/HSK). Onboarding via `scripts/import-piloto.ts`. Polish: QR SVG inline, fotos lost-found a S3 con URL firmada, Copilot conversacional cross-domain (FO + HSK) via `ToolResolver`. Stretch IA V1: tool `hsk_suggest_assignments` con heurística greedy interpretable. Observabilidad: 2 dashboards Grafana (api-health + housekeeping) + 8 alert rules + Alertmanager routing. RUNBOOK §13 (HSK), §14 (incident response con 8 playbooks), §15 (onboarding nuevo hotel 5–10d). 172/172 unit tests. Coste estimado piloto: ~90 €/mes/hotel. **Pendiente operacional:** smoke deploy real a Fly + UAT ≥ 14 días con el primer hotel piloto. Plan en [`docs/SPRINT-5-PLAN.md`](./docs/SPRINT-5-PLAN.md).
 - **Fase actual: Sprint 6 — IA V1 completa.** Anthropic adapter real con prompt caching + tool calling + streaming SSE. Anomaly detection NA (rate overrides, descuentos, duplicados, no-shows agregados). Voice-first HSK en la PWA (Web Speech API, idioma `es-ES`). Forecasting embebido (`forecast_demand` con Holt-Winters, 30/60/90d). Reservation copilot embebido en `/calendar` y `/reservations/new`. 2º hotel piloto onboarded. Plan en [`docs/SPRINT-6-PLAN.md`](./docs/SPRINT-6-PLAN.md).
-- **Branch de desarrollo actual:** `claude/sprint-6-plan` (este plan) → workstreams Sprint 6 en branches dedicadas.
-- **Última actualización:** 2026-05-07
+- **Sprint 6 — IA V1 en curso · workstream Copilot 🟢.** Adapter Anthropic con tool catalog real (Sonnet 4.6 por defecto, prompt caching pendiente), agentic loop interno encadenando read-only tools sin ruido al usuario, pre-validación Zod del `tool_use` con feedback al LLM, guard contra UUIDs alucinados, iter-limit a 12. Tools nuevas: `list_room_types`, `search_availability_by_type`, `create_reservation_group`. UI con cards de confirmación y redirect al detalle. Workstreams anomaly/voice/forecast/embedded-copilot **siguen pendientes**.
+- **Track Commercial-grade · paralelo a Sprint 6 🟢.** Trabajo en `claude/adr-023-cdg-region` para llevar reservations + payments al nivel "usable en hotel real" antes de cerrar Sprint 6:
+  - **Reservations UI v2 Iter A** ✅ — tabla Opera-like de 16 columnas, smart search regex + 9 chips + filtros avanzados, rutas `/arrivals` `/departures` `/in-house` con presets, nav del header reorganizado. *Iter B (campos Agencia/Empresa/VIP en schema) pendiente.*
+  - **Calendar v2** ✅ — home operativa con Gantt + click-to-create.
+  - **Reservation wizard 3-step** ✅ — search-first sin UUIDs a la vista.
+  - **Reservations Corte A** ✅ — garantía + política de cancelación visible en detalle.
+  - **Group reservations Fase 1-2** ✅ — página detalle del grupo, `patchGroup`/`cancelGroup` con cascada a reservas no terminales, bulk assign rooms / bulk check-in / bulk check-out con feedback visual.
+  - **Stripe SetupIntent Fase 1 (Corte B)** ✅ — tokenización real PCI SAQ A, migración con 7 columnas Stripe en `reservations`, `PaymentsModule` con webhook (rawBody) + fallback cliente→servidor `confirm-setup-intent`, modal de Elements en el detalle de reserva con `4242 4242 4242 4242` funcionando contra prod Fly. *Fase 2 (cobro off-session no-show) pendiente.*
+  - **Process docs** ✅ — `CLAUDE.md` (instrucciones core anti-drift), `docs/DELIVERY-LOG.md` (append-only del proyecto), `docs/PMS-DOMAIN-REFERENCE.md` (departments + ciclo de tareas).
+- **Branch de desarrollo actual:** `claude/adr-023-cdg-region` (track commercial-grade) en paralelo a Sprint 6 IA V1. Pendiente decidir si se mergea a `main` antes o después de cerrar workstreams Sprint 6.
+- **Última actualización:** 2026-05-16
 
 ---
 
@@ -229,9 +238,11 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 3. **Decisiones arquitecturales importantes:** se registran en sección 13 (ADR — Architecture Decision Records).
 4. **No se añaden features fuera del alcance MVP** sin aprobación explícita y actualización de este doc.
 5. **No se introducen abstracciones prematuras**: tres líneas similares es mejor que una abstracción especulativa.
-6. **El branch de desarrollo es `claude/plan-hotel-saas-rWaWw`** hasta que se decida lo contrario.
-7. **Idioma del código:** inglés (identificadores, comentarios técnicos).
-8. **Idioma de documentación de producto y comunicación:** español.
+6. **Branches activos:** `claude/adr-023-cdg-region` (track commercial-grade) y branches dedicadas por workstream de Sprint 6 IA V1. Ver §0 para estado actual.
+7. **Append-only delivery log:** cada PR mergeado o tarea cerrada se registra en [`docs/DELIVERY-LOG.md`](./docs/DELIVERY-LOG.md). Es la fuente de verdad para "¿ya tenemos X?".
+8. **CORE para Claude Code:** [`CLAUDE.md`](./CLAUDE.md) en la raíz define qué puede y no puede hacer Claude Code autónomamente. Releer si la conversación deriva.
+9. **Idioma del código:** inglés (identificadores, comentarios técnicos).
+10. **Idioma de documentación de producto y comunicación:** español.
 
 ---
 
@@ -430,27 +441,29 @@ El MVP debe ser **usable en un hotel real** — no una demo.
 - **Riesgo asumido:** ventana de Sprint 4 estimada 4-5 semanas. El riesgo principal es la calidad del PWA en móvil real con ancho de banda inestable; la cola offline de Tanstack Query / IndexedDB necesita validación con un dispositivo de test antes de cerrar UAT.
 - **Alternativas descartadas:** extender web-fo con responsive (desafío de UX por las dos audiencias mezcladas en el mismo bundle), app nativa iOS/Android (no escala para boutique 30-150 habs y bloquea iteración), no-PWA con web móvil (sin instalación + sin offline = friction inmensa para camareras).
 
-### ADR-023 — 2026-05-06 — Sprint 5 = Piloto en producción sobre **Fly.io** (región Madrid)
+### ADR-023 — 2026-05-06 — Sprint 5 = Piloto en producción sobre **Fly.io** (región París tras retirada de `mad`)
 
-- **Decisión:** la infraestructura de producción del piloto vive en **Fly.io** con la región primaria `mad` (Madrid). Stack:
-  - **API + workers + web (FO + HSK)**: Fly Apps en `mad`, autoscaling 1-3 máquinas, healthcheck `/health/ready`. Build con Dockerfile multi-stage publicado al registry de Fly.
-  - **Postgres**: Fly Postgres `mad` con réplica síncrona en `fra` (Frankfurt) para HA inter-región. Backups WAL-G a Backblaze B2 EU-Central cada 6h, snapshots diarios retención 30 días.
-  - **NATS JetStream**: una Fly Machine dedicada en `mad` con volumen persistente (file storage); evento de cluster solo si pasamos de 5 hoteles concurrentes.
-  - **Redis (BullMQ)**: Upstash EU (Madrid o Frankfurt) — managed, scale-to-zero en staging.
-  - **Keycloak**: Fly App separada (mismo proyecto) en `mad`, Postgres dedicado pequeño. Realm `pms` con clientes `pms-web`, `pms-hsk`, `pms-api`.
+> **Addendum 2026-05-07:** durante el smoke deploy real del piloto, Fly devolvió `Error: region mad not found`. Comprobamos `flyctl platform regions`: `mad` (Madrid) **ya no figura** — Fly la retiró del catálogo de regiones genéricas en 2025 (queda solo bajo planes enterprise con disponibilidad limitada). Migramos el ADR a **`cdg` (París)**: mejor RTT a la AEPD/MIR (~25 ms) que `fra`, sigue dentro de la UE/GDPR, y los datos personales de `guests` y partes SES.HOSPEDAJES viajan únicamente entre dos jurisdicciones EU (FR primary, DE replica). El resto del stack (Postgres, NATS, Keycloak, webs) se mantiene; solo cambia la cadena `primary_region`. Si Fly reabre `mad` en general availability, la migración futura es un `flyctl postgres failover` + `flyctl regions set` sin downtime visible.
+
+- **Decisión:** la infraestructura de producción del piloto vive en **Fly.io** con la región primaria `cdg` (París). Stack:
+  - **API + workers + web (FO + HSK)**: Fly Apps en `cdg`, autoscaling 1-3 máquinas, healthcheck `/health/ready`. Build con Dockerfile multi-stage publicado al registry de Fly.
+  - **Postgres**: Fly Postgres `cdg` con réplica síncrona en `fra` (Frankfurt) para HA inter-región. Backups WAL-G a Backblaze B2 EU-Central cada 6h, snapshots diarios retención 30 días.
+  - **NATS JetStream**: una Fly Machine dedicada en `cdg` con volumen persistente (file storage); evento de cluster solo si pasamos de 5 hoteles concurrentes.
+  - **Redis (BullMQ)**: Upstash EU (Frankfurt) — managed, scale-to-zero en staging.
+  - **Keycloak**: Fly App separada (mismo proyecto) en `cdg`, Postgres dedicado pequeño. Realm `pms` con clientes `pms-web`, `pms-hsk`, `pms-api`.
   - **Object storage (fotos lost-found, exports CSV)**: Backblaze B2 region EU-Central con CDN delante (Cloudflare R2 si latencia obliga). Buckets `aubergine-prod-photos` y `aubergine-prod-exports`.
   - **Observabilidad**: Grafana Cloud (free tier inicial) consumiendo Prometheus scrape de `:9464/metrics` y Loki via OTLP. Alertmanager → Slack `#aubergine-oncall`.
   - **DNS y TLS**: dominio `aubergine.es` (registrado), Cloudflare delante, certificados Fly auto-renovados.
 - **Por qué Fly.io (vs Railway / Render):**
-  - **Residencia de datos en España**: Fly tiene región `mad` desde 2024. La AEPD y los hoteles boutique ven con buenos ojos que los datos personales (DNI/NIE de huéspedes en `guests`, partes SES.HOSPEDAJES) nunca crucen la frontera ES. Railway no tiene región en España (US-céntrico con una opción Frankfurt); Render solo Frankfurt.
-  - **Latencia a SES.HOSPEDAJES**: el endpoint de Guardia Civil sirve desde infra del MIR en territorio español. Estar en `mad` mantiene el RTT < 20 ms — relevante para el sender que reintenta con backoff bajo carga.
+  - **Residencia de datos en la UE**: con `mad` retirado, la siguiente mejor opción es `cdg` (París). Sigue dentro de la jurisdicción EU/GDPR; AEPD trata datos en EU como aceptables sin cláusulas de transferencia adicional. Railway no tiene región europea propia (proxy a US); Render solo Frankfurt — equivalente a nuestra réplica DR pero peor para latencia a infra ES.
+  - **Latencia a SES.HOSPEDAJES**: desde `cdg` el RTT al endpoint de Guardia Civil es ~25 ms (vs los <20 ms que prometía `mad`). Aceptable para el sender que reintenta con backoff. Si la latencia se vuelve un problema en producción real, podemos pasar a `mad` cuando Fly lo reabra o a un VPS Hetzner Madrid (Sprint 7+).
   - **Soporte para stateful**: NATS JetStream necesita un volumen persistente y una sola instancia (al menos en MVP). Fly Machines + Volumes lo modelan limpiamente. Railway desincentiva volúmenes; Render obliga a Disk plan caro.
   - **Postgres cross-region replica**: Fly Postgres soporta réplicas de lectura en otra región sin pagar managed pricing. Para el piloto basta single-primary; la réplica `fra` es seguro DR.
   - **Pay-per-VM y scale-to-zero**: staging puede estar dormido entre tests. Fly cobra por la máquina encendida.
   - **DX para monorepo TS**: Dockerfile + `fly.toml` por app. Sin lock-in serio (todo es Docker estándar).
 - **Coste estimado del piloto** (1 hotel, 8-30 habs, ~50 reservas/día):
   - Fly Apps (API + 2 webs + Keycloak + NATS): ~50 €/mes
-  - Fly Postgres `mad` con réplica `fra`: ~30 €/mes
+  - Fly Postgres `cdg` con réplica `fra`: ~30 €/mes
   - Upstash Redis EU: free tier
   - Backblaze B2 EU-Central: ~5 €/mes con < 100 GB
   - Grafana Cloud: free tier hasta 10k series / 50 GB logs
@@ -460,9 +473,11 @@ El MVP debe ser **usable en un hotel real** — no una demo.
   - Migración a Kubernetes / GKE (tiene sentido > 20 hoteles activos con multi-region).
   - Channel Manager y POS — se quedan en §4.4 hasta que un cliente los pida con presupuesto.
   - Multi-region active-active de la API (la réplica Postgres `fra` es solo DR, no read-only para tráfico).
+  - Migración back a `mad` cuando/si Fly la reabre — operación documentada como `flyctl postgres failover --to mad` + `flyctl regions set mad fra`.
 - **Riesgos asumidos:**
   - Fly tuvo incidentes de red en 2023 que afectaron disponibilidad ~99.5% en algunas regiones. Mitigación: alertas tempranas via Grafana Cloud + el piloto acepta `monthly downtime` < 4h con SLA documentado en RUNBOOK §15.
   - Vendor lock-in moderado en `fly.toml` y en Fly Postgres (gestión de réplica, role switching). Mitigación: imágenes Docker estándar + scripts de import/export Postgres → migración a otra plataforma se mide en días, no semanas.
+  - **`cdg` no es ES** (~2300 km vs `mad` 0 km del MIR). Si AEPD bloquea o un cliente lo requiere por contrato, podemos cambiar a Hetzner Madrid (VPS) o esperar a `mad` reabrir. El movimiento está documentado y no rompe la arquitectura.
 - **Alternativas descartadas:**
   - **Railway**: sin región España, menos control sobre stateful workloads, base price más alta para igual capacidad.
   - **Render**: comparable a Railway en simplicidad, EU solo Frankfurt; sin ventaja sobre Fly.

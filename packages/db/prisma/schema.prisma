@@ -49,6 +49,7 @@ model Tenant {
   housekeepingTasks   HousekeepingTask[]
   lostFoundItems      LostFoundItem[]
   devicePairings      DevicePairing[]
+  cancellationPolicies CancellationPolicy[]
 
   @@map("tenants")
 }
@@ -121,6 +122,7 @@ model Property {
   cashReconciliations CashDrawerReconciliation[]
   housekeepingTasks   HousekeepingTask[]
   lostFoundItems      LostFoundItem[]
+  cancellationPolicies CancellationPolicy[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -386,6 +388,24 @@ model Reservation {
   checkedOutAt       DateTime?         @map("checked_out_at")
   cancelledAt        DateTime?         @map("cancelled_at")
   cancellationReason String?           @map("cancellation_reason")
+  // Garantía comercial (Corte A modelo; gateway Stripe llega en Corte B)
+  guaranteeType        GuaranteeType   @default(NONE)            @map("guarantee_type")
+  guaranteeStatus      GuaranteeStatus @default(PENDING)         @map("guarantee_status")
+  guaranteeAmount      Decimal?        @map("guarantee_amount")  @db.Decimal(12, 2)
+  guaranteeReference   String?         @map("guarantee_reference")
+  guaranteeDeadline    DateTime?       @map("guarantee_deadline")
+  guaranteeSecuredAt   DateTime?       @map("guarantee_secured_at")
+  cancellationPolicyId String?         @map("cancellation_policy_id") @db.Uuid
+  // Stripe Setup Intent + tokenized payment method (Corte B garantía).
+  // Solo guardamos referencias y últimos 4 — el PAN nunca toca nuestros
+  // servidores (Stripe es el custodian PCI-compliant).
+  stripeCustomerId      String?  @map("stripe_customer_id")
+  stripeSetupIntentId   String?  @map("stripe_setup_intent_id")
+  stripePaymentMethodId String?  @map("stripe_payment_method_id")
+  stripeCardBrand       String?  @map("stripe_card_brand")
+  stripeCardLast4       String?  @map("stripe_card_last4") @db.Char(4)
+  stripeCardExpMonth    Int?     @map("stripe_card_exp_month") @db.SmallInt
+  stripeCardExpYear     Int?     @map("stripe_card_exp_year") @db.SmallInt
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
   deletedAt          DateTime?         @map("deleted_at")
@@ -398,6 +418,7 @@ model Reservation {
   group    ReservationGroup?  @relation(fields: [groupId], references: [id])
   guests   ReservationGuest[]
   folio    Folio?
+  cancellationPolicy CancellationPolicy? @relation(fields: [cancellationPolicyId], references: [id])
 
   @@unique([tenantId, code])
   @@index([tenantId, propertyId, arrivalDate])
@@ -405,7 +426,51 @@ model Reservation {
   @@index([tenantId, propertyId, status])
   @@index([tenantId, roomId])
   @@index([tenantId, groupId])
+  @@index([tenantId, guaranteeStatus])
   @@map("reservations")
+}
+
+enum GuaranteeType {
+  NONE
+  CARD_ON_FILE
+  DEPOSIT
+  CORPORATE
+  HOTEL_GUARANTEE
+
+  @@map("guarantee_type")
+}
+
+enum GuaranteeStatus {
+  PENDING
+  SECURED
+  EXPIRED
+  FAILED
+  RELEASED
+
+  @@map("guarantee_status")
+}
+
+model CancellationPolicy {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  propertyId         String   @map("property_id") @db.Uuid
+  code               String
+  name               String
+  hoursBeforeArrival Int      @default(24) @map("hours_before_arrival")
+  penaltyPct         Decimal  @default(100) @map("penalty_pct") @db.Decimal(5, 2)
+  penaltyMinAmount   Decimal? @map("penalty_min_amount") @db.Decimal(12, 2)
+  currency           String   @default("EUR") @db.Char(3)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@unique([tenantId, propertyId, code])
+  @@index([tenantId, propertyId])
+  @@map("cancellation_policies")
 }
 
 enum ReservationStatus {

@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
+import Anthropic from '@anthropic-ai/sdk';
+import { foToolCatalog, hskToolCatalog } from '@pms/mcp-tools';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { AuthUser } from '../auth';
 import type { Env } from '../config/env.schema';
 import { type AnyToolName, ToolResolver } from './tool-resolver';
@@ -44,6 +47,9 @@ export class CopilotService {
     private readonly config: ConfigService<Env, true>,
   ) {
     this.anthropicApiKey = this.config.get('ANTHROPIC_API_KEY', { infer: true });
+    this.log.log(
+      `Copilot init: anthropic=${this.anthropicApiKey ? 'present(' + this.anthropicApiKey.length + 'ch)' : 'absent'}`,
+    );
   }
 
   createSession(user: AuthUser, propertyId: string | undefined): { sessionId: string } {
@@ -80,7 +86,7 @@ export class CopilotService {
       createdAt: new Date(),
     });
 
-    const proposal = await this.proposeReply(session, content);
+    const proposal = await this.proposeReply(session, user, correlationId, content);
 
     if (proposal.kind === 'text') {
       session.messages.push({
@@ -92,10 +98,12 @@ export class CopilotService {
       return toView(session);
     }
 
-    // Tool intent.
+    // Tool intent: el agentic loop solo devuelve mutating aqui (los
+    // read-only se ejecutan internamente en anthropicPropose).
     const meta = this.resolver.getMeta(proposal.tool);
     if (!meta.mutating) {
-      // Auto-execute read-only.
+      // Fallback (stub path): si por algun motivo nos llega un read-only,
+      // ejecuta y muestra.
       try {
         const result = await this.resolver.execute(
           proposal.tool,
@@ -106,16 +114,14 @@ export class CopilotService {
         session.messages.push({
           id: randomUUID(),
           role: 'assistant',
-          content: `He consultado \`${proposal.tool}\`. Resultado:\n\n\`\`\`json\n${truncateJson(
-            result,
-          )}\n\`\`\``,
+          content: `Resultado de ${proposal.tool}:\n\n\`\`\`json\n${truncateJson(result)}\n\`\`\``,
           createdAt: new Date(),
         });
       } catch (err) {
         session.messages.push({
           id: randomUUID(),
           role: 'assistant',
-          content: `No pude ejecutar \`${proposal.tool}\`: ${(err as Error).message}`,
+          content: `No pude ejecutar ${proposal.tool}: ${(err as Error).message}`,
           createdAt: new Date(),
         });
       }
@@ -210,13 +216,182 @@ export class CopilotService {
    * tool_use. Sin la key cae al stub deterministico — suficiente para
    * tests y demos.
    */
-  private async proposeReply(_session: Session, content: string): Promise<ToolProposal> {
+  private async proposeReply(
+    session: Session,
+    user: AuthUser,
+    correlationId: string,
+    content: string,
+  ): Promise<ToolProposal> {
     if (!this.anthropicApiKey) {
+      this.log.warn('Anthropic key absent, using stub');
       return stubProposal(content);
     }
-    // Real Anthropic integration is wired in a follow-up; the stub keeps
-    // the surface deterministic until then.
-    return stubProposal(content);
+    try {
+      this.log.log(`Anthropic propose: msg="${content.slice(0, 60)}"`);
+      const result = await this.anthropicPropose(session, user, correlationId);
+      this.log.log(`Anthropic result kind=${result.kind}`);
+      return result;
+    } catch (err) {
+      this.log.error('Anthropic adapter error, falling back to stub', err as Error);
+      return stubProposal(content);
+    }
+  }
+
+  /**
+   * Agentic loop: el LLM ve la conversacion + tool catalog. Si propone un
+   * tool read-only, lo ejecutamos en silencio, devolvemos el resultado al
+   * LLM como tool_result y le dejamos seguir razonando. Repetimos hasta
+   * que devuelva un mensaje de texto final o un tool MUTATING (que
+   * requiere confirmacion humana).
+   *
+   * Pre: this.anthropicApiKey definido.
+   */
+  private async anthropicPropose(
+    session: Session,
+    user: AuthUser,
+    correlationId: string,
+  ): Promise<ToolProposal> {
+    const client = new Anthropic({ apiKey: this.anthropicApiKey });
+    const tools = buildAnthropicTools();
+
+    const today = new Date().toISOString().slice(0, 10);
+    const propertyHint = session.propertyId
+      ? `Property activa: ${session.propertyId}. Usala como propertyId por defecto.`
+      : 'Si necesitas propertyId pide al usuario que lo confirme.';
+    const system = [
+      'Eres Aubergine, copiloto operativo de un PMS hotelero.',
+      'Responde en español, breve, profesional. Usa los tools cuando aplique.',
+      'NO PIDAS CONFIRMACIÓN POR TEXTO — la UI ya muestra una tarjeta de',
+      'confirmación cuando propones un tool mutating. Cuando tengas todos los',
+      'datos para mutar, LLAMA AL TOOL DIRECTAMENTE; no contestes "¿confirmas?"',
+      'en texto. El usuario aprobará en la tarjeta. Para read-only ejecuta',
+      'sin pedir permiso.',
+      'NO muestres JSON intermedio al usuario, encadena varias llamadas read-only',
+      'si hace falta y al final propon un único tool_use mutating o un texto natural.',
+      'Fechas siempre YYYY-MM-DD.',
+      `Hoy es ${today}. Cuando el usuario dice "mañana" calculalo desde aquí.`,
+      'NUNCA pidas UUIDs al usuario. Cuando menciona un tipo de habitación',
+      'por nombre ("doble", "doble estándar", "suite") llama PRIMERO a',
+      'list_room_types para resolver el roomTypeId, luego procede.',
+      'JAMÁS inventes un UUID. Si no tienes uno real del catálogo NO ejecutes',
+      'el tool — vuelve a llamar list_room_types o pregunta al usuario.',
+      '',
+      'REGLA CRÍTICA — GRUPOS:',
+      'Si el usuario pide MÁS DE UNA habitación o menciona "grupo", "tour",',
+      '"boda", "conferencia", "X individuales + Y dobles", DEBES usar',
+      'create_reservation_group (NUNCA create_reservation individual).',
+      'OBLIGATORIO: el array `reservations` debe contener TODAS las',
+      'reservas COMPLETAS antes de proponer el tool. No propongas el tool',
+      'con array vacío o parcial; si necesitas resolver roomTypeId u otro',
+      'dato, primero llama a las tools read-only que hagan falta y DESPUÉS',
+      'genera el array completo en UN ÚNICO tool_use de',
+      'create_reservation_group.',
+      'Si no conoces el nombre de cada huésped, usa el organizador como',
+      'guest.firstName y un número como lastName: ej. para 7 individuales a',
+      'nombre de "Miki Tour" → firstName="Miki Tour", lastName="#1" … "#7".',
+      'Occupancy según tipo: IND=1 adulto, DBL/TWN=2, SUP=2, JSU=2-4, SUI=2.',
+      'Ejemplo: usuario pide "7 individuales y 6 dobles para Miki Tour',
+      'mañana 1 noche" → tu propuesta debe ser create_reservation_group',
+      'con array de 13 elementos: 7 con roomTypeId(IND)+occupancy.adults=1',
+      'y 6 con roomTypeId(DBL)+adults=2, todos con guestData firstName=',
+      '"Miki Tour" y lastName="#1".."#13" y organizerName="Miki Tour".',
+      '',
+      'Si el usuario da nombre y apellido en una sola frase (ej. "Smith Arnold"),',
+      'asume firstName=primero, lastName=segundo. No vuelvas a preguntar.',
+      propertyHint,
+    ].join(' ');
+
+    // Construye historial inicial desde session.messages.
+    const conv: Anthropic.Messages.MessageParam[] = session.messages.map((m) => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.content,
+    }));
+
+    for (let iter = 0; iter < 12; iter += 1) {
+      const resp = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        system,
+        tools,
+        messages: conv,
+      });
+
+      // Busca tool_use block.
+      const toolUse = resp.content.find(
+        (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use',
+      );
+
+      if (!toolUse) {
+        const text = resp.content
+          .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
+          .map((b) => b.text)
+          .join('\n')
+          .trim();
+        return { kind: 'text', text: text || '…' };
+      }
+
+      if (!this.resolver.has(toolUse.name)) {
+        this.log.warn(`Anthropic returned unknown tool: ${toolUse.name}`);
+        return {
+          kind: 'text',
+          text: `Quise usar el tool ${toolUse.name} pero no existe. ¿Puedes reformular?`,
+        };
+      }
+      const meta = this.resolver.getMeta(toolUse.name as AnyToolName);
+
+      if (meta.mutating) {
+        // Pre-validamos contra el zod schema antes de pasarlo al humano.
+        // Si el LLM mandó algo incompleto (ej. group sin reservations array),
+        // devolvemos el error como tool_result y le dejamos corregir en la
+        // próxima iteración. Así evitamos cards-fantasma vacías.
+        const validation = this.resolver.tryValidate(toolUse.name as AnyToolName, toolUse.input);
+        if (!validation.ok) {
+          conv.push({ role: 'assistant', content: resp.content });
+          conv.push({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: toolUse.id,
+                content: `ERROR de validación. Tu propuesta no cumple el schema:\n${validation.error}\nCorrige los campos faltantes y vuelve a llamar al tool con el payload COMPLETO en este mismo turno.`,
+                is_error: true,
+              },
+            ],
+          });
+          continue;
+        }
+        // Devuelve para que la UI pida confirmacion humana.
+        return { kind: 'tool', tool: toolUse.name as AnyToolName, input: toolUse.input };
+      }
+
+      // Read-only: ejecuta silenciosamente, alimenta el resultado al LLM.
+      let toolResultText: string;
+      try {
+        const result = await this.resolver.execute(
+          toolUse.name as AnyToolName,
+          toolUse.input,
+          user,
+          correlationId,
+        );
+        toolResultText = truncateJson(result);
+      } catch (err) {
+        toolResultText = `ERROR: ${(err as Error).message}`;
+      }
+
+      conv.push({ role: 'assistant', content: resp.content });
+      conv.push({
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: toolResultText,
+          },
+        ],
+      });
+    }
+
+    return { kind: 'text', text: 'Demasiados pasos. ¿Puedes simplificar la petición?' };
   }
 
   private requireSession(user: AuthUser, sessionId: string): Session {
@@ -457,4 +632,30 @@ function toView(session: Session): SessionView {
       createdAt: p.createdAt.toISOString(),
     })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Anthropic tools build
+// ---------------------------------------------------------------------------
+
+type ToolMetaShape = { name: string; description: string; inputSchema: unknown };
+
+function buildAnthropicTools(): Anthropic.Messages.Tool[] {
+  const out: Anthropic.Messages.Tool[] = [];
+  const catalogs: Record<string, ToolMetaShape>[] = [
+    foToolCatalog as unknown as Record<string, ToolMetaShape>,
+    hskToolCatalog as unknown as Record<string, ToolMetaShape>,
+  ];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const toJson = zodToJsonSchema as unknown as (schema: any) => Record<string, unknown>;
+  for (const cat of catalogs) {
+    for (const meta of Object.values(cat)) {
+      out.push({
+        name: meta.name,
+        description: meta.description,
+        input_schema: toJson(meta.inputSchema) as Anthropic.Messages.Tool.InputSchema,
+      });
+    }
+  }
+  return out;
 }

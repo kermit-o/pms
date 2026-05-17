@@ -70,6 +70,28 @@ export class ToolResolver {
     return this.getMeta(name).financial;
   }
 
+  /**
+   * Valida un input contra el schema Zod del tool sin ejecutarlo. Usado por
+   * el agentic loop del copilot para rechazar propuestas incompletas antes
+   * de mostrarlas al humano.
+   */
+  tryValidate(
+    name: AnyToolName,
+    rawInput: unknown,
+  ): { ok: true } | { ok: false; error: string } {
+    const schema =
+      name in hskToolCatalog
+        ? (hskToolCatalog[name as HskToolName] as unknown as { inputSchema: { safeParse: (v: unknown) => { success: boolean; error?: { issues: Array<{ path: (string | number)[]; message: string }> } } } }).inputSchema
+        : (foToolCatalog[name as FoToolName] as unknown as { inputSchema: { safeParse: (v: unknown) => { success: boolean; error?: { issues: Array<{ path: (string | number)[]; message: string }> } } } }).inputSchema;
+    const r = schema.safeParse(rawInput);
+    if (r.success) return { ok: true };
+    const issues = r.error?.issues ?? [];
+    const summary = issues
+      .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+      .join('\n');
+    return { ok: false, error: summary };
+  }
+
   async execute(
     name: AnyToolName,
     rawInput: unknown,

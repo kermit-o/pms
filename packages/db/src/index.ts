@@ -17,6 +17,8 @@ export {
   HousekeepingTaskStatus,
   HousekeepingTaskType,
   LostFoundStatus,
+  GuaranteeType,
+  GuaranteeStatus,
 } from '@prisma/client';
 
 export type {
@@ -41,6 +43,7 @@ export type {
   HousekeepingTask,
   LostFoundItem,
   DevicePairing,
+  CancellationPolicy,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

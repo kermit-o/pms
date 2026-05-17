@@ -16,13 +16,40 @@ export interface DashboardKpis {
   occupancyPct: number;
 }
 
-export async function fetchDashboardKpis(_accessToken: string | undefined): Promise<DashboardKpis> {
-  return {
-    arrivalsToday: 0,
-    departuresToday: 0,
-    inHouse: 0,
-    occupancyPct: 0,
-  };
+export async function fetchDashboardKpis(
+  accessToken: string | undefined,
+  propertyId?: string,
+): Promise<DashboardKpis> {
+  if (!accessToken || !propertyId) {
+    return { arrivalsToday: 0, departuresToday: 0, inHouse: 0, occupancyPct: 0 };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  // Ventana ±1 dia para capturar tanto in-house como llegadas/salidas de hoy.
+  // El filtro de la API es departureDate>from AND arrivalDate<to (estricto).
+  const [reservations, rooms] = await Promise.all([
+    listReservations(accessToken, { from: yesterday, to: tomorrow, limit: 200 }),
+    listRooms(accessToken, { propertyId }),
+  ]);
+
+  const items = reservations.items;
+  const arrivalsToday = items.filter(
+    (r) =>
+      r.arrivalDate === today &&
+      (r.status === 'CONFIRMED' || r.status === 'PENDING' || r.status === 'CHECKED_IN'),
+  ).length;
+  const departuresToday = items.filter(
+    (r) =>
+      r.departureDate === today &&
+      (r.status === 'CHECKED_IN' || r.status === 'CHECKED_OUT'),
+  ).length;
+  const inHouse = items.filter((r) => r.status === 'CHECKED_IN').length;
+  const totalRooms = rooms.filter((r) => !r.isOutOfOrder).length || 1;
+  const occupancyPct = Math.round((inHouse / totalRooms) * 100);
+
+  return { arrivalsToday, departuresToday, inHouse, occupancyPct };
 }
 
 interface ApiInit extends RequestInit {
@@ -100,17 +127,181 @@ export interface CreateReservationInput {
   currency?: string;
   specialRequests?: string;
   notes?: string;
+  walkIn?: boolean;
+  guarantee?: {
+    type: 'NONE' | 'CARD_ON_FILE' | 'DEPOSIT' | 'CORPORATE' | 'HOTEL_GUARANTEE';
+    amount?: number;
+    reference?: string;
+    cancellationPolicyId?: string;
+  };
+}
+
+export interface ReservationGroupDetail {
+  id: string;
+  code: string;
+  name: string;
+  organizerName: string | null;
+  organizerEmail: string | null;
+  organizerPhone: string | null;
+  notes: string | null;
+  propertyId: string;
+  createdAt: string;
+  updatedAt: string;
+  reservations: Array<ReservationListItem & { roomNumber: string | null; roomFloor: string | null }>;
+}
+
+export async function getReservationGroup(
+  accessToken: string | undefined,
+  id: string,
+): Promise<ReservationGroupDetail> {
+  return apiFetch(`/reservations/groups/${id}`, { accessToken });
+}
+
+export async function patchReservationGroup(
+  accessToken: string | undefined,
+  id: string,
+  input: {
+    name?: string;
+    organizerName?: string;
+    organizerEmail?: string;
+    organizerPhone?: string;
+    notes?: string;
+    arrival?: string;
+    departure?: string;
+    roomTypeId?: string;
+    ratePlanId?: string;
+  },
+): Promise<{ id: string; affectedReservations: number }> {
+  return apiFetch(`/reservations/groups/${id}`, {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function cancelReservationGroup(
+  accessToken: string | undefined,
+  id: string,
+  reason: string,
+): Promise<{ id: string; cancelledReservations: number }> {
+  return apiFetch(`/reservations/groups/${id}/cancel`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function bulkAssignRooms(
+  accessToken: string | undefined,
+  id: string,
+): Promise<{ id: string; assignedCount: number; missingByType: Record<string, number> }> {
+  return apiFetch(`/reservations/groups/${id}/bulk-assign-rooms`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function bulkCheckIn(
+  accessToken: string | undefined,
+  id: string,
+): Promise<{ id: string; checkedIn: number; skipped: Array<{ id: string; reason: string }> }> {
+  return apiFetch(`/reservations/groups/${id}/bulk-check-in`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function bulkCheckOut(
+  accessToken: string | undefined,
+  id: string,
+): Promise<{ id: string; checkedOut: number; skipped: Array<{ id: string; reason: string }> }> {
+  return apiFetch(`/reservations/groups/${id}/bulk-check-out`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function createStripeSetupIntent(
+  accessToken: string | undefined,
+  reservationId: string,
+): Promise<{ clientSecret: string; publishableKey: string }> {
+  return apiFetch(`/payments/stripe/reservations/${reservationId}/setup-intent`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function updateGuarantee(
+  accessToken: string | undefined,
+  reservationId: string,
+  input: {
+    type?: 'NONE' | 'CARD_ON_FILE' | 'DEPOSIT' | 'CORPORATE' | 'HOTEL_GUARANTEE';
+    status?: 'PENDING' | 'SECURED' | 'EXPIRED' | 'FAILED' | 'RELEASED';
+    amount?: number;
+    reference?: string;
+  },
+): Promise<{ id: string; guaranteeStatus: string; guaranteeType: string }> {
+  return apiFetch(`/reservations/${reservationId}/guarantee`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export interface ReservationRichListItem extends ReservationListItem {
+  source: string;
+  ratePlanId: string | null;
+  ratePlanCode: string | null;
+  groupId: string | null;
+  groupCode: string | null;
+  groupName: string | null;
+  organizerName: string | null;
+  guaranteeStatus: 'PENDING' | 'SECURED' | 'EXPIRED' | 'FAILED' | 'RELEASED';
+  roomNumber: string | null;
+  roomFloor: string | null;
+  roomTypeCode: string | null;
+  roomTypeName: string | null;
+  primaryGuest: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+  } | null;
+  folioBalance: string | null;
+}
+
+export interface ListReservationsQuery {
+  from?: string;
+  to?: string;
+  arrivalFrom?: string;
+  arrivalTo?: string;
+  departureFrom?: string;
+  departureTo?: string;
+  /** Coma-separados, ej. "PENDING,CONFIRMED" */
+  status?: string;
+  source?: string;
+  groupId?: string;
+  search?: string;
+  guaranteeStatus?: string;
+  /** "true" → solo reservas sin roomId */
+  unassigned?: string;
+  cursor?: string;
+  limit?: number;
 }
 
 export async function listReservations(
   accessToken: string | undefined,
-  query: { from?: string; to?: string; status?: ReservationStatus; limit?: number } = {},
-): Promise<{ items: ReservationListItem[]; nextCursor: string | null }> {
+  query: ListReservationsQuery = {},
+): Promise<{ items: ReservationRichListItem[]; nextCursor: string | null }> {
   const params = new URLSearchParams();
-  if (query.from) params.set('from', query.from);
-  if (query.to) params.set('to', query.to);
-  if (query.status) params.set('status', query.status);
-  if (query.limit) params.set('limit', String(query.limit));
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== '') params.set(k, String(v));
+  }
   const q = params.toString();
   return apiFetch(`/reservations${q ? `?${q}` : ''}`, { accessToken });
 }
@@ -127,6 +318,57 @@ export async function createReservation(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Properties
+// ---------------------------------------------------------------------------
+
+export interface PropertySummary {
+  id: string;
+  code: string;
+  name: string;
+  timezone: string;
+  currency: string;
+  locale: string;
+}
+
+export async function listProperties(
+  accessToken: string | undefined,
+): Promise<PropertySummary[]> {
+  return apiFetch(`/properties`, { accessToken });
+}
+
+// ---------------------------------------------------------------------------
+// Availability search (alimenta el wizard de creación)
+// ---------------------------------------------------------------------------
+
+export interface RoomTypeAvailability {
+  roomTypeId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  baseOccupancy: number;
+  maxOccupancy: number;
+  totalRooms: number;
+  availableRooms: number;
+  pricePerNight: string;
+  nights: number;
+  totalForStay: string;
+  currency: string;
+}
+
+export async function searchAvailabilityByType(
+  accessToken: string | undefined,
+  query: { propertyId: string; arrival: string; departure: string; ratePlanId?: string },
+): Promise<RoomTypeAvailability[]> {
+  const params = new URLSearchParams({
+    propertyId: query.propertyId,
+    arrival: query.arrival,
+    departure: query.departure,
+  });
+  if (query.ratePlanId) params.set('ratePlanId', query.ratePlanId);
+  return apiFetch(`/rooms/availability/by-type?${params.toString()}`, { accessToken });
+}
+
 export async function cancelReservation(
   accessToken: string | undefined,
   id: string,
@@ -136,6 +378,29 @@ export async function cancelReservation(
     method: 'DELETE',
     accessToken,
     body: JSON.stringify({ reason }),
+  });
+}
+
+export async function assignRoom(
+  accessToken: string | undefined,
+  reservationId: string,
+  roomId: string,
+): Promise<{ id: string; roomId: string }> {
+  return apiFetch(`/reservations/${reservationId}/assign-room`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ roomId }),
+  });
+}
+
+export async function checkOutReservation(
+  accessToken: string | undefined,
+  reservationId: string,
+): Promise<{ id: string; balance: number }> {
+  return apiFetch(`/reservations/${reservationId}/check-out`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({}),
   });
 }
 

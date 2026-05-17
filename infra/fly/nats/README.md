@@ -6,7 +6,7 @@
 
 | Pieza     | Detalle                                                      |
 | --------- | ------------------------------------------------------------ |
-| App Fly   | `pms-nats` en `mad`                                          |
+| App Fly   | `pms-nats` en `cdg`                                          |
 | Imagen    | `nats:2.10-alpine` con `nats-server.conf` propio             |
 | Volume    | `pms_nats_data` (5 GB) montado en `/data`                    |
 | TCP 4222  | Cliente NATS (interno, 6PN)                                  |
@@ -19,7 +19,7 @@
 # 1. App + volumen.
 flyctl apps create pms-nats --org aubergine
 flyctl volumes create pms_nats_data \
-  --region mad \
+  --region cdg \
   --size 5 \
   -a pms-nats
 
@@ -102,7 +102,7 @@ Detonantes:
 - p99 publish latency > 50 ms sostenido.
 - Caídas de Fly Machine que duren > 1 min/mes.
 
-Plan: 3 instancias replicadas (`mad`, `fra`, `ams`) con cluster
+Plan: 3 instancias replicadas (`cdg`, `fra`, `ams`) con cluster
 configurado en `nats-server.conf`. Streams pasan a `--replicas 3`.
 Estimación de coste: ~3× lo actual (~30 €/mes adicional).
 

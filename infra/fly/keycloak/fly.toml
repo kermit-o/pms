@@ -1,4 +1,4 @@
-# fly.toml — pms-keycloak en Fly.io (region primaria mad, ADR-023).
+# fly.toml — pms-keycloak en Fly.io (region primaria cdg, ADR-023).
 #
 # Deploy desde la raiz del monorepo:
 #   flyctl deploy -c infra/fly/keycloak/fly.toml --build-context infra/fly/keycloak
@@ -7,7 +7,7 @@
 # completo + bootstrap del realm via scripts/keycloak-bootstrap.ts).
 
 app = "pms-keycloak"
-primary_region = "mad"
+primary_region = "cdg"
 kill_signal = "SIGTERM"
 kill_timeout = "30s"
 
@@ -15,7 +15,7 @@ kill_timeout = "30s"
   dockerfile = "Dockerfile"
 
 [env]
-  KC_HOSTNAME = "auth.aubergine.es"
+  KC_HOSTNAME = "pms-keycloak.fly.dev"
   KC_PROXY_HEADERS = "xforwarded"
   KC_HEALTH_ENABLED = "true"
   KC_METRICS_ENABLED = "true"
@@ -39,11 +39,17 @@ kill_timeout = "30s"
   min_machines_running = 1
   processes = ["app"]
 
+  # KC 25 separa /health/* en el puerto 9000 (management interface) por
+  # defecto y solo se puede mover a 8080 vía rebuild con
+  # --legacy-observability-interface. En vez de tocar la imagen oficial,
+  # comprobamos un endpoint que SI vive en 8080 — el discovery de OIDC
+  # del realm master, disponible en cuanto KC arranca. Las metricas
+  # siguen scrapeandose en :9000/metrics via 6PN.
   [[http_service.checks]]
     grace_period = "60s"
     interval = "20s"
     method = "GET"
-    path = "/health/ready"
+    path = "/realms/master/.well-known/openid-configuration"
     protocol = "http"
     timeout = "10s"
 

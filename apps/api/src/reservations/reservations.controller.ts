@@ -21,6 +21,8 @@ import {
   CreateReservationDto,
   CreateReservationGroupDto,
   PatchReservationDto,
+  PatchReservationGroupDto,
+  UpdateGuaranteeDto,
 } from './dto';
 import { ReservationsService } from './reservations.service';
 
@@ -55,6 +57,70 @@ export class ReservationsController {
     return this.reservations.createGroup(user, correlationIdOf(req), input);
   }
 
+  @Get('groups/:id')
+  @Roles(...FRONT_DESK_ROLES, 'night_auditor')
+  async findGroup(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.reservations.findGroup(user, correlationIdOf(req), id);
+  }
+
+  @Patch('groups/:id')
+  @Roles(...FRONT_DESK_ROLES)
+  async patchGroup(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = PatchReservationGroupDto.parse(body);
+    return this.reservations.patchGroup(user, correlationIdOf(req), id, input);
+  }
+
+  @Post('groups/:id/cancel')
+  @Roles(...FRONT_DESK_ROLES)
+  async cancelGroup(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = CancelReservationDto.parse(body);
+    return this.reservations.cancelGroup(user, correlationIdOf(req), id, input);
+  }
+
+  @Post('groups/:id/bulk-assign-rooms')
+  @Roles(...FRONT_DESK_ROLES)
+  async bulkAssignRooms(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.reservations.bulkAssignRooms(user, correlationIdOf(req), id);
+  }
+
+  @Post('groups/:id/bulk-check-in')
+  @Roles(...FRONT_DESK_ROLES)
+  async bulkCheckIn(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.reservations.bulkCheckIn(user, correlationIdOf(req), id);
+  }
+
+  @Post('groups/:id/bulk-check-out')
+  @Roles(...FRONT_DESK_ROLES)
+  async bulkCheckOut(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.reservations.bulkCheckOut(user, correlationIdOf(req), id);
+  }
+
   @Post('walk-in')
   @Roles(...FRONT_DESK_ROLES)
   async createWalkIn(
@@ -71,7 +137,7 @@ export class ReservationsController {
   async list(
     @CurrentUser() user: AuthUser,
     @Req() req: FastifyRequest,
-    @Query() query: { from?: string; to?: string; status?: string; cursor?: string },
+    @Query() query: Record<string, string | undefined>,
   ) {
     return this.reservations.list(user, correlationIdOf(req), query);
   }
@@ -144,6 +210,18 @@ export class ReservationsController {
   ) {
     const input = AssignRoomDto.parse(body);
     return this.reservations.assignRoom(user, correlationIdOf(req), id, input);
+  }
+
+  @Post(':id/guarantee')
+  @Roles(...FRONT_DESK_ROLES)
+  async updateGuarantee(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = UpdateGuaranteeDto.parse(body);
+    return this.reservations.updateGuarantee(user, correlationIdOf(req), id, input);
   }
 }
 

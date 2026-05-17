@@ -26,6 +26,14 @@ export const SearchAvailabilityQuery = z.object({
 });
 export type SearchAvailabilityQuery = z.infer<typeof SearchAvailabilityQuery>;
 
+export const SearchAvailabilityByTypeQuery = z.object({
+  propertyId: z.string().uuid(),
+  arrival: isoDate,
+  departure: isoDate,
+  ratePlanId: z.string().uuid().optional(),
+});
+export type SearchAvailabilityByTypeQuery = z.infer<typeof SearchAvailabilityByTypeQuery>;
+
 export const ChangeStatusDto = z.object({
   status: z.enum(['CLEAN', 'DIRTY', 'INSPECTED', 'OUT_OF_ORDER', 'OUT_OF_SERVICE']),
   outOfOrderReason: z.string().max(500).optional(),

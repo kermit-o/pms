@@ -93,6 +93,20 @@ export default function CopilotSidebar() {
       if (!res.ok) throw new Error(await res.text());
       const updated = (await res.json()) as CopilotSession;
       setSession(updated);
+
+      // Si el tool aprobado creó una reserva, salta al detalle.
+      if (decision === 'approve') {
+        const pending = updated.pendingTools.find((p) => p.id === pendingToolId);
+        if (pending?.tool === 'create_reservation' && pending.status === 'approved') {
+          // El último mensaje contiene el id de la reserva creada en su JSON.
+          const last = updated.messages[updated.messages.length - 1];
+          const m = last?.content.match(/"id"\s*:\s*"([0-9a-f-]{36})"/i);
+          if (m) {
+            window.location.href = `/reservations/${m[1]}`;
+            return;
+          }
+        }
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -252,9 +266,7 @@ function PendingToolCard({
           {pending.status}
         </span>
       </div>
-      <pre className="mt-2 overflow-auto rounded bg-aubergine-50/80 p-2 text-[11px] text-aubergine-900">
-        {JSON.stringify(pending.input, null, 2)}
-      </pre>
+      <ToolInputSummary tool={pending.tool} input={pending.input} />
       {!decided && (
         <div className="mt-2 flex justify-end gap-2">
           <button
@@ -277,4 +289,111 @@ function PendingToolCard({
       )}
     </div>
   );
+}
+
+// Renderizado natural del tool input para que el operador entienda qué se
+// va a ejecutar sin leer JSON. Si el shape no encaja, cae a JSON crudo.
+function ToolInputSummary({ tool, input }: { tool: string; input: unknown }) {
+  const obj = (typeof input === 'object' && input !== null ? input : {}) as Record<
+    string,
+    unknown
+  >;
+  const rows: Array<[string, string]> = [];
+
+  if (tool === 'create_reservation') {
+    const guest = obj.guest as Record<string, unknown> | undefined;
+    const occ = obj.occupancy as Record<string, unknown> | undefined;
+    if (obj.arrival && obj.departure) {
+      const nights = nightsBetween(obj.arrival as string, obj.departure as string);
+      rows.push(['Estancia', `${obj.arrival} → ${obj.departure} · ${nights} noches`]);
+    }
+    if (occ) {
+      const adults = Number(occ.adults ?? 0);
+      const children = Number(occ.children ?? 0);
+      rows.push(['Huéspedes', `${adults} adultos${children ? ` + ${children} niños` : ''}`]);
+    }
+    if (guest) {
+      if (guest.firstName || guest.lastName) {
+        rows.push(['Huésped', `${guest.firstName ?? ''} ${guest.lastName ?? ''}`.trim()]);
+      }
+      if (guest.email) rows.push(['Email', String(guest.email)]);
+      if (guest.phone) rows.push(['Teléfono', String(guest.phone)]);
+    }
+    if (obj.roomTypeId) {
+      rows.push(['Tipo habitación', String(obj.roomTypeId).slice(0, 8) + '…']);
+    }
+  } else if (tool === 'create_reservation_group') {
+    if (obj.name) rows.push(['Grupo', String(obj.name)]);
+    const reservations = Array.isArray(obj.reservations) ? obj.reservations : [];
+    if (reservations.length > 0) {
+      rows.push(['Reservas', `${reservations.length}`]);
+      const byType = new Map<string, number>();
+      for (const r of reservations as Record<string, unknown>[]) {
+        const rt = String(r.roomTypeId ?? '???').slice(0, 8);
+        byType.set(rt, (byType.get(rt) ?? 0) + 1);
+      }
+      rows.push([
+        'Distribución',
+        Array.from(byType.entries())
+          .map(([k, v]) => `${v}×${k}…`)
+          .join(' · '),
+      ]);
+      const firstArrival = (reservations[0] as Record<string, unknown>).arrival;
+      const firstDeparture = (reservations[0] as Record<string, unknown>).departure;
+      if (firstArrival && firstDeparture) {
+        rows.push(['Fechas', `${firstArrival} → ${firstDeparture}`]);
+      }
+    }
+    if (obj.organizerName) rows.push(['Organizador', String(obj.organizerName)]);
+  } else if (tool === 'check_in' || tool === 'check_out') {
+    if (obj.reservationId) rows.push(['Reserva', String(obj.reservationId).slice(0, 8) + '…']);
+    if (obj.roomId) rows.push(['Habitación', String(obj.roomId).slice(0, 8) + '…']);
+  } else if (tool === 'add_folio_charge') {
+    if (obj.folioId) rows.push(['Folio', String(obj.folioId).slice(0, 8) + '…']);
+    if (obj.description) rows.push(['Concepto', String(obj.description)]);
+    if (obj.amount !== undefined) rows.push(['Importe', `${obj.amount} EUR`]);
+    if (obj.type) rows.push(['Tipo', String(obj.type)]);
+  } else if (tool === 'assign_room') {
+    if (obj.reservationId) rows.push(['Reserva', String(obj.reservationId).slice(0, 8) + '…']);
+    if (obj.roomId) rows.push(['Habitación', String(obj.roomId).slice(0, 8) + '…']);
+  } else if (tool === 'hsk_assign_task') {
+    if (obj.taskId) rows.push(['Tarea', String(obj.taskId).slice(0, 8) + '…']);
+    if (obj.assignedToUserId)
+      rows.push(['Asignar a', String(obj.assignedToUserId).slice(0, 8) + '…']);
+  }
+
+  if (rows.length === 0) {
+    return (
+      <pre className="mt-2 overflow-auto rounded bg-aubergine-50/80 p-2 text-[11px] text-aubergine-900">
+        {JSON.stringify(input, null, 2)}
+      </pre>
+    );
+  }
+
+  return (
+    <div>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded bg-aubergine-50/80 p-2 text-[11px]">
+        {rows.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="font-medium text-aubergine-700/70">{k}</dt>
+            <dd className="text-aubergine-900">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <details className="mt-1">
+        <summary className="cursor-pointer text-[10px] text-aubergine-700/60 hover:text-aubergine-700">
+          Ver JSON crudo
+        </summary>
+        <pre className="mt-1 overflow-auto rounded bg-aubergine-50/40 p-2 text-[10px] text-aubergine-900">
+          {JSON.stringify(input, null, 2)}
+        </pre>
+      </details>
+    </div>
+  );
+}
+
+function nightsBetween(arrival: string, departure: string): number {
+  const a = new Date(arrival);
+  const d = new Date(departure);
+  return Math.max(1, Math.round((d.getTime() - a.getTime()) / 86_400_000));
 }

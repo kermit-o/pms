@@ -15,6 +15,14 @@ const occupancyShape = z.object({
   children: z.number().int().min(0).max(10).default(0),
 });
 
+const guaranteeShape = z.object({
+  type: z.enum(['NONE', 'CARD_ON_FILE', 'DEPOSIT', 'CORPORATE', 'HOTEL_GUARANTEE']),
+  amount: z.number().nonnegative().optional(),
+  reference: z.string().max(200).optional(),
+  cancellationPolicyId: z.string().uuid().optional(),
+});
+export type GuaranteeInput = z.infer<typeof guaranteeShape>;
+
 const baseReservationShape = z.object({
   propertyId: z.string().uuid(),
   guestId: z.string().uuid().optional(),
@@ -29,7 +37,16 @@ const baseReservationShape = z.object({
   specialRequests: z.string().max(2000).optional(),
   notes: z.string().max(2000).optional(),
   walkIn: z.boolean().default(false),
+  guarantee: guaranteeShape.optional(),
 });
+
+export const UpdateGuaranteeDto = z.object({
+  type: z.enum(['NONE', 'CARD_ON_FILE', 'DEPOSIT', 'CORPORATE', 'HOTEL_GUARANTEE']).optional(),
+  status: z.enum(['PENDING', 'SECURED', 'EXPIRED', 'FAILED', 'RELEASED']).optional(),
+  amount: z.number().nonnegative().optional(),
+  reference: z.string().max(200).optional(),
+});
+export type UpdateGuaranteeDto = z.infer<typeof UpdateGuaranteeDto>;
 
 export const CreateReservationDto = baseReservationShape
   .refine((v) => v.guestId || v.guestData, {
@@ -116,3 +133,35 @@ export const CreateReservationGroupDto = z
   });
 
 export type CreateReservationGroupDto = z.infer<typeof CreateReservationGroupDto>;
+
+// PATCH a nivel grupo. Los campos provistos se propagan a todas las
+// reservas hijas (cascadeFields) o solo al grupo (organizerName, notes).
+// Las reservas hijas mantienen sus diferencias individuales en lo NO
+// especificado aqui (huespedes, roomTypeId si no se pasa, etc).
+export const PatchReservationGroupDto = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    organizerName: z.string().max(200).optional(),
+    organizerEmail: z.string().email().optional(),
+    organizerPhone: z.string().max(40).optional(),
+    notes: z.string().max(2000).optional(),
+    // Cascade fields — se aplican a TODAS las reservas hijas en CHECKED_IN
+    // o PENDING/CONFIRMED. Reservas CHECKED_OUT/CANCELLED se ignoran.
+    arrival: isoDate.optional(),
+    departure: isoDate.optional(),
+    roomTypeId: z.string().uuid().optional(),
+    ratePlanId: z.string().uuid().optional(),
+  })
+  .refine((v) => !(v.arrival && v.departure) || v.departure > v.arrival, {
+    message: 'departure must be after arrival',
+    path: ['departure'],
+  });
+export type PatchReservationGroupDto = z.infer<typeof PatchReservationGroupDto>;
+
+// Bulk ops sobre el grupo entero. Aplican a reservas no-terminales del
+// grupo (skip CHECKED_OUT, CANCELLED, NO_SHOW).
+export const BulkGroupActionDto = z.object({
+  // opcional: notas para todas las acciones (motivo, comentario)
+  notes: z.string().max(500).optional(),
+});
+export type BulkGroupActionDto = z.infer<typeof BulkGroupActionDto>;

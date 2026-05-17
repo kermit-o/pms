@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { Prisma, ReservationSource, ReservationStatus as PrismaReservationStatus } from '@pms/db';
+import { Prisma, ReservationSource, ReservationStatus as PrismaReservationStatus, RoomStatus, HousekeepingTaskStatus, HousekeepingTaskType, GuaranteeType, GuaranteeStatus } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
@@ -19,6 +19,8 @@ import {
   CreateReservationDto,
   CreateReservationGroupDto,
   PatchReservationDto,
+  PatchReservationGroupDto,
+  UpdateGuaranteeDto,
 } from './dto';
 import { IllegalReservationTransitionError, assertTransition } from './reservation-status';
 
@@ -72,7 +74,7 @@ export class ReservationsService {
 
       const roomType = await tx.roomType.findFirst({
         where: { id: input.roomTypeId, propertyId: property.id, deletedAt: null },
-        select: { id: true },
+        select: { id: true, defaultRate: true, defaultCurrency: true },
       });
       if (!roomType) {
         throw new BadRequestException(
@@ -80,6 +82,7 @@ export class ReservationsService {
         );
       }
 
+      let ratePlanAttributes: Prisma.JsonValue | null = null;
       if (input.ratePlanId) {
         const ratePlan = await tx.ratePlan.findFirst({
           where: {
@@ -87,14 +90,32 @@ export class ReservationsService {
             propertyId: property.id,
             deletedAt: null,
           },
-          select: { id: true },
+          select: { id: true, attributes: true },
         });
         if (!ratePlan) {
           throw new BadRequestException(
             `RatePlan ${input.ratePlanId} not found for property ${property.id}`,
           );
         }
+        ratePlanAttributes = ratePlan.attributes;
       }
+
+      // Si la API call no pasa totalAmount, lo calculamos: nights × dailyRate.
+      // dailyRate viene de RatePlan.attributes.dailyRate (si tiene tarifa
+      // declarada) o RoomType.defaultRate como fallback. Misma logica que
+      // night-audit/steps/post-room-charges.ts.
+      const nights = Math.max(
+        1,
+        Math.round(
+          (new Date(input.departure).getTime() - new Date(input.arrival).getTime()) /
+            (1000 * 60 * 60 * 24),
+        ),
+      );
+      const dailyRate = resolveDailyRateFromInputs(roomType.defaultRate, ratePlanAttributes);
+      const computedTotal = dailyRate.mul(nights);
+      const effectiveTotal = input.totalAmount
+        ? new Prisma.Decimal(input.totalAmount)
+        : computedTotal;
 
       const guestId = input.guestId ?? (await ensureAdHocGuest(tx, user.tenantId, input));
 
@@ -108,6 +129,23 @@ export class ReservationsService {
         ? ReservationSource.WALK_IN
         : ReservationSource.DIRECT;
 
+      // Garantía: si walk-in, NONE por defecto (el huésped está en mostrador
+      // y el pago se cobra en folio). Si reserva remota sin guarantee
+      // explícita, marcar PENDING con deadline 2h — operador completa luego.
+      const guaranteeInput = input.guarantee;
+      const guaranteeType: GuaranteeType = (guaranteeInput?.type as GuaranteeType | undefined) ??
+        (walkIn ? GuaranteeType.NONE : GuaranteeType.CARD_ON_FILE);
+      const guaranteeStatus: GuaranteeStatus =
+        guaranteeType === GuaranteeType.NONE
+          ? GuaranteeStatus.RELEASED
+          : guaranteeInput?.reference
+            ? GuaranteeStatus.SECURED
+            : GuaranteeStatus.PENDING;
+      const guaranteeDeadline =
+        guaranteeStatus === GuaranteeStatus.PENDING
+          ? new Date(Date.now() + 2 * 60 * 60 * 1000)
+          : null;
+
       const reservation = await tx.reservation.create({
         data: {
           tenantId: user.tenantId,
@@ -120,12 +158,19 @@ export class ReservationsService {
           children: input.occupancy.children,
           roomTypeId: input.roomTypeId,
           ratePlanId: input.ratePlanId ?? null,
-          totalAmount: new Prisma.Decimal(input.totalAmount ?? 0),
+          totalAmount: effectiveTotal,
           currency: input.currency ?? property.currency,
           source,
           specialRequests: input.specialRequests ?? null,
           notes: input.notes ?? null,
           checkedInAt: walkIn ? new Date() : null,
+          guaranteeType,
+          guaranteeStatus,
+          guaranteeAmount: guaranteeInput?.amount ? new Prisma.Decimal(guaranteeInput.amount) : null,
+          guaranteeReference: guaranteeInput?.reference ?? null,
+          guaranteeDeadline,
+          guaranteeSecuredAt: guaranteeStatus === GuaranteeStatus.SECURED ? new Date() : null,
+          cancellationPolicyId: guaranteeInput?.cancellationPolicyId ?? null,
           guests: {
             create: {
               tenantId: user.tenantId,
@@ -321,35 +366,101 @@ export class ReservationsService {
     query: {
       from?: string;
       to?: string;
+      arrivalFrom?: string;
+      arrivalTo?: string;
+      departureFrom?: string;
+      departureTo?: string;
       status?: string;
+      source?: string;
       propertyId?: string;
+      groupId?: string;
+      search?: string;
+      guaranteeStatus?: string;
+      unassigned?: string;
       cursor?: string;
       limit?: string;
     },
-  ): Promise<{ items: ReservationListItem[]; nextCursor: string | null }> {
+  ): Promise<{ items: ReservationRichListItem[]; nextCursor: string | null }> {
     const ctx = tenantCtx(user, correlationId);
     const limit = Math.min(Math.max(parseInt(query.limit ?? '50', 10) || 50, 1), 200);
 
-    if (query.from && !ISO_DATE.test(query.from)) {
-      throw new BadRequestException('from must be YYYY-MM-DD');
+    const dateFields = [
+      'from',
+      'to',
+      'arrivalFrom',
+      'arrivalTo',
+      'departureFrom',
+      'departureTo',
+    ] as const;
+    for (const k of dateFields) {
+      const v = (query as Record<string, string | undefined>)[k];
+      if (v && !ISO_DATE.test(v)) {
+        throw new BadRequestException(`${k} must be YYYY-MM-DD`);
+      }
     }
-    if (query.to && !ISO_DATE.test(query.to)) {
-      throw new BadRequestException('to must be YYYY-MM-DD');
-    }
-    if (query.status && !(query.status in PrismaReservationStatus)) {
-      throw new BadRequestException(`unknown status: ${query.status}`);
+    if (query.status) {
+      const tokens = query.status.split(',');
+      for (const s of tokens) {
+        if (!(s in PrismaReservationStatus)) {
+          throw new BadRequestException(`unknown status: ${s}`);
+        }
+      }
     }
 
     const where: Prisma.ReservationWhereInput = { deletedAt: null };
+    const and: Prisma.ReservationWhereInput[] = [];
     if (query.propertyId) where.propertyId = query.propertyId;
+    if (query.groupId) where.groupId = query.groupId;
     if (query.status) {
-      where.status = PrismaReservationStatus[query.status as keyof typeof PrismaReservationStatus];
+      const tokens = query.status.split(',') as Array<keyof typeof PrismaReservationStatus>;
+      where.status = { in: tokens.map((t) => PrismaReservationStatus[t]) };
     }
-    if (query.from || query.to) {
-      where.AND = [];
-      if (query.from) where.AND.push({ departureDate: { gt: new Date(query.from) } });
-      if (query.to) where.AND.push({ arrivalDate: { lt: new Date(query.to) } });
+    if (query.source) {
+      const tokens = query.source.split(',') as Array<keyof typeof ReservationSource>;
+      where.source = { in: tokens.map((t) => ReservationSource[t]) };
     }
+    if (query.guaranteeStatus) {
+      where.guaranteeStatus = query.guaranteeStatus as Prisma.ReservationWhereInput['guaranteeStatus'];
+    }
+    if (query.unassigned === 'true') {
+      where.roomId = null;
+    }
+    // Legacy from/to: stays overlapping the window.
+    if (query.from) and.push({ departureDate: { gt: new Date(query.from) } });
+    if (query.to) and.push({ arrivalDate: { lt: new Date(query.to) } });
+    // Explicit arrival/departure ranges (inclusive).
+    if (query.arrivalFrom) and.push({ arrivalDate: { gte: new Date(query.arrivalFrom) } });
+    if (query.arrivalTo) and.push({ arrivalDate: { lte: new Date(query.arrivalTo) } });
+    if (query.departureFrom) and.push({ departureDate: { gte: new Date(query.departureFrom) } });
+    if (query.departureTo) and.push({ departureDate: { lte: new Date(query.departureTo) } });
+    if (query.search) {
+      const term = query.search.trim();
+      // Búsqueda libre: code reserva, group code/name, organizador, o
+      // huésped por nombre/email/teléfono.
+      and.push({
+        OR: [
+          { code: { contains: term, mode: 'insensitive' } },
+          { group: { code: { contains: term, mode: 'insensitive' } } },
+          { group: { name: { contains: term, mode: 'insensitive' } } },
+          { group: { organizerName: { contains: term, mode: 'insensitive' } } },
+          {
+            guests: {
+              some: {
+                guest: {
+                  OR: [
+                    { firstName: { contains: term, mode: 'insensitive' } },
+                    { lastName: { contains: term, mode: 'insensitive' } },
+                    { email: { contains: term, mode: 'insensitive' } },
+                    { phone: { contains: term, mode: 'insensitive' } },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      });
+    }
+    if (and.length > 0) where.AND = and;
 
     const items = await this.prisma.withTenant(ctx, (tx) =>
       tx.reservation.findMany({
@@ -357,12 +468,12 @@ export class ReservationsService {
         orderBy: [{ arrivalDate: 'asc' }, { id: 'asc' }],
         take: limit + 1,
         ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-        select: RESERVATION_LIST_SELECT,
+        select: RESERVATION_RICH_LIST_SELECT,
       }),
     );
 
     const nextCursor = items.length > limit ? items[limit]!.id : null;
-    return { items: items.slice(0, limit).map(toListItem), nextCursor };
+    return { items: items.slice(0, limit).map(toRichListItem), nextCursor };
   }
 
   async findOne(user: AuthUser, correlationId: string, id: string): Promise<ReservationDetail> {
@@ -632,12 +743,99 @@ export class ReservationsService {
   }
 
   async checkOut(
-    _user: AuthUser,
-    _correlationId: string,
-    _id: string,
+    user: AuthUser,
+    correlationId: string,
+    id: string,
     _input: CheckOutDto,
   ): Promise<{ id: string; balance: number }> {
-    throw new ForbiddenException('reservations.checkOut — Sprint 2 W3');
+    const ctx = tenantCtx(user, correlationId);
+
+    const result = await this.prisma.withTenant(ctx, async (tx) => {
+      const existing = await tx.reservation.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+          id: true,
+          status: true,
+          propertyId: true,
+          code: true,
+          roomId: true,
+          folio: { select: { id: true, balance: true } },
+        },
+      });
+      if (!existing) {
+        throw new NotFoundException(`Reservation ${id} not found`);
+      }
+
+      try {
+        assertTransition(existing.status, PrismaReservationStatus.CHECKED_OUT);
+      } catch (err) {
+        if (err instanceof IllegalReservationTransitionError) {
+          throw new ConflictException(err.message);
+        }
+        throw err;
+      }
+
+      if (!existing.roomId) {
+        throw new BadRequestException('cannot check out: reservation has no assigned room');
+      }
+
+      const checkedOutAt = new Date();
+      const businessDate = new Date(checkedOutAt.toISOString().slice(0, 10));
+
+      const updated = await tx.reservation.update({
+        where: { id: existing.id },
+        data: {
+          status: PrismaReservationStatus.CHECKED_OUT,
+          checkedOutAt,
+        },
+        select: { id: true, propertyId: true, code: true },
+      });
+
+      // Habitacion -> DIRTY (la HSK la pasa a CLEAN al completar la tarea)
+      await tx.room.update({
+        where: { id: existing.roomId },
+        data: { status: RoomStatus.DIRTY },
+      });
+
+      // Tarea HSK CHECKOUT_CLEAN. La unique (propertyId, businessDate, roomId,
+      // taskType) garantiza idempotencia si se llama dos veces el mismo dia.
+      await tx.housekeepingTask.upsert({
+        where: {
+          propertyId_businessDate_roomId_taskType: {
+            propertyId: existing.propertyId,
+            businessDate,
+            roomId: existing.roomId,
+            taskType: HousekeepingTaskType.CHECKOUT_CLEAN,
+          },
+        },
+        update: {},
+        create: {
+          tenantId: user.tenantId,
+          propertyId: existing.propertyId,
+          roomId: existing.roomId,
+          taskType: HousekeepingTaskType.CHECKOUT_CLEAN,
+          status: HousekeepingTaskStatus.PENDING,
+          businessDate,
+          scheduledFor: new Date(checkedOutAt.getTime() + 30 * 60_000),
+        },
+      });
+
+      const balance = existing.folio?.balance
+        ? Number(existing.folio.balance.toString())
+        : 0;
+
+      return { updated, roomId: existing.roomId, checkedOutAt, balance };
+    });
+
+    await this.events.publish('reservation.checked_out', ctx, {
+      reservationId: result.updated.id,
+      propertyId: result.updated.propertyId,
+      code: result.updated.code,
+      checkedOutAt: result.checkedOutAt.toISOString(),
+      finalBalance: result.balance.toFixed(2),
+    });
+
+    return { id: result.updated.id, balance: result.balance };
   }
 
   async assignRoom(
@@ -713,6 +911,408 @@ export class ReservationsService {
 
     return { id: result.updated.id, roomId: result.roomId };
   }
+
+  async updateGuarantee(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+    input: UpdateGuaranteeDto,
+  ): Promise<{ id: string; guaranteeStatus: GuaranteeStatus; guaranteeType: GuaranteeType }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const existing = await tx.reservation.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true, guaranteeType: true, guaranteeStatus: true },
+      });
+      if (!existing) throw new NotFoundException(`Reservation ${id} not found`);
+
+      const nextType = (input.type as GuaranteeType | undefined) ?? existing.guaranteeType;
+      const nextStatus = (input.status as GuaranteeStatus | undefined) ?? existing.guaranteeStatus;
+
+      const updated = await tx.reservation.update({
+        where: { id },
+        data: {
+          guaranteeType: nextType,
+          guaranteeStatus: nextStatus,
+          guaranteeAmount:
+            input.amount !== undefined ? new Prisma.Decimal(input.amount) : undefined,
+          guaranteeReference: input.reference ?? undefined,
+          guaranteeSecuredAt:
+            nextStatus === GuaranteeStatus.SECURED ? new Date() : undefined,
+          guaranteeDeadline:
+            nextStatus === GuaranteeStatus.SECURED || nextStatus === GuaranteeStatus.RELEASED
+              ? null
+              : undefined,
+        },
+        select: { id: true, guaranteeStatus: true, guaranteeType: true },
+      });
+
+      return updated;
+    });
+  }
+
+  // ===========================================================================
+  // GROUP OPERATIONS
+  // ===========================================================================
+
+  /** Detalle de un grupo con todas sus reservas hijas. */
+  async findGroup(user: AuthUser, correlationId: string, id: string) {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          organizerName: true,
+          organizerEmail: true,
+          organizerPhone: true,
+          notes: true,
+          propertyId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      const items = await tx.reservation.findMany({
+        where: { groupId: id, deletedAt: null },
+        orderBy: [{ arrivalDate: 'asc' }, { code: 'asc' }],
+        select: {
+          ...RESERVATION_LIST_SELECT,
+          room: { select: { number: true, floor: true } },
+        },
+      });
+
+      return {
+        ...grp,
+        reservations: items.map((r) => ({
+          ...toListItem(r),
+          roomNumber: r.room?.number ?? null,
+          roomFloor: r.room?.floor ?? null,
+        })),
+      };
+    });
+  }
+
+  /**
+   * Patch a nivel grupo. Campos del grupo (name, organizer*, notes) actualizan
+   * solo el grupo. Campos de estancia (arrival, departure, roomTypeId,
+   * ratePlanId) hacen cascade a TODAS las reservas hijas que no esten en
+   * estado terminal (CHECKED_OUT, CANCELLED, NO_SHOW). Lo que no se especifica
+   * se mantiene por reserva — la edicion linea-a-linea sigue valida.
+   */
+  async patchGroup(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+    input: PatchReservationGroupDto,
+  ): Promise<{ id: string; affectedReservations: number }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      // 1. Update group-level fields
+      await tx.reservationGroup.update({
+        where: { id },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.organizerName !== undefined ? { organizerName: input.organizerName } : {}),
+          ...(input.organizerEmail !== undefined ? { organizerEmail: input.organizerEmail } : {}),
+          ...(input.organizerPhone !== undefined ? { organizerPhone: input.organizerPhone } : {}),
+          ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        },
+      });
+
+      // 2. Cascade fields a las reservas hijas no-terminales
+      const cascadeData: Record<string, unknown> = {};
+      if (input.arrival !== undefined) cascadeData.arrivalDate = new Date(input.arrival);
+      if (input.departure !== undefined) cascadeData.departureDate = new Date(input.departure);
+      if (input.roomTypeId !== undefined) cascadeData.roomTypeId = input.roomTypeId;
+      if (input.ratePlanId !== undefined) cascadeData.ratePlanId = input.ratePlanId;
+
+      let affected = 0;
+      if (Object.keys(cascadeData).length > 0) {
+        const result = await tx.reservation.updateMany({
+          where: {
+            groupId: id,
+            deletedAt: null,
+            status: {
+              notIn: [
+                PrismaReservationStatus.CHECKED_OUT,
+                PrismaReservationStatus.CANCELLED,
+                PrismaReservationStatus.NO_SHOW,
+              ],
+            },
+          },
+          data: cascadeData,
+        });
+        affected = result.count;
+      }
+
+      return { id, affectedReservations: affected };
+    });
+  }
+
+  /** Cancela TODAS las reservas no-terminales del grupo en una transaccion. */
+  async cancelGroup(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+    input: CancelReservationDto,
+  ): Promise<{ id: string; cancelledReservations: number }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      const cancelledAt = new Date();
+      const result = await tx.reservation.updateMany({
+        where: {
+          groupId: id,
+          deletedAt: null,
+          status: {
+            notIn: [
+              PrismaReservationStatus.CHECKED_OUT,
+              PrismaReservationStatus.CANCELLED,
+              PrismaReservationStatus.NO_SHOW,
+            ],
+          },
+        },
+        data: {
+          status: PrismaReservationStatus.CANCELLED,
+          cancelledAt,
+          cancellationReason: input.reason,
+        },
+      });
+
+      return { id, cancelledReservations: result.count };
+    });
+  }
+
+  /**
+   * Asigna habitaciones libres del tipo correcto a CADA reserva no-terminal
+   * sin roomId del grupo. No reasigna las que ya tienen room.
+   */
+  async bulkAssignRooms(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+  ): Promise<{ id: string; assignedCount: number; missingByType: Record<string, number> }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true, propertyId: true },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      const pending = await tx.reservation.findMany({
+        where: {
+          groupId: id,
+          deletedAt: null,
+          roomId: null,
+          status: {
+            notIn: [
+              PrismaReservationStatus.CHECKED_OUT,
+              PrismaReservationStatus.CANCELLED,
+              PrismaReservationStatus.NO_SHOW,
+            ],
+          },
+        },
+        select: { id: true, roomTypeId: true, arrivalDate: true, departureDate: true },
+      });
+
+      const allRooms = await tx.room.findMany({
+        where: { propertyId: grp.propertyId, deletedAt: null, isOutOfOrder: false },
+        select: { id: true, roomTypeId: true },
+      });
+
+      // Habitaciones ocupadas en cualquier rango que solape con cada reserva
+      // pending. Para simplificar, una pasada que coge cualquier reserva
+      // overlapping en el rango completo del grupo.
+      const groupRange = pending.reduce(
+        (acc, r) => ({
+          minArrival: !acc.minArrival || r.arrivalDate < acc.minArrival ? r.arrivalDate : acc.minArrival,
+          maxDeparture: !acc.maxDeparture || r.departureDate > acc.maxDeparture ? r.departureDate : acc.maxDeparture,
+        }),
+        { minArrival: undefined as Date | undefined, maxDeparture: undefined as Date | undefined },
+      );
+
+      const conflicting = await tx.reservation.findMany({
+        where: {
+          propertyId: grp.propertyId,
+          deletedAt: null,
+          NOT: { roomId: null },
+          status: {
+            in: [
+              PrismaReservationStatus.PENDING,
+              PrismaReservationStatus.CONFIRMED,
+              PrismaReservationStatus.CHECKED_IN,
+            ],
+          },
+          ...(groupRange.minArrival && groupRange.maxDeparture
+            ? {
+                arrivalDate: { lt: groupRange.maxDeparture },
+                departureDate: { gt: groupRange.minArrival },
+              }
+            : {}),
+        },
+        select: { roomId: true },
+      });
+      const taken = new Set(conflicting.map((r) => r.roomId).filter(Boolean) as string[]);
+
+      const missingByType: Record<string, number> = {};
+      let assignedCount = 0;
+
+      for (const reservation of pending) {
+        const candidate = allRooms.find(
+          (r) => r.roomTypeId === reservation.roomTypeId && !taken.has(r.id),
+        );
+        if (!candidate) {
+          missingByType[reservation.roomTypeId] = (missingByType[reservation.roomTypeId] ?? 0) + 1;
+          continue;
+        }
+        await tx.reservation.update({
+          where: { id: reservation.id },
+          data: { roomId: candidate.id },
+        });
+        taken.add(candidate.id);
+        assignedCount += 1;
+      }
+
+      return { id, assignedCount, missingByType };
+    });
+  }
+
+  /**
+   * Check-in masivo: para cada reserva PENDING/CONFIRMED del grupo, transita
+   * a CHECKED_IN. Si la reserva no tiene roomId, falla solo esa (el resto
+   * se procesan). El operador debe correr bulkAssignRooms antes.
+   */
+  async bulkCheckIn(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+  ): Promise<{ id: string; checkedIn: number; skipped: Array<{ id: string; reason: string }> }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      const items = await tx.reservation.findMany({
+        where: {
+          groupId: id,
+          deletedAt: null,
+          status: {
+            in: [PrismaReservationStatus.PENDING, PrismaReservationStatus.CONFIRMED],
+          },
+        },
+        select: { id: true, roomId: true, code: true },
+      });
+
+      const skipped: Array<{ id: string; reason: string }> = [];
+      let checkedIn = 0;
+      const now = new Date();
+
+      for (const r of items) {
+        if (!r.roomId) {
+          skipped.push({ id: r.id, reason: 'no roomId — corre bulkAssignRooms primero' });
+          continue;
+        }
+        await tx.reservation.update({
+          where: { id: r.id },
+          data: { status: PrismaReservationStatus.CHECKED_IN, checkedInAt: now },
+        });
+        checkedIn += 1;
+      }
+
+      return { id, checkedIn, skipped };
+    });
+  }
+
+  /**
+   * Check-out masivo: para cada reserva CHECKED_IN del grupo, transita a
+   * CHECKED_OUT, marca room DIRTY, crea tarea HSK CHECKOUT_CLEAN (upsert
+   * por unique).
+   */
+  async bulkCheckOut(
+    user: AuthUser,
+    correlationId: string,
+    id: string,
+  ): Promise<{ id: string; checkedOut: number; skipped: Array<{ id: string; reason: string }> }> {
+    const ctx = tenantCtx(user, correlationId);
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const grp = await tx.reservationGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true, propertyId: true },
+      });
+      if (!grp) throw new NotFoundException(`Group ${id} not found`);
+
+      const items = await tx.reservation.findMany({
+        where: {
+          groupId: id,
+          deletedAt: null,
+          status: PrismaReservationStatus.CHECKED_IN,
+        },
+        select: { id: true, roomId: true, code: true },
+      });
+
+      const skipped: Array<{ id: string; reason: string }> = [];
+      let checkedOut = 0;
+      const now = new Date();
+      const businessDate = new Date(now.toISOString().slice(0, 10));
+
+      for (const r of items) {
+        if (!r.roomId) {
+          skipped.push({ id: r.id, reason: 'no roomId' });
+          continue;
+        }
+        await tx.reservation.update({
+          where: { id: r.id },
+          data: { status: PrismaReservationStatus.CHECKED_OUT, checkedOutAt: now },
+        });
+        await tx.room.update({
+          where: { id: r.roomId },
+          data: { status: RoomStatus.DIRTY },
+        });
+        await tx.housekeepingTask.upsert({
+          where: {
+            propertyId_businessDate_roomId_taskType: {
+              propertyId: grp.propertyId,
+              businessDate,
+              roomId: r.roomId,
+              taskType: HousekeepingTaskType.CHECKOUT_CLEAN,
+            },
+          },
+          update: {},
+          create: {
+            tenantId: user.tenantId,
+            propertyId: grp.propertyId,
+            roomId: r.roomId,
+            taskType: HousekeepingTaskType.CHECKOUT_CLEAN,
+            status: HousekeepingTaskStatus.PENDING,
+            businessDate,
+            scheduledFor: new Date(now.getTime() + 30 * 60_000),
+          },
+        });
+        checkedOut += 1;
+      }
+
+      return { id, checkedOut, skipped };
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -784,6 +1384,28 @@ const RESERVATION_LIST_SELECT = {
   currency: true,
 } as const;
 
+const RESERVATION_RICH_LIST_SELECT = {
+  ...RESERVATION_LIST_SELECT,
+  source: true,
+  ratePlanId: true,
+  groupId: true,
+  guaranteeStatus: true,
+  room: { select: { number: true, floor: true } },
+  roomType: { select: { code: true, name: true } },
+  ratePlan: { select: { code: true } },
+  group: { select: { code: true, name: true, organizerName: true } },
+  folio: { select: { balance: true } },
+  guests: {
+    where: { isPrimary: true },
+    take: 1,
+    select: {
+      guest: {
+        select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+      },
+    },
+  },
+} as const;
+
 const RESERVATION_DETAIL_SELECT = {
   ...RESERVATION_LIST_SELECT,
   ratePlanId: true,
@@ -794,6 +1416,18 @@ const RESERVATION_DETAIL_SELECT = {
   checkedOutAt: true,
   cancelledAt: true,
   cancellationReason: true,
+  guaranteeType: true,
+  guaranteeStatus: true,
+  guaranteeAmount: true,
+  guaranteeReference: true,
+  stripeCardBrand: true,
+  stripeCardLast4: true,
+  stripeCardExpMonth: true,
+  stripeCardExpYear: true,
+  guaranteeDeadline: true,
+  guaranteeSecuredAt: true,
+  cancellationPolicyId: true,
+  groupId: true,
   createdAt: true,
   updatedAt: true,
   propertyId: true,
@@ -826,9 +1460,36 @@ type ReservationListRow = Prisma.ReservationGetPayload<{
   select: typeof RESERVATION_LIST_SELECT;
 }>;
 
+type ReservationRichListRow = Prisma.ReservationGetPayload<{
+  select: typeof RESERVATION_RICH_LIST_SELECT;
+}>;
+
 type ReservationDetailRow = Prisma.ReservationGetPayload<{
   select: typeof RESERVATION_DETAIL_SELECT;
 }>;
+
+export interface ReservationRichListItem extends ReservationListItem {
+  source: ReservationSource;
+  ratePlanId: string | null;
+  ratePlanCode: string | null;
+  groupId: string | null;
+  groupCode: string | null;
+  groupName: string | null;
+  organizerName: string | null;
+  guaranteeStatus: import('@pms/db').GuaranteeStatus;
+  roomNumber: string | null;
+  roomFloor: string | null;
+  roomTypeCode: string | null;
+  roomTypeName: string | null;
+  primaryGuest: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+  } | null;
+  folioBalance: string | null;
+}
 
 export interface ReservationListItem {
   id: string;
@@ -853,6 +1514,18 @@ export type ReservationDetail = ReservationListItem & {
   checkedOutAt: string | null;
   cancelledAt: string | null;
   cancellationReason: string | null;
+  guaranteeType: GuaranteeType;
+  guaranteeStatus: GuaranteeStatus;
+  guaranteeAmount: string | null;
+  guaranteeReference: string | null;
+  stripeCardBrand: string | null;
+  stripeCardLast4: string | null;
+  stripeCardExpMonth: number | null;
+  stripeCardExpYear: number | null;
+  guaranteeDeadline: string | null;
+  guaranteeSecuredAt: string | null;
+  cancellationPolicyId: string | null;
+  groupId: string | null;
   createdAt: string;
   updatedAt: string;
   propertyId: string;
@@ -891,6 +1564,35 @@ function toListItem(row: ReservationListRow): ReservationListItem {
   };
 }
 
+function toRichListItem(row: ReservationRichListRow): ReservationRichListItem {
+  const primary = row.guests[0]?.guest;
+  return {
+    ...toListItem(row),
+    source: row.source,
+    ratePlanId: row.ratePlanId,
+    ratePlanCode: row.ratePlan?.code ?? null,
+    groupId: row.groupId,
+    groupCode: row.group?.code ?? null,
+    groupName: row.group?.name ?? null,
+    organizerName: row.group?.organizerName ?? null,
+    guaranteeStatus: row.guaranteeStatus,
+    roomNumber: row.room?.number ?? null,
+    roomFloor: row.room?.floor ?? null,
+    roomTypeCode: row.roomType?.code ?? null,
+    roomTypeName: row.roomType?.name ?? null,
+    primaryGuest: primary
+      ? {
+          id: primary.id,
+          firstName: primary.firstName,
+          lastName: primary.lastName,
+          email: primary.email,
+          phone: primary.phone,
+        }
+      : null,
+    folioBalance: row.folio?.balance?.toString() ?? null,
+  };
+}
+
 function toDetail(row: ReservationDetailRow): ReservationDetail {
   return {
     ...toListItem(row),
@@ -902,6 +1604,18 @@ function toDetail(row: ReservationDetailRow): ReservationDetail {
     checkedOutAt: row.checkedOutAt?.toISOString() ?? null,
     cancelledAt: row.cancelledAt?.toISOString() ?? null,
     cancellationReason: row.cancellationReason,
+    guaranteeType: row.guaranteeType,
+    guaranteeStatus: row.guaranteeStatus,
+    guaranteeAmount: row.guaranteeAmount?.toString() ?? null,
+    guaranteeReference: row.guaranteeReference,
+    stripeCardBrand: row.stripeCardBrand,
+    stripeCardLast4: row.stripeCardLast4,
+    stripeCardExpMonth: row.stripeCardExpMonth,
+    stripeCardExpYear: row.stripeCardExpYear,
+    guaranteeDeadline: row.guaranteeDeadline?.toISOString() ?? null,
+    guaranteeSecuredAt: row.guaranteeSecuredAt?.toISOString() ?? null,
+    cancellationPolicyId: row.cancellationPolicyId,
+    groupId: row.groupId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     propertyId: row.propertyId,
@@ -922,4 +1636,29 @@ function toDetail(row: ReservationDetailRow): ReservationDetail {
 
 function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+// Resuelve la tarifa diaria: RatePlan.attributes.dailyRate > RoomType.defaultRate.
+// Mismo contrato que apps/api/src/night-audit/steps/post-room-charges.ts
+// resolveDailyRate — extraido aqui para usar en create().
+function resolveDailyRateFromInputs(
+  roomTypeDefaultRate: Prisma.Decimal,
+  ratePlanAttributes: Prisma.JsonValue | null,
+): Prisma.Decimal {
+  if (
+    ratePlanAttributes &&
+    typeof ratePlanAttributes === 'object' &&
+    !Array.isArray(ratePlanAttributes) &&
+    'dailyRate' in ratePlanAttributes
+  ) {
+    const raw = (ratePlanAttributes as Record<string, unknown>).dailyRate;
+    if (typeof raw === 'number' || typeof raw === 'string') {
+      try {
+        return new Prisma.Decimal(raw);
+      } catch {
+        // fall through
+      }
+    }
+  }
+  return new Prisma.Decimal(roomTypeDefaultRate);
 }

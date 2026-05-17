@@ -473,7 +473,7 @@ Una vez al mes (primer martes), el on-call primario ejecuta un drill de restore:
 flyctl postgres snapshots list pms-postgres -a pms-postgres
 
 # 2. Provisional un cluster paralelo desde el snapshot.
-flyctl postgres restore <snapshot-id> --name pms-postgres-drill --region mad
+flyctl postgres restore <snapshot-id> --name pms-postgres-drill --region cdg
 
 # 3. Apuntar una API "shadow" (pms-api-drill) al cluster restaurado.
 flyctl secrets set -a pms-api-drill DATABASE_URL="<conn-del-cluster-restored>"

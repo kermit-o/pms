@@ -15,7 +15,8 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ trustProxy: true }),
-    { bufferLogs: true },
+    // rawBody habilita req.rawBody para validar firmas de webhook (Stripe).
+    { bufferLogs: true, rawBody: true },
   );
 
   app.useLogger(app.get(Logger));

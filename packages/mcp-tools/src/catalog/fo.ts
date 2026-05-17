@@ -39,6 +39,18 @@ export const queryAvailabilityInput = z.object({
 });
 export type QueryAvailabilityInput = z.infer<typeof queryAvailabilityInput>;
 
+export const listRoomTypesInput = z.object({
+  propertyId: z.string().uuid(),
+});
+export type ListRoomTypesInput = z.infer<typeof listRoomTypesInput>;
+
+export const searchAvailabilityByTypeInput = z.object({
+  propertyId: z.string().uuid(),
+  arrival: isoDate,
+  departure: isoDate,
+});
+export type SearchAvailabilityByTypeInput = z.infer<typeof searchAvailabilityByTypeInput>;
+
 export const createReservationInput = z.object({
   propertyId: z.string().uuid(),
   guest: guestRef,
@@ -53,6 +65,31 @@ export const createReservationInput = z.object({
   notes: z.string().max(2000).optional(),
 });
 export type CreateReservationInput = z.infer<typeof createReservationInput>;
+
+const groupChildInput = z.object({
+  guest: guestRef,
+  arrival: isoDate,
+  departure: isoDate,
+  roomTypeId: z.string().uuid(),
+  ratePlanId: z.string().uuid().optional(),
+  occupancy: z.object({
+    adults: z.number().int().min(1).max(10),
+    children: z.number().int().min(0).max(10).default(0),
+  }),
+  notes: z.string().max(2000).optional(),
+});
+
+export const createReservationGroupInput = z.object({
+  propertyId: z.string().uuid(),
+  name: z.string().min(1).max(200),
+  code: z.string().min(1).max(40).optional(),
+  organizerName: z.string().max(200).optional(),
+  organizerEmail: z.string().email().optional(),
+  organizerPhone: z.string().max(40).optional(),
+  notes: z.string().max(2000).optional(),
+  reservations: z.array(groupChildInput).min(2).max(50),
+});
+export type CreateReservationGroupInput = z.infer<typeof createReservationGroupInput>;
 
 export const checkInInput = z.object({
   reservationId: z.string().uuid(),
@@ -105,11 +142,35 @@ export const foToolCatalog = {
     mutating: false,
     financial: false,
   },
+  list_room_types: {
+    name: 'list_room_types',
+    description:
+      'Lists all room types of a property with code (e.g. "DBL"), name, capacity, defaultRate and roomTypeId UUID. Call this when the user mentions a room type by name (e.g. "doble estandar", "suite") to resolve the UUID before creating a reservation.',
+    inputSchema: listRoomTypesInput,
+    mutating: false,
+    financial: false,
+  },
+  search_availability_by_type: {
+    name: 'search_availability_by_type',
+    description:
+      'Aggregated availability summary per room type for a stay window. Returns available rooms count, totalRooms, pricePerNight and totalForStay. Use this when user wants to book and you need to know how many of each type are free + price.',
+    inputSchema: searchAvailabilityByTypeInput,
+    mutating: false,
+    financial: false,
+  },
   create_reservation: {
     name: 'create_reservation',
     description:
-      'Creates a new reservation in PENDING status. Accepts an existing guest by id or inline guest data.',
+      'Creates a new reservation in PENDING status. Accepts an existing guest by id or inline guest data. roomTypeId MUST be a real UUID returned by list_room_types; never invent one.',
     inputSchema: createReservationInput,
+    mutating: true,
+    financial: false,
+  },
+  create_reservation_group: {
+    name: 'create_reservation_group',
+    description:
+      'Creates a GROUP booking with multiple reservations under one organizer (tours, weddings, conferences). Use this whenever the user asks for several rooms in one go. INPUTS REQUIRED in a single call: propertyId, name, organizerName, and the COMPLETE `reservations` array (min 2 items). Each item must have: guest (firstName + lastName), arrival, departure, roomTypeId (UUID from list_room_types), occupancy.adults. NEVER propose this tool without the full reservations array. Workflow: (1) call list_room_types, (2) compute the array client-side, (3) propose this tool in ONE tool_use with all data.',
+    inputSchema: createReservationGroupInput,
     mutating: true,
     financial: false,
   },
