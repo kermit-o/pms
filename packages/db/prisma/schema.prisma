@@ -112,6 +112,10 @@ model Property {
   // publishedAt = NULL significa "no expuesto al IBE público".
   publicSlug  String?   @unique @map("public_slug")
   publishedAt DateTime? @map("published_at")
+  // Atributos extensibles. Sprint 9 W4 introduce `blockedIps: string[]` para
+  // bloqueo manual de IPs abusivas en el IBE. Otros usos futuros: branding
+  // de email, configuración de channel manager, etc.
+  attributes  Json?
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")

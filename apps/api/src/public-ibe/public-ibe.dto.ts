@@ -31,6 +31,7 @@ export const CreatePublicReservationDto = z.object({
     marketingConsent: z.boolean().default(false),
   }),
   specialRequests: z.string().max(2000).optional(),
+  turnstileToken: z.string().max(2048).optional(),
 });
 export type CreatePublicReservationDto = z.infer<typeof CreatePublicReservationDto>;
 
@@ -42,6 +43,7 @@ export type LookupReservationQuery = z.infer<typeof LookupReservationQuery>;
 export const CancelPublicReservationDto = z.object({
   lastName: z.string().min(1).max(80),
   acceptPenalty: z.boolean().default(false),
+  turnstileToken: z.string().max(2048).optional(),
 });
 export type CancelPublicReservationDto = z.infer<typeof CancelPublicReservationDto>;
 
@@ -52,5 +54,6 @@ export type PublicSetupIntentDto = z.infer<typeof PublicSetupIntentDto>;
 
 export const ResendConfirmationDto = z.object({
   lastName: z.string().min(1).max(80),
+  turnstileToken: z.string().max(2048).optional(),
 });
 export type ResendConfirmationDto = z.infer<typeof ResendConfirmationDto>;

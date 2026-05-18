@@ -1,63 +1,107 @@
-import { describe, expect, it } from 'vitest';
-import { HttpException } from '@nestjs/common';
+import { describe, expect, it, vi } from 'vitest';
+import { ForbiddenException, HttpException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { RateLimitGuard, RATE_LIMIT_META, type RateLimitConfig } from './rate-limit.guard';
+import type { PublicIbeMetrics } from './public-ibe.metrics';
+import type { PrismaService } from '../db';
 
-function makeCtx(cfg: RateLimitConfig | undefined, ip = '1.2.3.4', path = '/x') {
-  const reflector = new Reflector();
-  const handler = function dummy() {};
-  if (cfg) Reflect.defineMetadata(RATE_LIMIT_META, cfg, handler);
+function stubMetrics(): PublicIbeMetrics {
   return {
-    reflector,
-    handler,
-    ctx: {
-      getHandler: () => handler,
-      getClass: () => Object,
-      switchToHttp: () => ({
-        getRequest: () => ({
-          headers: {},
-          ip,
-          routerPath: path,
-          url: path,
-        }),
-      }),
-    } as unknown as Parameters<RateLimitGuard['canActivate']>[0],
+    rateLimitHits: { add: vi.fn() },
+    blocklistHits: { add: vi.fn() },
+    turnstileFailures: { add: vi.fn() },
+    turnstileVerifications: { add: vi.fn() },
+  } as unknown as PublicIbeMetrics;
+}
+
+function stubPrisma(attrs: Record<string, unknown> | null = null): PrismaService {
+  return {
+    property: {
+      findFirst: vi.fn().mockResolvedValue(attrs ? { attributes: attrs } : null),
+    },
+  } as unknown as PrismaService;
+}
+
+function makeReq(ip: string, path: string, slug?: string, headers: Record<string, string> = {}) {
+  return {
+    headers,
+    ip,
+    routerPath: path,
+    url: path,
+    params: slug !== undefined ? { slug } : undefined,
   };
 }
 
+function ctx(handler: object, req: ReturnType<typeof makeReq>) {
+  return {
+    getHandler: () => handler,
+    getClass: () => Object,
+    switchToHttp: () => ({ getRequest: () => req }),
+  } as never;
+}
+
 describe('RateLimitGuard', () => {
-  it('passes through when no decorator is present', () => {
-    const { reflector, ctx } = makeCtx(undefined);
-    const guard = new RateLimitGuard(reflector);
-    expect(guard.canActivate(ctx)).toBe(true);
-  });
-
-  it('allows up to max calls in the window', () => {
-    const cfg = { max: 3, windowMs: 60_000 };
-    const { reflector, ctx } = makeCtx(cfg, '1.1.1.1', '/avail');
-    const guard = new RateLimitGuard(reflector);
-    expect(guard.canActivate(ctx)).toBe(true);
-    expect(guard.canActivate(ctx)).toBe(true);
-    expect(guard.canActivate(ctx)).toBe(true);
-    expect(() => guard.canActivate(ctx)).toThrow(HttpException);
-  });
-
-  it('separates buckets by IP', () => {
-    const cfg = { max: 1, windowMs: 60_000 };
+  it('passes through when no decorator is present', async () => {
     const reflector = new Reflector();
-    const handler1 = function h1() {};
-    Reflect.defineMetadata(RATE_LIMIT_META, cfg, handler1);
-    const guard = new RateLimitGuard(reflector);
-    const make = (ip: string) =>
-      ({
-        getHandler: () => handler1,
-        getClass: () => Object,
-        switchToHttp: () => ({
-          getRequest: () => ({ headers: {}, ip, routerPath: '/p', url: '/p' }),
-        }),
-      }) as never;
-    expect(guard.canActivate(make('a'))).toBe(true);
-    expect(guard.canActivate(make('b'))).toBe(true);
-    expect(() => guard.canActivate(make('a'))).toThrow(HttpException);
+    const handler = function dummy() {};
+    const guard = new RateLimitGuard(reflector, stubPrisma(), stubMetrics());
+    expect(await guard.canActivate(ctx(handler, makeReq('1.1.1.1', '/x')))).toBe(true);
+  });
+
+  it('allows up to max calls in the window', async () => {
+    const cfg: RateLimitConfig = { max: 3, windowMs: 60_000 };
+    const reflector = new Reflector();
+    const handler = function h() {};
+    Reflect.defineMetadata(RATE_LIMIT_META, cfg, handler);
+    const guard = new RateLimitGuard(reflector, stubPrisma(), stubMetrics());
+    const req = makeReq('1.1.1.1', '/avail', 'hotel');
+    expect(await guard.canActivate(ctx(handler, req))).toBe(true);
+    expect(await guard.canActivate(ctx(handler, req))).toBe(true);
+    expect(await guard.canActivate(ctx(handler, req))).toBe(true);
+    await expect(guard.canActivate(ctx(handler, req))).rejects.toBeInstanceOf(HttpException);
+  });
+
+  it('separates buckets by IP and slug', async () => {
+    const cfg: RateLimitConfig = { max: 1, windowMs: 60_000 };
+    const reflector = new Reflector();
+    const handler = function h() {};
+    Reflect.defineMetadata(RATE_LIMIT_META, cfg, handler);
+    const guard = new RateLimitGuard(reflector, stubPrisma(), stubMetrics());
+    expect(await guard.canActivate(ctx(handler, makeReq('a', '/p', 'h1')))).toBe(true);
+    expect(await guard.canActivate(ctx(handler, makeReq('b', '/p', 'h1')))).toBe(true);
+    expect(await guard.canActivate(ctx(handler, makeReq('a', '/p', 'h2')))).toBe(true);
+    await expect(
+      guard.canActivate(ctx(handler, makeReq('a', '/p', 'h1'))),
+    ).rejects.toBeInstanceOf(HttpException);
+  });
+
+  it('rejects with 403 when IP is in property blockedIps', async () => {
+    const cfg: RateLimitConfig = { max: 100, windowMs: 60_000 };
+    const reflector = new Reflector();
+    const handler = function h() {};
+    Reflect.defineMetadata(RATE_LIMIT_META, cfg, handler);
+    const prisma = stubPrisma({ blockedIps: ['1.2.3.4'] });
+    const metrics = stubMetrics();
+    const guard = new RateLimitGuard(reflector, prisma, metrics);
+    await expect(
+      guard.canActivate(ctx(handler, makeReq('1.2.3.4', '/p', 'hotel-evil'))),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(metrics.blocklistHits.add).toHaveBeenCalledWith(1, { slug: 'hotel-evil' });
+  });
+
+  it('prefers cf-connecting-ip over x-forwarded-for and req.ip', async () => {
+    const cfg: RateLimitConfig = { max: 1, windowMs: 60_000 };
+    const reflector = new Reflector();
+    const handler = function h() {};
+    Reflect.defineMetadata(RATE_LIMIT_META, cfg, handler);
+    const prisma = stubPrisma({ blockedIps: ['9.9.9.9'] });
+    const guard = new RateLimitGuard(reflector, prisma, stubMetrics());
+    const req = makeReq('1.1.1.1', '/p', 'h', {
+      'cf-connecting-ip': '9.9.9.9',
+      'x-forwarded-for': '8.8.8.8',
+    });
+    await expect(guard.canActivate(ctx(handler, req))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 });
