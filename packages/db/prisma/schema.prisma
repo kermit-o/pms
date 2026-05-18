@@ -119,6 +119,10 @@ model Property {
   channelManagerProvider       String? @map("channel_manager_provider")
   channelManagerPropertyId     String? @map("channel_manager_property_id")
   channelManagerCredentialsRef String? @map("channel_manager_credentials_ref")
+  // Atributos extensibles. Sprint 9 W4 introduce `blockedIps: string[]` para
+  // bloqueo manual de IPs abusivas en el IBE. Otros usos futuros: branding
+  // de email, configuración de channel manager, etc.
+  attributes  Json?
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")

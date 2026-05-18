@@ -81,6 +81,11 @@ export const envSchema = z.object({
   CM_SITEMINDER_API_BASE: z.string().url().optional(),
   CM_SITEMINDER_HMAC_SECRET: z.string().optional(),
 
+  // Anti-abuso (Sprint 9 W4). Si TURNSTILE_SECRET_KEY está, el API verifica
+  // el token cf-turnstile que envía el IBE en POSTs de mutación. Si falta,
+  // el guard hace skip (útil en dev y para hoteles sin tráfico adverso).
+  TURNSTILE_SECRET_KEY: z.string().optional(),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])

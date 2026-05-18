@@ -18,6 +18,7 @@ import {
 } from './public-ibe.dto';
 import { PublicIbeService } from './public-ibe.service';
 import { RateLimit, RateLimitGuard } from './rate-limit.guard';
+import { RequireTurnstile, TurnstileGuard } from './turnstile.guard';
 
 /**
  * Endpoints sin auth para el IBE (Online Booking Engine).
@@ -26,7 +27,7 @@ import { RateLimit, RateLimitGuard } from './rate-limit.guard';
  * acciones sobre una reserva existente es `code + lastName`.
  */
 @Public()
-@UseGuards(RateLimitGuard)
+@UseGuards(RateLimitGuard, TurnstileGuard)
 @Controller('public/ibe')
 export class PublicIbeController {
   constructor(private readonly service: PublicIbeService) {}
@@ -49,6 +50,7 @@ export class PublicIbeController {
 
   @Post('properties/:slug/reservations')
   @RateLimit({ max: 5, windowMs: 60 * 60_000 })
+  @RequireTurnstile()
   async createReservation(@Param('slug') slug: string, @Body() body: unknown) {
     const input = CreatePublicReservationDto.parse(body);
     return this.service.createReservation(slug, input);
@@ -67,6 +69,7 @@ export class PublicIbeController {
 
   @Post('properties/:slug/reservations/:code/cancel')
   @RateLimit({ max: 5, windowMs: 60 * 60_000 })
+  @RequireTurnstile()
   async cancel(
     @Param('slug') slug: string,
     @Param('code') code: string,
@@ -100,6 +103,7 @@ export class PublicIbeController {
 
   @Post('properties/:slug/reservations/:code/resend-confirmation')
   @RateLimit({ max: 3, windowMs: 60 * 60_000 })
+  @RequireTurnstile()
   async resendConfirmation(
     @Param('slug') slug: string,
     @Param('code') code: string,
