@@ -23,6 +23,8 @@ export {
   NightAuditAnomalySeverity,
   GuaranteeType,
   GuaranteeStatus,
+  ChannelSyncKind,
+  ChannelSyncStatus,
 } from '@prisma/client';
 
 export type {
@@ -51,6 +53,7 @@ export type {
   LostFoundItem,
   DevicePairing,
   CancellationPolicy,
+  ChannelSyncRun,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

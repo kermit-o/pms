@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { NightAuditRunStatus, NightAuditStep, NightAuditStepStatus, Prisma } from '@pms/db';
+import { ChannelManagerService } from '../channel-manager';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
@@ -51,6 +52,7 @@ export class NightAuditService {
     private readonly events: EventbusService,
     private readonly anomaly: AnomalyService,
     private readonly anomalyMetrics: AnomalyMetrics,
+    private readonly channelManager: ChannelManagerService,
   ) {
     this.pipeline = [
       new PostRoomChargesStep(),
@@ -242,6 +244,15 @@ export class NightAuditService {
       completedAt: completedRun.completedAt!.toISOString(),
       totals,
     });
+
+    // Tras CLOSE_DAY, hacer push completo de availability + rates al CM
+    // si el hotel lo tiene configurado. No bloquea: errores se loguean
+    // pero el NA queda cerrado igualmente.
+    void this.channelManager
+      .runNightlyPush(input.propertyId)
+      .catch((err) =>
+        this.log.warn(`channelManager.runNightlyPush failed: ${(err as Error).message}`),
+      );
 
     return toSummary(completedRun, stepRows);
   }

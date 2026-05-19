@@ -1394,3 +1394,126 @@ si está definido lo usa el wrapper HTML. Defaults Aubergine.
 
 Quitar `POSTMARK_SERVER_TOKEN` → dry-run automático. No requiere
 redeploy si Fly secrets cambia (machine restart sí).
+
+## 24. Channel Manager — Sprint 9 W2
+
+El módulo `channel-manager` conecta el PMS con un Channel Manager
+externo (SiteMinder en V1). Tres flujos:
+
+1. **Push delta** (on-change) — cuando se crea o cancela una reserva
+   (directa o IBE), Aubergine empuja la disponibilidad de las fechas
+   afectadas al CM en background. Errores se loguean pero no rompen
+   la operación principal.
+2. **Push nightly** — tras CLOSE_DAY del Night Audit, push completo de
+   availability + rates de los próximos 365 días.
+3. **Pull (webhook)** — el CM envía bookings OTA al endpoint
+   `POST /public/cm/:slug/webhook`. Verificación HMAC del body crudo,
+   idempotencia por `externalRef` (segundo webhook con mismo ref →
+   update, no duplicado).
+
+Cada operación genera una fila en `channel_sync_runs` (kind ∈
+{PUSH_AVAILABILITY, PUSH_RATES, PULL_RESERVATION, NIGHTLY_FULL},
+status ∈ {IN_PROGRESS, OK, FAILED, SKIPPED}). Auditoría + dashboards.
+
+### 24.1 Métricas
+
+```
+channel_manager_sync_total{provider, kind, status}
+channel_manager_sync_duration_ms_*{provider, kind}   (histogram)
+channel_manager_inbound_total{provider, source, outcome}
+channel_manager_webhook_rejections_total{provider, reason}
+```
+
+Sin label por property — la salud global del canal es lo que se alerta.
+Si un hotel concreto da problemas, se consulta `channel_sync_runs`.
+
+### 24.2 Configurar un hotel
+
+```sql
+-- En psql sobre pms-pg, con tenant context:
+UPDATE properties
+SET channel_manager_provider = 'siteminder',
+    channel_manager_property_id = '<id-del-cm-para-este-hotel>',
+    channel_manager_credentials_ref = 'CM_SITEMINDER_HMAC_SECRET'
+WHERE id = '<property-id>';
+```
+
+Y los secrets Fly:
+
+```bash
+flyctl secrets set -a pms-api \
+  CM_SITEMINDER_API_BASE=https://api.siteminder.com/v1 \
+  CM_SITEMINDER_HMAC_SECRET="$(openssl rand -hex 32)"
+# El mismo HMAC secret se da al provider para que firme los webhooks.
+```
+
+Si las env vars o el `channel_manager_provider` faltan, todo es no-op
+silencioso — el PMS sigue funcionando sin CM.
+
+### 24.3 Webhook entrante
+
+`POST https://pms-api.fly.dev/public/cm/<slug>/webhook`
+
+Headers requeridos:
+- `x-siteminder-signature: <hex sha256 HMAC>` calculado sobre el body
+  crudo.
+
+Body (V1 SiteMinder shape):
+
+```json
+{
+  "reservationId": "sm-uuid",
+  "channelCode": "BDC",
+  "arrival": "2026-07-15",
+  "departure": "2026-07-17",
+  "adults": 2,
+  "children": 0,
+  "roomTypeCode": "DBL",
+  "total": { "amount": "200.00", "currency": "EUR" },
+  "customer": {
+    "firstName": "...", "lastName": "...",
+    "email": "...", "phone": "...", "nationality": "ES"
+  },
+  "specialRequests": "..."
+}
+```
+
+Respuestas:
+- `200 { reservationId, code, outcome: created|updated }`
+- `400` payload inválido / room type desconocido / CM no configurado
+- `403` firma HMAC inválida
+- `404` slug del hotel no existe
+
+Endpoint de ping para que el provider valide la URL:
+`POST /public/cm/<slug>/webhook/ping` → `{ ok: true, slug, ts }`.
+
+### 24.4 ChannelSyncRun
+
+Auditoría completa de cada intento. Inspección rápida:
+
+```sql
+SELECT kind, status, started_at, completed_at,
+       totals, error, external_ref
+FROM channel_sync_runs
+WHERE property_id = '<...>'
+ORDER BY started_at DESC
+LIMIT 20;
+```
+
+### 24.5 Apagar el canal sin redeploy
+
+`flyctl secrets unset -a pms-api CM_SITEMINDER_API_BASE` — push se vuelve
+SKIPPED (los webhooks entrantes siguen llegando pero responderán 400
+hasta que se desconfigure el `channel_manager_provider` en DB).
+
+### 24.6 Roadmap
+
+- V1 ships solo SiteMinder. Para añadir Cloudbeds Channel o RoomCloud
+  basta con implementar `ChannelManagerProvider` y registrarlo en el
+  `Map` del constructor de `ChannelManagerService`.
+- Webhook firmado HMAC es el contrato V1 con SiteMinder. Otros
+  providers (Cloudbeds) usan OAuth2; añadiremos `verifyOAuth2` en la
+  interfaz cuando aparezca el primer caso real.
+- El job nightly se invoca **inline** tras CLOSE_DAY. Cuando aparezca
+  el primer hotel con > 1 property por tenant, se moverá a un scheduler
+  dedicado (Sprint 10+ con `@nestjs/schedule`, sujeto a ADR).

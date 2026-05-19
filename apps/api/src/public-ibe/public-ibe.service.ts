@@ -14,6 +14,7 @@ import {
   ReservationStatus,
 } from '@pms/db';
 import { ConfigService } from '@nestjs/config';
+import { ChannelManagerService } from '../channel-manager';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import { NotificationsService } from '../notifications';
@@ -58,6 +59,7 @@ export class PublicIbeService {
     private readonly stripe: StripeService,
     private readonly notifications: NotificationsService,
     private readonly config: ConfigService<Env, true>,
+    private readonly channelManager: ChannelManagerService,
   ) {}
 
   async getProperty(slug: string): Promise<PublicProperty> {
@@ -264,6 +266,14 @@ export class PublicIbeService {
     const roomTypeNameOrCode = result.roomTypeNameOrCode;
     const reservationOut = result.reservation;
 
+    // Push delta al channel manager si está configurado (no-op silencioso
+    // si la property no lo está). Errores del CM no rompen la creación.
+    void this.channelManager
+      .pushDelta({ propertyId: property.id, arrival: input.arrival, departure: input.departure })
+      .catch((err) =>
+        this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`),
+      );
+
     await this.events.publish('reservation.created', ctx, {
       reservationId: reservationOut.id,
       propertyId: property.id,
@@ -431,8 +441,17 @@ export class PublicIbeService {
         cancelledAt,
         guestFirstName: existing.guests[0]?.guest.firstName ?? null,
         guestEmail: existing.guests[0]?.guest.email ?? null,
+        arrivalIso: existing.arrivalDate.toISOString().slice(0, 10),
+        departureIso: existing.departureDate.toISOString().slice(0, 10),
       };
     });
+
+    // Push delta al channel manager — la cancelación libera inventario.
+    void this.channelManager
+      .pushDelta({ propertyId: property.id, arrival: result.arrivalIso, departure: result.departureIso })
+      .catch((err) =>
+        this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`),
+      );
 
     await this.events.publish('reservation.cancelled', ctx, {
       reservationId: result.id,

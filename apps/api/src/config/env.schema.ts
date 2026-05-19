@@ -75,6 +75,12 @@ export const envSchema = z.object({
   /** Base URL del back-office (para los enlaces "Abrir en back-office" en emails al hotel). */
   BACKOFFICE_PUBLIC_URL: z.string().url().optional(),
 
+  // Channel manager (Sprint 9 W2). Sin estos vars todo es no-op.
+  // CM_SITEMINDER_API_BASE: endpoint REST del provider.
+  // CM_SITEMINDER_HMAC_SECRET: shared secret para verificar webhooks.
+  CM_SITEMINDER_API_BASE: z.string().url().optional(),
+  CM_SITEMINDER_HMAC_SECRET: z.string().optional(),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])

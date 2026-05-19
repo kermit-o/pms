@@ -1,6 +1,10 @@
 import type { z } from 'zod';
 import { businessDayClosedV1, businessDayReopenedV1 } from './business-day';
 import { cashReconciliationCreatedV1, cashReconciliationDiscrepancyV1 } from './cash';
+import {
+  channelInboundReservationReceivedV1,
+  channelSyncCompletedV1,
+} from './channel-manager';
 import { sesSubmissionFailedV1, sesSubmissionQueuedV1, sesSubmissionSentV1 } from './compliance';
 import {
   housekeepingTaskAssignedV1,
@@ -149,6 +153,11 @@ export const catalog = {
     schema: reservationConfirmationResendRequestedV1,
     schemaVersion: 1,
   },
+  'channel.sync_completed': { schema: channelSyncCompletedV1, schemaVersion: 1 },
+  'channel.inbound_reservation_received': {
+    schema: channelInboundReservationReceivedV1,
+    schemaVersion: 1,
+  },
 } as const;
 
 export type CatalogKey = keyof typeof catalog;
@@ -261,3 +270,12 @@ export type {
   EmailSendRequestedV1Payload,
   ReservationConfirmationResendRequestedV1Payload,
 } from './notifications';
+
+export {
+  channelInboundReservationReceivedV1,
+  channelSyncCompletedV1,
+} from './channel-manager';
+export type {
+  ChannelInboundReservationReceivedV1Payload,
+  ChannelSyncCompletedV1Payload,
+} from './channel-manager';
