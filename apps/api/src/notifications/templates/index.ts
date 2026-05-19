@@ -17,7 +17,8 @@
 export type TemplateName =
   | 'reservation_confirmation'
   | 'reservation_cancelled'
-  | 'front_desk_new_reservation';
+  | 'front_desk_new_reservation'
+  | 'onboarding_verify';
 export type Locale = 'es' | 'en';
 
 export interface RenderedTemplate {
@@ -138,6 +139,24 @@ const TEMPLATES: Record<TemplateName, TplDict> = {
 <p style="color:#5c2a4d;">Penalty applied: <strong>{{ penalty }} {{ currency }}</strong>.</p>
 <p style="color:#5c2a4d;">If this was a mistake, contact the hotel directly.</p>`,
       text: `Booking cancelled — {{ code }}\n\nHi {{ guestFirstName }},\n\nYour booking {{ code }} at {{ hotelName }} is cancelled.\nPenalty: {{ penalty }} {{ currency }}.`,
+    },
+  },
+  onboarding_verify: {
+    es: {
+      subject: 'Confirma tu email para crear tu hotel en Aubergine',
+      html: `<h2 style="margin:0 0 8px 0;color:#451f3a;">Vamos a crear tu hotel</h2>
+<p style="color:#5c2a4d;">Has solicitado abrir una cuenta Aubergine para <strong>{{ email }}</strong>. Confirma este email pulsando el enlace de abajo y te llevaremos al wizard para configurar tu hotel.</p>
+<p style="text-align:center;padding:16px 0;"><a href="{{ verifyUrl }}" style="display:inline-block;padding:12px 20px;background:#5c2a4d;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Confirmar email</a></p>
+<p style="color:#5c2a4d;font-size:12px;">Si no fuiste tú, ignora este mensaje — el enlace caduca en {{ ttlHours }} horas.</p>`,
+      text: `Aubergine — confirma tu email\n\nHas solicitado abrir una cuenta Aubergine para {{ email }}.\nAbre el siguiente enlace para continuar (caduca en {{ ttlHours }}h):\n\n{{ verifyUrl }}\n\nSi no fuiste tú, ignora este mensaje.`,
+    },
+    en: {
+      subject: 'Verify your email to set up your hotel on Aubergine',
+      html: `<h2 style="margin:0 0 8px 0;color:#451f3a;">Let's set up your hotel</h2>
+<p style="color:#5c2a4d;">You requested an Aubergine account for <strong>{{ email }}</strong>. Confirm this email with the button below and we'll take you to the setup wizard.</p>
+<p style="text-align:center;padding:16px 0;"><a href="{{ verifyUrl }}" style="display:inline-block;padding:12px 20px;background:#5c2a4d;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Verify email</a></p>
+<p style="color:#5c2a4d;font-size:12px;">If this wasn't you, ignore this message — the link expires in {{ ttlHours }} hours.</p>`,
+      text: `Aubergine — verify your email\n\nYou requested an Aubergine account for {{ email }}.\nOpen the link to continue (expires in {{ ttlHours }}h):\n\n{{ verifyUrl }}\n\nIf this wasn't you, ignore this message.`,
     },
   },
   front_desk_new_reservation: {

@@ -20,6 +20,7 @@ import { NightAuditModule } from './night-audit';
 import { NotificationsModule } from './notifications';
 import { PaymentsModule } from './payments';
 import { PublicIbeModule } from './public-ibe';
+import { PublicOnboardingModule } from './public-onboarding';
 import { ReportsModule } from './reports';
 
 @Module({
@@ -43,6 +44,7 @@ import { ReportsModule } from './reports';
     NotificationsModule,
     PaymentsModule,
     PublicIbeModule,
+    PublicOnboardingModule,
     ReportsModule,
     CashModule,
     HousekeepingModule,

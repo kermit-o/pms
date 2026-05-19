@@ -80,6 +80,90 @@ Una o dos frases.
 
 ---
 
+## 2026-05-19 · [FEAT] · Sprint 9 W3 — Onboarding wizard self-service
+
+**Scope:** `apps/api/public-onboarding`, `apps/api/notifications/templates`,
+`apps/web-fo/onboarding`, `packages/db`, `RUNBOOK.md`
+**Branch:** `claude/s9-w3-onboarding`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo módulo `apps/api/src/public-onboarding` con tres endpoints
+  `@Public()` (sin auth): `POST /public/onboarding/{start,verify,setup}`.
+- Tokens HMAC autocontenidos firmados con `ONBOARDING_SECRET`
+  (`node:crypto`, sin lib externa). Formato `base64url(payload).
+  base64url(hmac)`, TTL configurable (default 24h), verificación
+  constante en tiempo.
+- Flujo `start` → email Postmark con plantilla nueva
+  `onboarding_verify` (ES/EN) — **no escribe en DB** todavía. `verify`
+  hace upsert del tenant en slug `pending-<hash(email)>` con
+  `onboarding_status='EMAIL_VERIFIED'` y devuelve un setupToken.
+  `setup` crea Property + RoomTypes default + Rooms 101..101+N +
+  admin User INVITED dentro de una transacción Prisma, marca el
+  tenant `SETUP_DONE` y devuelve los identificadores.
+- Migración `20260613100000_tenants_onboarding_status` añade
+  `tenants.onboarding_status text` para rastrear el origen self-service
+  (NULL en tenants creados manualmente).
+- Web-FO: páginas `/onboarding`, `/onboarding/verify`,
+  `/onboarding/setup`, `/onboarding/done` con server actions Next 15.
+  Middleware ampliado para considerar `/onboarding` y `/api/onboarding`
+  como públicas (no exigen sesión Keycloak).
+- Cliente `apps/web-fo/src/lib/api.ts` con tres helpers nuevos
+  (`publicOnboardingStart/Verify/Setup`).
+- Env nuevas: `ONBOARDING_SECRET`, `ONBOARDING_TOKEN_TTL_HOURS`. La
+  API se niega a arrancar en producción sin el secret (consistente
+  con `PAIRING_SECRET`).
+- Keycloak realm + admin user **manual V1** (per plan §4.4) —
+  documentado en RUNBOOK §23.5. Página `/onboarding/done` avisa al
+  hotel de que las credenciales llegan "en horas". Sprint 10
+  automatizará via Keycloak admin API.
+
+**Por qué.**
+
+Sprint 9 plan §4 pide que un hotel pueda registrarse y configurarse
+sin operador Aubergine. Esto desbloquea el crecimiento sin que
+nuestro equipo esté en el camino crítico. Tokens HMAC vs tabla de
+"onboarding_requests": el wizard es lo bastante corto (24h) y stateless
+para que un payload firmado sea más simple y menos costoso que una
+tabla con limpieza nocturna.
+
+**Archivos clave.**
+
+- `apps/api/src/public-onboarding/{onboarding-token,public-onboarding.{service,controller,dto}}.ts`
+- `apps/api/src/public-onboarding/index.ts`
+- `apps/api/src/app.module.ts`
+- `apps/api/src/notifications/templates/index.ts`
+- `apps/api/src/config/env.schema.ts`
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260613100000_tenants_onboarding_status/migration.sql`
+- `apps/web-fo/src/app/onboarding/{page,verify/page,setup/page,done/page}.tsx`
+- `apps/web-fo/src/middleware.ts`
+- `apps/web-fo/src/lib/api.ts`
+- `RUNBOOK.md` §23
+
+**Tests.**
+
+- 12 tests verdes (`onboarding-token.spec` × 5 +
+  `public-onboarding.service.spec` × 7) cubriendo firma/verificación,
+  expiración, tampering, idempotencia (start, verify, setup), error
+  paths (notif fail, tenant ya completo, token kind mismatch).
+- `pnpm --filter @pms/api typecheck`, `lint` verdes.
+- `pnpm --filter @pms/web-fo typecheck`, `lint` verdes.
+
+**Sigue pendiente.**
+
+- Automatizar Keycloak realm + admin user (Sprint 10).
+- Job de limpieza nocturna de tenants `pending-*` con > 7 días
+  (RUNBOOK §23.7 incluye el SQL).
+- Cuando W4 esté mergeado, aplicar `RateLimitGuard` + `TurnstileGuard`
+  a `public/onboarding` para defender contra bots — V1 confía en
+  Postmark (envío caro por sí mismo) y en el TTL del token.
+- Página `/onboarding/done` enlaza al IBE, pero el IBE solo funcionará
+  cuando el hotel publique el slug (`Property.publishedAt = now`).
+
+---
+
 ## 2026-05-17 · [FEAT] · Sprint 9 W1 — Email transaccional real
 
 **Scope:** `packages/eventbus`, `apps/api/notifications`,
