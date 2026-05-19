@@ -1272,6 +1272,12 @@ export async function publicOnboardingSetup(
   adminEmail: string;
   backofficeUrl: string;
   ibeUrl: string;
+  keycloak?: {
+    provisioned: boolean;
+    realm: string | null;
+    temporaryPassword: string | null;
+    reason?: string;
+  };
 }> {
   return apiFetch('/public/onboarding/setup', {
     method: 'POST',

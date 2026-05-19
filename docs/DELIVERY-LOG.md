@@ -80,6 +80,70 @@ Una o dos frases.
 
 ---
 
+## 2026-05-19 · [INTEGRATION] · Sprint 10 W1 — Auto-Keycloak en onboarding
+
+**Scope:** `apps/api/auth`, `apps/api/public-onboarding`,
+`apps/web-fo/onboarding`, `RUNBOOK.md`
+**Branch:** `claude/s10-w1-keycloak-admin`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo `KeycloakAdminService` en `auth/` con REST contra el admin API
+  de Keycloak (sin SDK npm). Operaciones idempotentes: token cacheado
+  50s, `createRealmIfMissing`, `createClientIfMissing` para `pms-api`
+  (bearer-only) y `pms-fo` (public + redirect-uris),
+  `createOrGetUser` por email + `resetUserPassword(temporary=true)`.
+- `PublicOnboardingService.setup` llama a `provisionTenant` tras crear
+  la property. Si KC falla, logueo estructurado, tenant queda en
+  `SETUP_DONE_KEYCLOAK_PENDING`, wizard sigue 200 OK con
+  `keycloak.provisioned: false`.
+- Web-FO `/onboarding/done` muestra credenciales temporales cuando
+  llegan; mantiene el aviso "alta manual" en fallback.
+- Env nuevas (opcionales): `KEYCLOAK_ADMIN_BASE_URL`,
+  `KEYCLOAK_ADMIN_CLIENT_ID`, `KEYCLOAK_ADMIN_CLIENT_SECRET`,
+  `KEYCLOAK_FO_REDIRECT_URI_BASE`. Sin ellas, comportamiento V1
+  (S9 W3) manual.
+- RUNBOOK §25 con setup del service account `admin-cli` en realm
+  master, env vars Fly, idempotencia y cómo apagar.
+
+**Por qué.**
+
+Sprint 10 §2. S9 W3 dejó el wizard funcional pero requería que el
+equipo Aubergine creara manualmente el realm + admin user tras cada
+onboarding. El admin REST API cierra el círculo sin nuevas deps,
+idempotente, con fallback transparente al modo manual.
+
+**Archivos clave.**
+
+- `apps/api/src/auth/keycloak-admin.service.ts` (+ .spec)
+- `apps/api/src/auth/auth.module.ts`, `auth/index.ts`
+- `apps/api/src/public-onboarding/public-onboarding.service.ts` (+ .spec)
+- `apps/api/src/config/env.schema.ts`
+- `apps/web-fo/src/app/onboarding/{done,setup}/page.tsx`
+- `apps/web-fo/src/lib/api.ts`
+- `RUNBOOK.md` §25
+
+**Tests.**
+
+- `keycloak-admin.service.spec` × 5 (enabled flag, disabled return,
+  auth fail, happy path con 11 fetch mocks secuenciales, idempotency
+  con realm + user existentes).
+- `public-onboarding.service.spec`: 2 nuevos casos (KC ok devuelve
+  credenciales; KC fail marca `SETUP_DONE_KEYCLOAK_PENDING`).
+- `pnpm --filter @pms/api test` → **242/242 passed (41 suites)**.
+  Incluye cherry-pick del fix S10 W2 (Decimal mock + business-day
+  fechas) para que esta rama sea independientemente verde.
+- Typecheck + lint verdes en api y web-fo.
+
+**Sigue pendiente.**
+
+- Configurar el service account `admin-cli` en Keycloak master con
+  roles (RUNBOOK §25.3) — paso único del PO.
+- Setear los 3 secrets en Fly.
+
+---
+
 ## 2026-05-19 · [FEAT] · Sprint 9 W3 — Onboarding wizard self-service
 
 **Scope:** `apps/api/public-onboarding`, `apps/api/notifications/templates`,

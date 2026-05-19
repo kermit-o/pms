@@ -61,9 +61,18 @@ export default async function OnboardingSetupPage({ searchParams }: Props) {
         admin: { fullName },
         acceptTerms: true,
       });
-      redirect(
-        `/onboarding/done?tenantId=${encodeURIComponent(out.tenantId)}&adminEmail=${encodeURIComponent(out.adminEmail)}&propertySlug=${encodeURIComponent(out.propertySlug)}&ibeUrl=${encodeURIComponent(out.ibeUrl)}&backofficeUrl=${encodeURIComponent(out.backofficeUrl)}`,
-      );
+      const doneParams = new URLSearchParams({
+        tenantId: out.tenantId,
+        adminEmail: out.adminEmail,
+        propertySlug: out.propertySlug,
+        ibeUrl: out.ibeUrl,
+        backofficeUrl: out.backofficeUrl,
+      });
+      if (out.keycloak?.provisioned && out.keycloak.temporaryPassword) {
+        doneParams.set('kcTempPassword', out.keycloak.temporaryPassword);
+        if (out.keycloak.realm) doneParams.set('kcRealm', out.keycloak.realm);
+      }
+      redirect(`/onboarding/done?${doneParams.toString()}`);
     } catch (err) {
       if (err instanceof ApiError) {
         const reason = err.body.includes('expired') ? 'expired' : 'api';

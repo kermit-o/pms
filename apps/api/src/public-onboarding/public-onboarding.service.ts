@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createHmac, randomBytes } from 'node:crypto';
 import type { Prisma } from '@pms/db';
+import { KeycloakAdminService } from '../auth';
 import { PrismaService } from '../db';
 import { NotificationsService } from '../notifications';
 import type { Env } from '../config/env.schema';
@@ -47,6 +48,7 @@ export class PublicOnboardingService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly config: ConfigService<Env, true>,
+    private readonly keycloak: KeycloakAdminService,
   ) {}
 
   onModuleInit(): void {
@@ -139,6 +141,15 @@ export class PublicOnboardingService implements OnModuleInit {
     adminEmail: string;
     backofficeUrl: string;
     ibeUrl: string;
+    /** Resultado de la provisión automática en Keycloak. Si el admin API
+     *  no está configurado o falla, este campo describe el motivo y el
+     *  hotel debe esperar el alta manual (RUNBOOK §23.5). */
+    keycloak: {
+      provisioned: boolean;
+      realm: string | null;
+      temporaryPassword: string | null;
+      reason?: string;
+    };
   }> {
     const result = verifyOnboardingToken(input.token, this.secret);
     if (!result.ok) throw new BadRequestException(`token_${result.reason}`);
@@ -219,6 +230,26 @@ export class PublicOnboardingService implements OnModuleInit {
       `onboarding setup done tenant=${created.tenant.id} property=${created.property.id} admin=${created.admin.id}`,
     );
 
+    // Provisión automática en Keycloak (Sprint 10 W1). Si el admin API
+    // no está configurado o falla, no rompemos el wizard — devolvemos
+    // status `pending` para que el hotel espere el alta manual.
+    const kcResult = await this.keycloak.provisionTenant({
+      tenantSlug: tenantSlug,
+      adminEmail: email,
+      adminFullName: input.admin.fullName,
+    });
+    let kcStatus: 'SETUP_DONE' | 'SETUP_DONE_KEYCLOAK_PENDING' = 'SETUP_DONE';
+    if (!kcResult.ok) {
+      this.log.warn(
+        `keycloak provisioning ${kcResult.reason}: ${kcResult.error ?? '(no detail)'} — falling back to manual`,
+      );
+      kcStatus = 'SETUP_DONE_KEYCLOAK_PENDING';
+      await this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { onboardingStatus: kcStatus },
+      });
+    }
+
     return {
       tenantId: created.tenant.id,
       propertyId: created.property.id,
@@ -227,6 +258,12 @@ export class PublicOnboardingService implements OnModuleInit {
       adminEmail: email,
       backofficeUrl: this.backofficeUrl,
       ibeUrl: this.ibeUrl ? `${this.ibeUrl}/h/${propertySlug}` : '',
+      keycloak: {
+        provisioned: kcResult.ok,
+        realm: kcResult.realm ?? null,
+        temporaryPassword: kcResult.temporaryPassword ?? null,
+        reason: kcResult.reason,
+      },
     };
   }
 

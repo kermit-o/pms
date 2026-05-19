@@ -1502,3 +1502,78 @@ WHERE onboarding_status = 'EMAIL_VERIFIED'
   AND slug LIKE 'pending-%'
   AND created_at < NOW() - INTERVAL '7 days';
 ```
+
+## 25. Auto-Keycloak en onboarding — Sprint 10 W1
+
+El wizard de onboarding (`/public/onboarding/setup`) **provisiona
+automáticamente** el realm Keycloak + clients + admin user via el admin
+REST API si las env vars están configuradas. Si no, hace fallback al
+modo manual (V1 S9 W3) y marca el tenant
+`onboarding_status='SETUP_DONE_KEYCLOAK_PENDING'`.
+
+### 25.1 Flujo
+
+1. `POST /public/onboarding/setup` crea Tenant + Property en una
+   transacción Prisma.
+2. **Después** llama a `KeycloakAdminService.provisionTenant`:
+   - `obtainAdminToken()` — client_credentials contra
+     `/realms/master/protocol/openid-connect/token`.
+   - `createRealm(pms-<slug>)` — idempotente (404 → POST, 200 → skip).
+   - `createClient('pms-api', bearerOnly=true)`.
+   - `createClient('pms-fo', redirectUris=[<BACKOFFICE_PUBLIC_URL>/*])`.
+   - `createUser(email, fullName)` con password temporal de 16 hex
+     marcada `temporary=true` (forzosa al primer login).
+3. Devuelve `{ provisioned, realm, temporaryPassword }`. Si algo
+   falla, captura el error y devuelve `provisioned: false, reason`.
+
+### 25.2 Env vars
+
+```bash
+# Service account en realm "master" con role view-realm + manage-realm + manage-users.
+flyctl secrets set -a pms-api \
+  KEYCLOAK_ADMIN_BASE_URL=https://kc.aubergine.me \
+  KEYCLOAK_ADMIN_CLIENT_ID=admin-cli \
+  KEYCLOAK_ADMIN_CLIENT_SECRET=<secret>
+
+# Opcional. Default = BACKOFFICE_PUBLIC_URL.
+flyctl secrets set -a pms-api \
+  KEYCLOAK_FO_REDIRECT_URI_BASE=https://pms-web-fo.fly.dev
+```
+
+Si falta cualquiera de los tres primeros, el wizard sigue funcionando
+pero el campo `provisioned` será `false` y el operador completa el
+alta a mano (RUNBOOK §23.5).
+
+### 25.3 Service account en Keycloak (paso único)
+
+En el realm `master`:
+
+1. Clients → Create:
+   - Client ID: `admin-cli` (o el nombre que quieras)
+   - Client authentication: ON
+   - Authentication flow: Service accounts roles ✓
+2. Service accounts roles tab → Assign:
+   - `realm-management.create-realm`
+   - `realm-management.manage-realm`
+   - `realm-management.manage-clients`
+   - `realm-management.manage-users`
+3. Credentials tab → copy `Client secret` → setear en Fly.
+
+### 25.4 Idempotencia
+
+- Realm: lookup 200 → skip; 404 → POST.
+- Clients: list por `clientId` → si encuentra, skip.
+- User: list por `email exact=true` → si encuentra, reusa el id.
+- Reset password: idempotente por diseño (sobrescribe).
+
+Esto permite que un wizard re-ejecutado con el mismo email no rompa
+nada — útil para piloto y recovery.
+
+### 25.5 Apagar
+
+```bash
+flyctl secrets unset -a pms-api \
+  KEYCLOAK_ADMIN_CLIENT_ID KEYCLOAK_ADMIN_CLIENT_SECRET
+```
+
+Wizard vuelve al modo manual sin redeploy (refresca al primer setup).

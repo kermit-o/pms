@@ -61,13 +61,20 @@ function buildService(opts: {
       return env[key];
     }),
   };
+  const keycloak = {
+    enabled: false,
+    provisionTenant: vi
+      .fn()
+      .mockResolvedValue({ ok: false, reason: 'disabled' as const }),
+  };
   const service = new PublicOnboardingService(
     prisma as never,
     notifications as never,
     config as never,
+    keycloak as never,
   );
   service.onModuleInit();
-  return { service, prisma, notifications, tx: txStub };
+  return { service, prisma, notifications, keycloak, tx: txStub };
 }
 
 describe('PublicOnboardingService.start', () => {
@@ -145,6 +152,58 @@ describe('PublicOnboardingService.setup', () => {
     expect(out.adminEmail).toBe('owner@hotel.test');
     expect(out.propertySlug).toMatch(/^hotel-/);
     expect(out.ibeUrl).toMatch(/^https:\/\/ibe\.test\/h\//);
+    // Keycloak deshabilitado por defecto en el stub → provisioned=false.
+    expect(out.keycloak.provisioned).toBe(false);
+    expect(out.keycloak.reason).toBe('disabled');
+  });
+
+  it('returns keycloak credentials when admin API succeeds', async () => {
+    const { service, keycloak } = buildService();
+    keycloak.enabled = true;
+    keycloak.provisionTenant.mockResolvedValueOnce({
+      ok: true,
+      realm: 'pms-hotel-x',
+      adminUserId: 'kc-user-1',
+      temporaryPassword: 'p4ssw0rd-temp',
+    });
+    const setupTok = await captureSetupToken(service, 'owner@hotel.test');
+    const out = await service.setup({
+      token: setupTok,
+      hotel: validHotel(),
+      admin: { fullName: 'Owner Name' },
+      acceptTerms: true,
+    });
+    expect(keycloak.provisionTenant).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminEmail: 'owner@hotel.test',
+        adminFullName: 'Owner Name',
+      }),
+    );
+    expect(out.keycloak.provisioned).toBe(true);
+    expect(out.keycloak.realm).toBe('pms-hotel-x');
+    expect(out.keycloak.temporaryPassword).toBe('p4ssw0rd-temp');
+  });
+
+  it('marks tenant SETUP_DONE_KEYCLOAK_PENDING when keycloak fails', async () => {
+    const { service, prisma, keycloak } = buildService();
+    keycloak.enabled = true;
+    keycloak.provisionTenant.mockResolvedValueOnce({
+      ok: false,
+      reason: 'auth_failed',
+      error: 'token_401',
+    });
+    const setupTok = await captureSetupToken(service, 'owner@hotel.test');
+    const out = await service.setup({
+      token: setupTok,
+      hotel: validHotel(),
+      admin: { fullName: 'Owner Name' },
+      acceptTerms: true,
+    });
+    expect(out.keycloak.provisioned).toBe(false);
+    expect(out.keycloak.reason).toBe('auth_failed');
+    // Una llamada update extra para marcar el estado pendiente.
+    const calls = prisma.tenant.update.mock.calls;
+    expect(calls.at(-1)![0]!.data.onboardingStatus).toBe('SETUP_DONE_KEYCLOAK_PENDING');
   });
 
   it('rejects when tenant is already SETUP_DONE (idempotency)', async () => {
