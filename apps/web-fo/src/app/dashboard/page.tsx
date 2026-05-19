@@ -20,6 +20,17 @@ export default async function DashboardPage() {
           <h1 className="text-3xl font-semibold text-aubergine-700">Dashboard</h1>
           <p className="text-sm text-aubergine-700/70">
             Hola {session?.user?.name ?? session?.user?.email ?? 'recepción'}.
+            {propertyId && (
+              <>
+                {' · '}
+                <Link
+                  href={`/properties/${propertyId}/settings`}
+                  className="text-aubergine-700 underline"
+                >
+                  Configurar hotel
+                </Link>
+              </>
+            )}
           </p>
         </div>
         <form

@@ -80,6 +80,74 @@ Una o dos frases.
 
 ---
 
+## 2026-05-19 · [FEAT] · Sprint 10 W4 — Back-office admin de Property (cierre del sprint)
+
+**Scope:** `apps/api/properties`, `apps/web-fo/properties`,
+`RUNBOOK.md`
+**Branch:** `claude/s10-w4-admin-ui-v2`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo `PropertiesService` + extensión de `PropertiesController` con
+  cuatro endpoints:
+  - `GET /properties/:id/settings` — devuelve los tres bloques (rol
+    `tenant_admin/front_desk/night_auditor`).
+  - `PUT /properties/:id/publish` — toggle IBE con
+    auto-generación `publicSlug = hotel-<hex6>` cuando falta y
+    detección de colisiones (`409 public_slug_taken`).
+  - `PUT /properties/:id/channel-manager` — `provider` (V1
+    `'siteminder'`), `channelManagerPropertyId`, `credentialsRef`.
+  - `PUT /properties/:id/blocked-ips` — lista completa
+    (deduplicada, max 500, validación IPv4/IPv6 via Zod).
+- Las mutaciones requieren rol `tenant_admin`. Lecturas accesibles a
+  operadores normales.
+- Cada PUT emite `property.updated v1` con `changes: {...}`.
+- Nueva página `apps/web-fo/src/app/properties/[id]/settings/page.tsx`
+  con tres secciones (anclas `#ibe`, `#cm`, `#ips`) y server actions.
+- Link discreto en `/dashboard` ("Configurar hotel") cuando hay
+  `propertyId` activo.
+- `apps/web-fo/src/lib/api.ts` extendido con 4 helpers nuevos.
+- RUNBOOK §27 con endpoints, validaciones, eventos y rol Keycloak.
+
+**Por qué.**
+
+Sprint 10 §5. Hasta ahora la configuración de IBE/CM/blocked IPs
+estaba solo en SQL — el hotel no podía operar sin nuestro equipo
+tocando la DB. W4 cierra ese gap para que el piloto sea
+self-service: un `tenant_admin` configura los tres bloques desde UI.
+
+**Archivos clave.**
+
+- `apps/api/src/properties/properties.{service,controller,dto,module}.ts`
+- `apps/api/src/properties/properties.service.spec.ts`
+- `apps/web-fo/src/app/properties/[id]/settings/page.tsx`
+- `apps/web-fo/src/app/dashboard/page.tsx`
+- `apps/web-fo/src/lib/api.ts`
+- `RUNBOOK.md` §27
+
+**Tests.**
+
+- `properties.service.spec` × 11 (getSettings 404 + parsing,
+  setPublish auto-slug / explicit / collision / unpublish-keeps-slug,
+  setChannelManager update / clear, setBlockedIps merge + event).
+- `pnpm --filter @pms/api test` → **262/262 passed (43 suites)**.
+  Cherry-pick S10 W2 incluido (Decimal mock + business-day fechas).
+- Typecheck + lint verdes en api y web-fo.
+
+**Sigue pendiente.**
+
+- **Sprint 10 cerrado en código.** Merge a main + redeploy de los 4
+  workstreams (W1 Auto-Keycloak, W2 Fix tests, W3 Cleanup nightly,
+  W4 Admin UI) pendiente del PO.
+- Rama W4 depende de S9 W2 + S9 W4 (incluyendo cherry-pick). Estrategia
+  de merge: orden Sprint 9 W1/W2/W3/W4 → S10 W2 → W1 → W3 → W4.
+- Sprint 11 candidates (per SPRINT-10-PLAN §8): memoria semántica
+  V1.1, 2º CM provider, pre-pago full PaymentIntent, multidivisa,
+  white-label, loyalty, SOC 2.
+
+---
+
 ## 2026-05-19 · [INTEGRATION] · Sprint 9 W2 — Channel Manager (SiteMinder skeleton + webhook OTA)
 
 **Scope:** `apps/api/channel-manager`, `apps/api/reservations`,

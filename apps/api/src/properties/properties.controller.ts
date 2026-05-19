@@ -1,20 +1,28 @@
-import { Controller, Get } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Put,
+  Req,
+} from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { Req } from '@nestjs/common';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
 import { PrismaService } from '../db';
+import {
+  BlockedIpsDto,
+  ChannelManagerConfigDto,
+  PublishPropertyDto,
+} from './properties.dto';
+import { PropertiesService } from './properties.service';
 
-/**
- * Endpoint demo que demuestra el flujo completo:
- *   JWT → tenantId → withTenant → RLS → solo se ven properties del tenant.
- *
- * No es la forma final del API. La organizacion definitiva (rooms, rates,
- * reservations...) se decide en Sprint 2 (MVP FO).
- */
 @Controller('properties')
 export class PropertiesController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly service: PropertiesService,
+  ) {}
 
   @Get()
   @Roles('tenant_admin', 'front_desk', 'night_auditor')
@@ -41,4 +49,58 @@ export class PropertiesController {
         }),
     );
   }
+
+  // -------------------------------------------------------------------------
+  // Sprint 10 W4 — Back-office admin
+  // -------------------------------------------------------------------------
+
+  @Get(':id/settings')
+  @Roles('tenant_admin', 'front_desk', 'night_auditor')
+  async getSettings(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id') id: string,
+  ) {
+    return this.service.getSettings(user, corr(req), id);
+  }
+
+  @Put(':id/publish')
+  @Roles('tenant_admin')
+  async publish(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const input = PublishPropertyDto.parse(body);
+    return this.service.setPublish(user, corr(req), id, input);
+  }
+
+  @Put(':id/channel-manager')
+  @Roles('tenant_admin')
+  async setChannelManager(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const input = ChannelManagerConfigDto.parse(body);
+    return this.service.setChannelManager(user, corr(req), id, input);
+  }
+
+  @Put(':id/blocked-ips')
+  @Roles('tenant_admin')
+  async setBlockedIps(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const input = BlockedIpsDto.parse(body);
+    return this.service.setBlockedIps(user, corr(req), id, input);
+  }
+}
+
+function corr(req: FastifyRequest): string {
+  return typeof req.id === 'string' ? req.id : String(req.id);
 }

@@ -1223,3 +1223,69 @@ export async function upsertCashReconciliation(
     body: JSON.stringify(input),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Sprint 10 W4 — Back-office admin de Property
+// ---------------------------------------------------------------------------
+
+export interface PropertySettings {
+  id: string;
+  code: string;
+  name: string;
+  ibe: { publishedAt: string | null; publicSlug: string | null };
+  channelManager: {
+    provider: 'siteminder' | null;
+    channelManagerPropertyId: string | null;
+    credentialsRef: string | null;
+  };
+  blockedIps: string[];
+}
+
+export async function getPropertySettings(
+  accessToken: string,
+  propertyId: string,
+): Promise<PropertySettings> {
+  return apiFetch(`/properties/${encodeURIComponent(propertyId)}/settings`, {
+    accessToken,
+  });
+}
+
+export async function setPropertyPublish(
+  accessToken: string,
+  propertyId: string,
+  input: { publish: boolean; slug?: string },
+): Promise<{ publishedAt: string | null; publicSlug: string | null }> {
+  return apiFetch(`/properties/${encodeURIComponent(propertyId)}/publish`, {
+    method: 'PUT',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function setPropertyChannelManager(
+  accessToken: string,
+  propertyId: string,
+  input: {
+    provider: 'siteminder' | null;
+    channelManagerPropertyId: string | null;
+    credentialsRef: string | null;
+  },
+): Promise<typeof input> {
+  return apiFetch(`/properties/${encodeURIComponent(propertyId)}/channel-manager`, {
+    method: 'PUT',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function setPropertyBlockedIps(
+  accessToken: string,
+  propertyId: string,
+  ips: string[],
+): Promise<{ blockedIps: string[] }> {
+  return apiFetch(`/properties/${encodeURIComponent(propertyId)}/blocked-ips`, {
+    method: 'PUT',
+    accessToken,
+    body: JSON.stringify({ ips }),
+  });
+}
