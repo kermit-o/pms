@@ -21,7 +21,7 @@ const user: AuthUser = {
 
 function buildService(overrides: {
   property?: { id: string; code: string; currency: string } | null;
-  roomType?: { id: string } | null;
+  roomType?: { id: string; defaultRate?: number } | null;
   ratePlan?: { id: string } | null;
   reservationOnFind?:
     | (Partial<{
@@ -42,7 +42,9 @@ function buildService(overrides: {
   room?: { id: string; isOutOfOrder: boolean } | null;
 }) {
   const propertyFindFirst = vi.fn().mockResolvedValue(overrides.property ?? null);
-  const roomTypeFindFirst = vi.fn().mockResolvedValue(overrides.roomType ?? null);
+  const roomTypeFindFirst = vi
+    .fn()
+    .mockResolvedValue(overrides.roomType ? { defaultRate: 100, ...overrides.roomType } : null);
   const ratePlanFindFirst = vi.fn().mockResolvedValue(overrides.ratePlan ?? null);
   const reservationCreate = vi.fn().mockResolvedValue({
     id: RESERVATION_ID,
