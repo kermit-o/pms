@@ -1,8 +1,20 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { BusinessDayStatus } from '@pms/db';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../auth';
 import { BusinessDayService } from './business-day.service';
+
+// La lógica de cierre rechaza fechas "futuras" (> hoy real). Para que la
+// suite siga pasando a medida que el calendario avance, congelamos `now`
+// en una fecha posterior a `2026-06-10` (la fecha usada en los fixtures).
+const FROZEN_NOW = new Date('2026-12-31T12:00:00Z');
+beforeAll(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(FROZEN_NOW);
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 const TENANT_ID = '11111111-1111-1111-1111-111111111111';
 const USER_ID = '22222222-2222-2222-2222-222222222222';
@@ -26,7 +38,14 @@ function buildService(opts: {
     reopenedReason: string | null;
   } | null;
 }) {
-  const findFirst = vi.fn().mockResolvedValue(opts.existing ?? null);
+  // El service hace dos `findFirst` durante `close`: el primero busca el
+  // estado actual (devuelve `existing` o null) y el segundo busca si hay un
+  // día anterior aún OPEN (no debe encontrar nada en estos tests). El mock
+  // discrimina por la cláusula `where.status` que sólo aparece en la 2ª.
+  const findFirst = vi.fn().mockImplementation((args: { where: { status?: unknown } }) => {
+    if (args.where.status === BusinessDayStatus.OPEN) return Promise.resolve(null);
+    return Promise.resolve(opts.existing ?? null);
+  });
   const create = vi.fn().mockResolvedValue({});
   const update = vi.fn().mockResolvedValue({});
 
