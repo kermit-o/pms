@@ -80,6 +80,64 @@ Una o dos frases.
 
 ---
 
+## 2026-05-19 · [FEAT] · Sprint 10 W3 — Cleanup nocturno de tenants huérfanos
+
+**Scope:** `apps/api/night-audit/steps`, `packages/db`, `RUNBOOK.md`
+**Branch:** `claude/s10-w3-cleanup-orphan`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo step `CleanupOrphanTenantsStep` añadido al pipeline NA, tras
+  `CLOSE_DAY`. Hace soft-delete (`deleted_at = NOW()`) de tenants
+  matchando: `onboarding_status='EMAIL_VERIFIED'`, `slug LIKE 'pending-%'`,
+  `created_at < NOW() - ORPHAN_TENANT_TTL_DAYS`, `deleted_at IS NULL`.
+- Idempotente: ejecuciones concurrentes (multi-property) convergen
+  porque la cláusula filtra `deleted_at IS NULL`. La tabla `tenants`
+  no tiene RLS, por lo que un único NA puede limpiar todo el sistema.
+- Valor enum `CLEANUP_ORPHAN_TENANTS` en `night_audit_step`
+  (migración `20260613200000_na_step_cleanup_orphan_tenants` con
+  `ALTER TYPE ... ADD VALUE IF NOT EXISTS` — forward-only).
+- Env nuevo `ORPHAN_TENANT_TTL_DAYS` (default 7, range 0-90). `0`
+  desactiva el step (`{ skipped: true }`).
+- Errores no revierten el cierre del día — solo el step queda
+  `FAILED` con el run en `COMPLETED`.
+- RUNBOOK §26 con criterio SQL, configuración, idempotencia,
+  auditoría y reactivación manual de un tenant borrado.
+
+**Por qué.**
+
+Sprint 10 §4. S9 W3 dejó el SQL como follow-up en RUNBOOK §23.7;
+W3 lo convierte en un step automático del NA sin nuevas deps —
+el NA ya corre cada noche por hotel.
+
+**Archivos clave.**
+
+- `apps/api/src/night-audit/steps/cleanup-orphan-tenants.ts` (+ .spec)
+- `apps/api/src/night-audit/night-audit.service.ts`
+- `apps/api/src/night-audit/{night-audit.service,pipeline}.spec.ts`
+- `apps/api/src/config/env.schema.ts`
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260613200000_na_step_cleanup_orphan_tenants/`
+- `RUNBOOK.md` §26
+
+**Tests.**
+
+- `cleanup-orphan-tenants.spec` × 4 (skip con ttl=0, soft-delete con
+  cutoff calculado, 0 filas matching, audit fields en el result).
+- `night-audit.service.spec` y `pipeline.spec` actualizados a 8 steps.
+- `pnpm --filter @pms/api test` → **237/237 passed (41 suites)**.
+  Incluye cherry-pick del fix S10 W2 para rama independientemente
+  verde.
+- Typecheck + lint verdes.
+
+**Sigue pendiente.**
+
+- Aplicar la migración en producción (`prisma migrate deploy` en el
+  `release_command` del despliegue).
+
+---
+
 ## 2026-05-19 · [FEAT] · Sprint 9 W3 — Onboarding wizard self-service
 
 **Scope:** `apps/api/public-onboarding`, `apps/api/notifications/templates`,

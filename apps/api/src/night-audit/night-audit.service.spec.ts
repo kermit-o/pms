@@ -197,13 +197,23 @@ function buildService(opts: BuildOpts = {}) {
       ),
       findUnique: vi.fn().mockResolvedValue(null),
     },
+    tenant: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 
   const prisma = {
     withTenant: vi.fn(async (_ctx, fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
-  const service = new NightAuditService(prisma as never, events as never, new AnomalyService(), new AnomalyMetrics());
+  const config = { get: vi.fn(() => 7) };
+  const service = new NightAuditService(
+    prisma as never,
+    events as never,
+    new AnomalyService(),
+    new AnomalyMetrics(),
+    config as never,
+  );
   return { service, tx, events, stepRows };
 }
 
@@ -252,6 +262,7 @@ describe('NightAuditService.run', () => {
       'night_audit.step_completed', // SNAPSHOT_REPORTS
       'night_audit.step_completed', // DETECT_ANOMALIES
       'night_audit.step_completed', // CLOSE_DAY
+      'night_audit.step_completed', // CLEANUP_ORPHAN_TENANTS (S10 W3)
       'night_audit.run_completed',
     ]);
   });

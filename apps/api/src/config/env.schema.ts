@@ -81,6 +81,11 @@ export const envSchema = z.object({
   ONBOARDING_SECRET: z.string().min(32).optional(),
   ONBOARDING_TOKEN_TTL_HOURS: z.coerce.number().int().min(1).max(72).default(24),
 
+  // Cleanup nocturno de tenants huérfanos del onboarding (Sprint 10 W3).
+  // Días sin completar setup tras los cuales el tenant se soft-deletea.
+  // 0 desactiva el paso.
+  ORPHAN_TENANT_TTL_DAYS: z.coerce.number().int().min(0).max(90).default(7),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])
