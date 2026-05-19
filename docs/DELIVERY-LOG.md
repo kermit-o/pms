@@ -80,6 +80,42 @@ Una o dos frases.
 
 ---
 
+## 2026-05-19 · [DOCS] · Sprint 10 plan — Consolidación pre-piloto
+
+**Scope:** `docs/SPRINT-10-PLAN.md`
+**Branch:** `claude/s10-plan`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo `docs/SPRINT-10-PLAN.md` con cuatro workstreams:
+  - **W1 Auto-Keycloak** — cierra el último paso manual de S9 W3,
+    crea realm + clients + admin user via Keycloak admin REST.
+  - **W2 Fix tests preexistentes** — Decimal mock en
+    `reservations.service.spec` + fechas hardcoded en
+    `business-day.service.spec`.
+  - **W3 Cleanup nightly de tenants pending** — step nuevo en NA
+    que soft-deletea tenants `pending-*` con > 7 días.
+  - **W4 Back-office admin UI** — `/properties/[id]/settings` con
+    publish IBE / config CM / blocked IPs.
+- Cero migraciones nuevas. Filosofía Sprint 10: solidificar antes
+  de invitar al primer piloto.
+- Orden de ejecución sugerido: W2 → W1 → W3 → W4.
+
+**Por qué.**
+
+Sprint 9 entregó las cuatro patas que el IBE + CM + onboarding
+necesitan. Sprint 10 cierra los gaps V1 restantes antes del piloto.
+Memoria semántica V1.1, 2º CM provider, pre-pago full, multidivisa,
+white-label, loyalty y SOC 2 quedan explícitamente fuera y se
+difieren a Sprint 11+.
+
+**Archivos clave.**
+
+- `docs/SPRINT-10-PLAN.md`
+
+---
+
 ## 2026-05-17 · [FEAT] · Sprint 9 W1 — Email transaccional real
 
 **Scope:** `packages/eventbus`, `apps/api/notifications`,
