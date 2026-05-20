@@ -1394,3 +1394,63 @@ si está definido lo usa el wrapper HTML. Defaults Aubergine.
 
 Quitar `POSTMARK_SERVER_TOKEN` → dry-run automático. No requiere
 redeploy si Fly secrets cambia (machine restart sí).
+
+## 29. Stripe webhook hardening — Sprint 11 W3
+
+Endurece la verificación del webhook de Stripe y añade observabilidad.
+
+### 29.1 Comportamiento
+
+| Caso | Status | Body |
+|---|---|---|
+| `STRIPE_WEBHOOK_SECRET` ausente | 503 | `STRIPE_WEBHOOK_SECRET no configurado` |
+| header `stripe-signature` ausente | **403** (antes 400) | `missing_stripe_signature` |
+| firma incorrecta | **403** (antes 400) | `signature_mismatch` |
+| raw body ausente | 400 | `raw_body_required` |
+| event `setup_intent.succeeded` | 200 | `{ ok, type, outcome: 'handled' }` |
+| otros event types | 200 | `{ ok, type, outcome: 'unknown_type' }` |
+| handler interno falla | 500 (Stripe reintenta) | — |
+
+403 vs 400 importa: las suites de seguridad alertan sobre 403
+agregado (señal de auth/firma) sin disparar alarmas de
+client-error generales.
+
+### 29.2 Métricas Prometheus
+
+```
+stripe_webhook_events_total{type, outcome}
+  outcome ∈ {handled, unknown_type, error, bad_signature, no_secret}
+
+stripe_webhook_event_age_seconds_*{type}     # histograma
+  edad del evento al recibirlo (event.created → now)
+```
+
+Alertas sugeridas:
+- `rate(stripe_webhook_events_total{outcome="bad_signature"}[5m]) > 0.1`
+  → posible ataque o secret rotado mal.
+- `histogram_quantile(0.95, stripe_webhook_event_age_seconds_bucket) > 60`
+  → eventos llegan tarde (delay del consumer Stripe → revisar
+  Stripe dashboard).
+
+### 29.3 Eventos unknown
+
+El handler loguea estructurado y devuelve 200 OK. Útil para
+descubrir nuevos tipos sin perder visibilidad — buscar en logs:
+
+```
+stripe.webhook event=<type> unknown — payload ignored
+```
+
+Cuando aparezca un tipo nuevo relevante, añadir caso en
+`handleWebhook` y test correspondiente.
+
+### 29.4 Rotar webhook secret
+
+```bash
+# 1. En el Stripe dashboard, rotar el signing secret del endpoint.
+# 2. Copia el nuevo whsec_ y setea:
+flyctl secrets set -a pms-api STRIPE_WEBHOOK_SECRET=whsec_new_...
+# 3. Tras el rolling restart, los eventos antiguos firmados con el
+#    secret viejo fallarán con 403. Stripe reintentará automáticamente
+#    con el nuevo en el siguiente envío.
+```
