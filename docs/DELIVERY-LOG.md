@@ -80,6 +80,70 @@ Una o dos frases.
 
 ---
 
+## 2026-05-20 · [INFRA] · Sprint 11 W4 — Grafana dashboards + alert rules (cierre del sprint)
+
+**Scope:** `infra/grafana`, `RUNBOOK.md`
+**Branch:** `claude/s11-w4-grafana-dashboards`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- 4 dashboards Grafana JSON nuevos en `infra/grafana/dashboards/`:
+  - `ibe.json` (`aubergine-ibe`): Rate-limit hits, blocklist hits,
+    Turnstile fail rate, breakdown por slug + route.
+  - `channel-manager.json` (`aubergine-channel-manager`): Syncs
+    OK/FAILED, inbound bookings, webhook rejections, sync duration
+    p50/p95/p99 por kind, inbound por source + outcome.
+  - `payments.json` (`aubergine-payments`): Webhook events handled,
+    bad_signature, unknown_type, event age p95, outcome mix.
+  - `notifications.json` (`aubergine-notifications`): Delivered (1h),
+    consumer failures, suppressions added, webhook rejections,
+    breakdown por template/outcome/reason.
+- 9 alert rules añadidas a `alerts.yaml` en 4 grupos nuevos:
+  - `aubergine-s11-payments`: `StripeWebhookBadSignature` (page),
+    `StripeWebhookEventAgeHigh` (warn).
+  - `aubergine-s11-notifications`: `NotificationConsumerFailures`,
+    `PostmarkWebhookBadSignature`, `EmailSuppressionsBurst`.
+  - `aubergine-s11-ibe`: `IbeRateLimitHitsSpike`,
+    `IbeTurnstileFailRateHigh`.
+  - `aubergine-s11-channel-manager`: `ChannelManagerSyncFailures`,
+    `ChannelManagerWebhookRejections`.
+- README actualizado con los dashboards extra (los 4 nuevos + los
+  pre-existentes `copilot`/`night-audit` que faltaban en la lista).
+- RUNBOOK §31 con tabla de dashboards, import (Cloud + self-hosted),
+  severities y debug "No data".
+
+**Por qué.**
+
+Sprint 11 §5. Sin dashboards no había visibilidad de los counters
+que añadimos en S6-S10. Las alertas permiten detectar ataques
+(`bad_signature` sostenido), Postmark caído, scraping del IBE y
+problemas de CM antes que el hotel.
+
+**Archivos clave.**
+
+- `infra/grafana/dashboards/{ibe,channel-manager,payments,notifications}.json`
+- `infra/grafana/alerts.yaml` (4 grupos nuevos, 9 reglas)
+- `infra/grafana/README.md`
+- `RUNBOOK.md` §31
+
+**Tests.**
+
+- JSON validity (`JSON.parse`) verde para los 4 dashboards.
+- YAML validity (`python3 -c yaml.safe_load`) verde para
+  `alerts.yaml`.
+
+**Sigue pendiente.**
+
+- Importar los dashboards en Grafana Cloud (UI del PO; archivos en
+  el repo).
+- Las series no aparecen hasta que el counter incrementa por primera
+  vez en prod — verificar tras primer envío email / request OTA / etc.
+- **Sprint 11 cerrado en código** (W1 Postmark webhook + W2 NATS
+  consumer + W3 Stripe hardening + W4 dashboards). Próximo: Sprint 12.
+
+---
+
 ## 2026-05-17 · [FEAT] · Sprint 9 W1 — Email transaccional real
 
 **Scope:** `packages/eventbus`, `apps/api/notifications`,

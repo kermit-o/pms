@@ -185,3 +185,149 @@ groups:
             anomalia de tipo {{ $labels.kind }} con severidad
             {{ $labels.severity }}. Revisar en
             /night-audit/anomalies de la web FO.
+
+  # ---------------------------------------------------------------------------
+  # Sprint 11 — Production hardening
+  # ---------------------------------------------------------------------------
+  - name: aubergine-s11-payments
+    interval: 30s
+    rules:
+      - alert: StripeWebhookBadSignature
+        expr: |
+          sum(rate(stripe_webhook_events_total{job="pms-api",outcome="bad_signature"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: page
+          service: pms-api
+        annotations:
+          summary: 'Stripe webhook bad_signature sostenido (> 0.1/s 5m)'
+          description: |
+            Posible ataque o STRIPE_WEBHOOK_SECRET rotado mal.
+            Verificar en Stripe Dashboard que el signing secret coincide
+            con `flyctl secrets list -a pms-api | grep STRIPE_WEBHOOK_SECRET`.
+          runbook_url: 'https://github.com/kermit-o/pms/blob/main/RUNBOOK.md#29-stripe-webhook-hardening'
+
+      - alert: StripeWebhookEventAgeHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(stripe_webhook_event_age_seconds_bucket{job="pms-api"}[5m]))
+          ) > 60
+        for: 10m
+        labels:
+          severity: warn
+          service: pms-api
+        annotations:
+          summary: 'Stripe webhook event_age p95 > 60s'
+          description: |
+            Eventos de Stripe llegan con retraso. Revisar el dashboard
+            de Stripe (Developers → Webhooks → endpoint → Failed events)
+            por reintentos o caída del nuestro endpoint.
+
+  - name: aubergine-s11-notifications
+    interval: 30s
+    rules:
+      - alert: NotificationConsumerFailures
+        expr: |
+          sum(rate(notification_consumer_events_total{job="pms-api",outcome=~"failed|error"}[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warn
+          service: pms-api
+        annotations:
+          summary: 'Email consumer failing (> 0.1/s 10m)'
+          description: |
+            El consumer NATS está fallando emails. Causas posibles:
+            Postmark caído, plantilla rota o DB conexion intermitente.
+            Inspecciona `notification_outbox WHERE status='FAILED' ORDER BY failed_at DESC`.
+
+      - alert: PostmarkWebhookBadSignature
+        expr: |
+          sum(rate(postmark_webhook_rejections_total{job="pms-api",reason="bad_signature"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warn
+          service: pms-api
+        annotations:
+          summary: 'Postmark webhook bad_signature'
+          description: |
+            Posible ataque o `POSTMARK_WEBHOOK_SECRET` rotado mal.
+            Verificar en Postmark Dashboard → Server → Webhooks que el
+            signing secret coincide.
+
+      - alert: EmailSuppressionsBurst
+        expr: |
+          sum(increase(email_suppressions_added_total{job="pms-api"}[1h])) > 20
+        for: 5m
+        labels:
+          severity: warn
+          service: pms-api
+        annotations:
+          summary: 'Burst de suppressions añadidas (> 20 en 1h)'
+          description: |
+            Picos anormales de bounces/complaints sugieren email mal
+            segmentado o sender reputation degradada. Revisar Postmark
+            stats y `email_suppressions WHERE created_at > NOW() - INTERVAL '1 hour'`.
+
+  - name: aubergine-s11-ibe
+    interval: 30s
+    rules:
+      - alert: IbeRateLimitHitsSpike
+        expr: |
+          sum(increase(public_ibe_rate_limit_hits_total{job="pms-api"}[5m])) > 100
+        for: 5m
+        labels:
+          severity: warn
+          service: pms-api
+        annotations:
+          summary: 'IBE rate-limit hits > 100/5m'
+          description: |
+            Tráfico abusivo o scraper. Identificar slug + route en el
+            dashboard "Aubergine — IBE" y considerar bloquear IPs en
+            `Property.attributes.blockedIps` (RUNBOOK §22.1).
+
+      - alert: IbeTurnstileFailRateHigh
+        expr: |
+          sum(rate(public_ibe_turnstile_failures_total{job="pms-api"}[5m]))
+            /
+          clamp_min(sum(rate(public_ibe_turnstile_verifications_total{job="pms-api"}[5m])), 1)
+            > 0.3
+        for: 10m
+        labels:
+          severity: warn
+          service: pms-api
+        annotations:
+          summary: 'Turnstile fail rate > 30% sostenido'
+          description: |
+            Si todas las reasons son 'invalid' = bot adverso real.
+            Si dominan 'missing' = widget mal cargado en el navegador
+            (revisar `NEXT_PUBLIC_TURNSTILE_SITE_KEY` y deploy web-ibe).
+
+  - name: aubergine-s11-channel-manager
+    interval: 30s
+    rules:
+      - alert: ChannelManagerSyncFailures
+        expr: |
+          sum(increase(channel_manager_sync_total{job="pms-api",status="FAILED"}[1h])) > 5
+        for: 15m
+        labels:
+          severity: warn
+          service: pms-api
+        annotations:
+          summary: 'Channel manager syncs FAILED > 5/h'
+          description: |
+            Provider del CM rechazando pushes. Revisar
+            `channel_sync_runs WHERE status='FAILED' ORDER BY started_at DESC`.
+
+      - alert: ChannelManagerWebhookRejections
+        expr: |
+          sum(rate(channel_manager_webhook_rejections_total{job="pms-api"}[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warn
+          service: pms-api
+        annotations:
+          summary: 'CM webhook rejections sostenidos'
+          description: |
+            reason=bad_signature → secret mal rotado.
+            reason=unknown_property → CM enviando bookings con slug
+            equivocado.

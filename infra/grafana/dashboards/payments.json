@@ -1,0 +1,134 @@
+{
+  "title": "Aubergine — Payments (Stripe)",
+  "uid": "aubergine-payments",
+  "tags": ["aubergine", "payments", "stripe"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Webhook events handled (5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(increase(stripe_webhook_events_total{job=\"pms-api\",outcome=\"handled\"}[5m]))" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Bad signatures (5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "description": "Posible ataque o secret rotado mal. Alerta > 0.1/s.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(stripe_webhook_events_total{job=\"pms-api\",outcome=\"bad_signature\"}[5m]))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Unknown event types (1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "description": "Stripe envió un tipo nuevo. Buscar en logs 'stripe.webhook event=<type> unknown' y considerar añadir handler.",
+      "targets": [
+        {
+          "expr": "sum(increase(stripe_webhook_events_total{job=\"pms-api\",outcome=\"unknown_type\"}[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Event age p95 (s)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "description": "Tiempo entre Stripe event.created y nuestra recepción. p95 > 60s sostenido = revisar Stripe dashboard.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 60 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(stripe_webhook_event_age_seconds_bucket{job=\"pms-api\"}[5m])))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Events por type + outcome",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by (type, outcome) (rate(stripe_webhook_events_total{job=\"pms-api\"}[5m]))",
+          "legendFormat": "{{type}} · {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Event age distribution (p50/p95/p99)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(stripe_webhook_event_age_seconds_bucket{job=\"pms-api\"}[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(stripe_webhook_event_age_seconds_bucket{job=\"pms-api\"}[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(stripe_webhook_event_age_seconds_bucket{job=\"pms-api\"}[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Outcome mix (% of total)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(stripe_webhook_events_total{job=\"pms-api\"}[5m])) / clamp_min(sum(rate(stripe_webhook_events_total{job=\"pms-api\"}[5m])), 0.001)",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    }
+  ]
+}

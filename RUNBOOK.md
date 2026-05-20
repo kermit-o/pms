@@ -1394,3 +1394,67 @@ si está definido lo usa el wrapper HTML. Defaults Aubergine.
 
 Quitar `POSTMARK_SERVER_TOKEN` → dry-run automático. No requiere
 redeploy si Fly secrets cambia (machine restart sí).
+
+## 31. Grafana dashboards Sprint 11 — IBE / CM / Payments / Notifications
+
+`infra/grafana/dashboards/` añade cuatro dashboards JSON importables
+cubriendo todos los métricas que añadimos en S6-S11:
+
+| Dashboard | UID | Métricas |
+|---|---|---|
+| `ibe.json` | `aubergine-ibe` | `public_ibe_{rate_limit_hits,blocklist_hits,turnstile_failures,turnstile_verifications}_total` |
+| `channel-manager.json` | `aubergine-channel-manager` | `channel_manager_{sync_total,sync_duration_ms,inbound_total,webhook_rejections_total}` |
+| `payments.json` | `aubergine-payments` | `stripe_webhook_{events_total,event_age_seconds}` |
+| `notifications.json` | `aubergine-notifications` | `notification_consumer_events_total`, `email_{suppressions_added,send_skipped_suppressed}_total`, `postmark_webhook_{records,rejections}_total` |
+
+### 31.1 Importar
+
+#### Grafana Cloud
+```
+Dashboards → New → Import → Upload JSON file
+```
+Repetir para cada uno de los 4 archivos.
+
+#### Self-hosted
+Los dashboards están provisionados file-based via `dashboards.yaml`
+existente — basta con que Grafana monte `infra/grafana/dashboards/`
+como volumen y los nuevos archivos se cargan al reiniciar.
+
+### 31.2 Alert rules nuevas (`alerts.yaml`)
+
+Cuatro grupos añadidos:
+- `aubergine-s11-payments` (2 reglas: bad_signature, event_age_p95).
+- `aubergine-s11-notifications` (3 reglas: consumer_failures,
+  postmark_bad_signature, suppressions_burst).
+- `aubergine-s11-ibe` (2 reglas: rate_limit_spike, turnstile_fail_rate).
+- `aubergine-s11-channel-manager` (2 reglas: sync_failures,
+  webhook_rejections).
+
+Severities:
+- `page` — despierta al on-call (StripeWebhookBadSignature por
+  defecto, indica ataque o config rota).
+- `warn` — slack channel, revisar mañana.
+
+### 31.3 Cardinalidad
+
+Todos los nuevos counters usan labels acotados:
+- `slug` (≈ decenas de hoteles a medio plazo).
+- `route` (≈ 7 endpoints IBE).
+- `type` Stripe (≈ 20-30 tipos relevantes).
+- `template` (3 actuales).
+
+Sin labels por `ip` ni por `correlation_id` — ambos explotarían la
+cardinalidad bajo abuso, que es justo cuando estas métricas importan.
+
+### 31.4 Cuándo aparecen series
+
+Las series **no existen** hasta que un counter incrementa al menos
+una vez. Los dashboards muestran `No data` los primeros minutos
+post-deploy. Si tras 1h sin tráfico siguen vacíos, verificar:
+
+```bash
+curl -s https://pms-api.fly.dev:9464/metrics | grep -E "public_ibe|channel_manager|stripe_webhook|notification_consumer|email_suppress|postmark_webhook"
+```
+
+(El endpoint `:9464/metrics` está en la red interna de Fly — usar
+`flyctl ssh console` o tunelizar.)

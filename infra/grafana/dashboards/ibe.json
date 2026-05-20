@@ -1,0 +1,112 @@
+{
+  "title": "Aubergine — IBE (Online Booking Engine)",
+  "uid": "aubergine-ibe",
+  "tags": ["aubergine", "ibe", "anti-abuse"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Rate-limit hits (last 5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "description": "Suma de bloqueos por exceso de cuota en cualquier ruta IBE. Alerta > 100/5m.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "expr": "sum(increase(public_ibe_rate_limit_hits_total{job=\"pms-api\"}[5m]))" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Blocklist hits (5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "description": "Requests rechazadas por IP en Property.attributes.blockedIps.",
+      "targets": [
+        { "expr": "sum(increase(public_ibe_blocklist_hits_total{job=\"pms-api\"}[5m]))" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Turnstile fail rate (5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "description": "Ratio failures / verifications. Si sube, posible bot adverso o widget mal configurado.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 0.3 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(public_ibe_turnstile_failures_total{job=\"pms-api\"}[5m])) / clamp_min(sum(rate(public_ibe_turnstile_verifications_total{job=\"pms-api\"}[5m])), 1)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Rate-limit hits por slug + route",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by (slug, route) (rate(public_ibe_rate_limit_hits_total{job=\"pms-api\"}[5m]))",
+          "legendFormat": "{{slug}} · {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Turnstile failures por reason",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "description": "reason ∈ {missing, invalid, network, disabled}. 'invalid' sostenido = posible ataque.",
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(public_ibe_turnstile_failures_total{job=\"pms-api\"}[5m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Blocklist hits por slug",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "description": "Si un slug acumula muchos hits, considerar elevar el bloqueo a nivel de red.",
+      "targets": [
+        {
+          "expr": "sum by (slug) (rate(public_ibe_blocklist_hits_total{job=\"pms-api\"}[5m]))",
+          "legendFormat": "{{slug}}"
+        }
+      ]
+    }
+  ]
+}
