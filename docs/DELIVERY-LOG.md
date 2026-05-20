@@ -100,6 +100,11 @@ Una o dos frases.
 
 **Scope:** `docs/SPRINT-10-PLAN.md`
 **Branch:** `claude/s10-plan`
+## 2026-05-19 · [FIX] · Sprint 10 W2 — Fix 4 tests preexistentes (CI 100% verde)
+
+**Scope:** `apps/api/src/reservations/reservations.service.spec.ts`,
+`apps/api/src/business-day/business-day.service.spec.ts`
+**Branch:** `claude/s10-w2-fix-tests`
 **Refs:** este commit
 
 **Qué cambió.**
@@ -350,6 +355,37 @@ difieren a Sprint 11+.
 **Archivos clave.**
 
 - `docs/SPRINT-10-PLAN.md`
+- **reservations.service.spec**: el mock de `roomType.findFirst`
+  devolvía `{ id: ROOM_TYPE_ID }` sin `defaultRate`, y
+  `resolveDailyRateFromInputs` hacía `new Prisma.Decimal(undefined)`
+  → `DecimalError`. Fix: el helper `buildService` ahora inyecta
+  `defaultRate: 100` por defecto (los tests pueden sobreescribir).
+- **business-day.service.spec**: dos fallos:
+  1. La fecha hardcoded `2026-06-10` era futura desde 2026-05-19 →
+     `ConflictException: Cannot close future business day`. Fix:
+     `vi.useFakeTimers()` + `vi.setSystemTime(new Date('2026-12-31'))`
+     en `beforeAll` / `afterAll`. Solución estable a futuro.
+  2. El mock de `businessDayState.findFirst` devolvía el mismo
+     `existing` para todas las llamadas; el service hace dos consultas
+     (estado actual + ¿hay día anterior aún OPEN?) y la segunda
+     interpretaba el mismo registro como "earlier open". Fix:
+     `mockImplementation` discrimina por `args.where.status`.
+
+**Por qué.**
+
+Sprint 10 §2 — limpiar la deuda de tests antes de meter más volumen.
+221/221 tests verdes deja el CI en estado válido para los siguientes
+workstreams (W1 Auto-Keycloak, W3 Cleanup nocturno, W4 Admin UI).
+
+**Archivos clave.**
+
+- `apps/api/src/reservations/reservations.service.spec.ts`
+- `apps/api/src/business-day/business-day.service.spec.ts`
+
+**Tests.**
+
+- `pnpm --filter @pms/api test` → **221/221 passed (38 suites)**.
+- `pnpm --filter @pms/api lint` verde.
 
 ---
 
