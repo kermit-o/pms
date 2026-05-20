@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Headers,
@@ -82,7 +83,8 @@ export class StripeController {
   ) {
     const raw = req.rawBody;
     if (!raw) {
-      return { ok: false, reason: 'no raw body' };
+      // Sin raw body no podemos verificar la firma — error real, 400.
+      throw new BadRequestException('raw_body_required');
     }
     return this.stripe.handleWebhook(raw, signature);
   }

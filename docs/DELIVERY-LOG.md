@@ -107,6 +107,10 @@ Una o dos frases.
 
 **Scope:** `apps/api/notifications`, `packages/db`, `RUNBOOK.md`
 **Branch:** `claude/s11-w1-postmark-webhook`
+## 2026-05-20 · [SECURITY] · Sprint 11 W3 — Stripe webhook hardening + observabilidad
+
+**Scope:** `apps/api/payments`, `RUNBOOK.md`
+**Branch:** `claude/s11-w3-stripe-hardening`
 **Refs:** este commit
 
 **Qué cambió.**
@@ -296,6 +300,46 @@ global evita reintentar emails muertos desde cualquier hotel.
   ambos códigos de error).
 - `notifications.service.spec`: 1 nuevo caso (suppressed skip).
 - `pnpm --filter @pms/api test` → **237/237 passed (40 suites)**.
+- `StripeService.handleWebhook` endurecido:
+  - Firma ausente: **403 `missing_stripe_signature`** (antes 400).
+  - Firma incorrecta: **403 `signature_mismatch`** (antes 400).
+  - Secret ausente: 503 + métrica `outcome=no_secret`.
+  - Eventos unknown: log estructurado + 200 OK con
+    `outcome: 'unknown_type'`.
+  - Eventos handled (V1: `setup_intent.succeeded`): outcome
+    `'handled'`.
+  - Errores internos se rethrow (500) — Stripe reintenta.
+- Refactor: `handleSetupIntentSucceeded` extraído como método
+  privado para facilitar futuros handlers.
+- `StripeController.webhook` retorna 400 si `req.rawBody` ausente
+  en lugar de silenciar `{ ok: false }`.
+- Métricas Prometheus nuevas:
+  - `stripe_webhook_events_total{type, outcome}` con outcomes
+    {handled, unknown_type, error, bad_signature, no_secret}.
+  - `stripe_webhook_event_age_seconds` (histogram, `event.created`
+    → `now`).
+- RUNBOOK §29 con comportamiento por código, métricas, alertas
+  sugeridas, debug de unknown types y rotación del secret.
+
+**Por qué.**
+
+Sprint 11 §4. El handler V1 no emitía métricas y devolvía 400 para
+casos que son señal clara de auth-fail (ahora 403). Sin métricas no
+podíamos detectar ataques por firma mala, atrasos del consumer
+Stripe ni tipos de evento nuevos.
+
+**Archivos clave.**
+
+- `apps/api/src/payments/stripe.service.ts`
+- `apps/api/src/payments/stripe.service.spec.ts`
+- `apps/api/src/payments/stripe.controller.ts`
+- `RUNBOOK.md` §29
+
+**Tests.**
+
+- 5 nuevos en `stripe.service.spec` (503 sin secret, 403 sin header,
+  403 firma mala, handled, unknown_type, setup sin metadata).
+- `pnpm --filter @pms/api test` → **227/227 passed (38 suites)**.
   Cherry-pick S10 W2 incluido.
 - Typecheck + lint verdes.
 
@@ -335,6 +379,8 @@ global evita reintentar emails muertos desde cualquier hotel.
 - Configurar webhook en Postmark dashboard apuntando a
   `https://pms-api.fly.dev/public/notifications/postmark` y
   `flyctl secrets set -a pms-api POSTMARK_WEBHOOK_SECRET=...`.
+- Alertas en Grafana sobre `bad_signature` o `event_age > 60s`
+  (parte del Sprint 11 W4 — dashboards).
 
 ---
 

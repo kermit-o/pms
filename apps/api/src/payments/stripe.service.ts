@@ -1,12 +1,18 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  type Counter,
+  type Histogram,
+  metrics,
+} from '@opentelemetry/api';
 import Stripe from 'stripe';
 import { FolioStatus, GuaranteeStatus, GuaranteeType, Prisma } from '@pms/db';
 import { FolioService } from '../folio';
@@ -31,6 +37,9 @@ export class StripeService {
   private readonly stripe: Stripe | null;
   private readonly publishableKey: string | undefined;
   private readonly webhookSecret: string | undefined;
+  // Sprint 11 W3: hardening + observabilidad del webhook de Stripe.
+  private readonly webhookEvents: Counter;
+  private readonly webhookEventAge: Histogram;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -44,6 +53,14 @@ export class StripeService {
     this.log.log(
       `Stripe init: ${this.stripe ? 'live (' + (secret?.startsWith('sk_test_') ? 'TEST' : 'LIVE') + ')' : 'disabled'}`,
     );
+    const meter = metrics.getMeter('pms-api/payments');
+    this.webhookEvents = meter.createCounter('stripe_webhook_events', {
+      description: 'Webhook events recibidos. outcome ∈ {handled, unknown_type, error, bad_signature, no_secret}.',
+    });
+    this.webhookEventAge = meter.createHistogram('stripe_webhook_event_age_seconds', {
+      description: 'Antigüedad del event al recibirlo (event.created → now), segundos.',
+      unit: 's',
+    });
   }
 
   private requireStripe(): Stripe {
@@ -230,58 +247,86 @@ export class StripeService {
    * Webhook handler. Solo procesamos setup_intent.succeeded por ahora —
    * marca la reserva SECURED y guarda los datos visibles de la tarjeta.
    */
-  async handleWebhook(rawBody: Buffer, signature: string | undefined): Promise<{ ok: true }> {
+  async handleWebhook(rawBody: Buffer, signature: string | undefined): Promise<{ ok: true; type: string; outcome: string }> {
     const stripe = this.requireStripe();
     if (!this.webhookSecret) {
+      this.webhookEvents.add(1, { type: 'unknown', outcome: 'no_secret' });
       throw new ServiceUnavailableException('STRIPE_WEBHOOK_SECRET no configurado');
     }
-    if (!signature) throw new BadRequestException('missing stripe-signature');
+    if (!signature) {
+      // Sin firma es un signo claro de error o ataque: 403, no 400.
+      this.webhookEvents.add(1, { type: 'unknown', outcome: 'bad_signature' });
+      throw new ForbiddenException('missing_stripe_signature');
+    }
 
     let event: Stripe.Event;
     try {
       event = stripe.webhooks.constructEvent(rawBody, signature, this.webhookSecret);
     } catch (err) {
-      this.log.error(`Webhook signature mismatch: ${(err as Error).message}`);
-      throw new BadRequestException('signature mismatch');
+      this.log.warn(`stripe.webhook bad_signature: ${(err as Error).message}`);
+      this.webhookEvents.add(1, { type: 'unknown', outcome: 'bad_signature' });
+      throw new ForbiddenException('signature_mismatch');
     }
 
-    if (event.type === 'setup_intent.succeeded') {
-      const si = event.data.object as Stripe.SetupIntent;
-      const reservationId = si.metadata?.reservationId;
-      const tenantId = si.metadata?.tenantId;
-      if (!reservationId || !tenantId) {
-        this.log.warn(`SetupIntent ${si.id} sin metadata.reservationId/tenantId`);
-        return { ok: true };
-      }
-      const paymentMethodId =
-        typeof si.payment_method === 'string' ? si.payment_method : si.payment_method?.id;
-      let card: Stripe.PaymentMethod.Card | null = null;
-      if (paymentMethodId) {
-        const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
-        card = pm.card ?? null;
-      }
+    // Edad del evento (event.created en segundos epoch).
+    const ageSeconds = Math.max(0, Math.floor(Date.now() / 1000) - event.created);
+    this.webhookEventAge.record(ageSeconds, { type: event.type });
 
-      // No tenemos el usuario en el webhook → bypaseamos withTenant con un
-      // query directo. El reservationId+tenantId vienen del metadata que
-      // nosotros mismos pusimos, así que es seguro.
-      await this.prisma.reservation.updateMany({
-        where: { id: reservationId, tenantId },
-        data: {
-          stripePaymentMethodId: paymentMethodId ?? null,
-          stripeCardBrand: card?.brand ?? null,
-          stripeCardLast4: card?.last4 ?? null,
-          stripeCardExpMonth: card?.exp_month ?? null,
-          stripeCardExpYear: card?.exp_year ?? null,
-          guaranteeStatus: GuaranteeStatus.SECURED,
-          guaranteeSecuredAt: new Date(),
-          guaranteeReference: card?.last4 ? `**** ${card.last4} (${card.brand})` : 'stripe',
-          guaranteeDeadline: null,
-        },
-      });
-      this.log.log(`SetupIntent ${si.id} succeeded → reservation ${reservationId} SECURED`);
+    let outcome: 'handled' | 'unknown_type' | 'error' = 'unknown_type';
+    try {
+      if (event.type === 'setup_intent.succeeded') {
+        await this.handleSetupIntentSucceeded(event, stripe);
+        outcome = 'handled';
+      } else {
+        // Log estructurado para descubrir tipos nuevos sin perder visibilidad.
+        this.log.log(`stripe.webhook event=${event.type} unknown — payload ignored`);
+      }
+    } catch (err) {
+      outcome = 'error';
+      this.log.error(`stripe.webhook handler error event=${event.type}: ${(err as Error).message}`);
+      // Re-lanzamos: Stripe reintentará. Mejor 500 que silenciar.
+      this.webhookEvents.add(1, { type: event.type, outcome });
+      throw err;
     }
 
-    return { ok: true };
+    this.webhookEvents.add(1, { type: event.type, outcome });
+    return { ok: true, type: event.type, outcome };
+  }
+
+  private async handleSetupIntentSucceeded(event: Stripe.Event, stripe: Stripe): Promise<void> {
+    const si = event.data.object as Stripe.SetupIntent;
+    const reservationId = si.metadata?.reservationId;
+    const tenantId = si.metadata?.tenantId;
+    if (!reservationId || !tenantId) {
+      this.log.warn(`SetupIntent ${si.id} sin metadata.reservationId/tenantId`);
+      return;
+    }
+    const paymentMethodId =
+      typeof si.payment_method === 'string' ? si.payment_method : si.payment_method?.id;
+    let card: Stripe.PaymentMethod.Card | null = null;
+    if (paymentMethodId) {
+      const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+      card = pm.card ?? null;
+    }
+
+    // No tenemos el usuario en el webhook → bypaseamos withTenant con un
+    // query directo. El reservationId+tenantId vienen del metadata que
+    // nosotros mismos pusimos, así que es seguro.
+    await this.prisma.reservation.updateMany({
+      where: { id: reservationId, tenantId },
+      data: {
+        stripePaymentMethodId: paymentMethodId ?? null,
+        stripeCardBrand: card?.brand ?? null,
+        stripeCardLast4: card?.last4 ?? null,
+        stripeCardExpMonth: card?.exp_month ?? null,
+        stripeCardExpYear: card?.exp_year ?? null,
+        guaranteeStatus: GuaranteeStatus.SECURED,
+        guaranteeSecuredAt: new Date(),
+        guaranteeReference: card?.last4 ? `**** ${card.last4} (${card.brand})` : 'stripe',
+        guaranteeDeadline: null,
+      },
+    });
+    this.log.log(`SetupIntent ${si.id} succeeded → reservation ${reservationId} SECURED`);
   }
 
   /**
