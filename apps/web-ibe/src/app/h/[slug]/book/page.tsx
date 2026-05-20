@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Turnstile } from '@/components/turnstile';
 import { createReservation, IbeApiError } from '@/lib/api';
 import { resolveLocale, t } from '@/lib/i18n';
+import { TURNSTILE_SITE_KEY } from '@/lib/turnstile';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +45,7 @@ export default async function BookPage({ params, searchParams }: Props) {
     const gdpr = formData.get('gdprConsent') === 'on';
     const marketing = formData.get('marketingConsent') === 'on';
     const specialRequests = String(formData.get('specialRequests') ?? '').trim() || undefined;
+    const turnstileToken = String(formData.get('turnstileToken') ?? '').trim() || undefined;
 
     if (!firstName || !lastName || !email) {
       redirect(
@@ -52,6 +55,11 @@ export default async function BookPage({ params, searchParams }: Props) {
     if (!gdpr) {
       redirect(
         `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&error=gdpr`,
+      );
+    }
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      redirect(
+        `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&error=captcha`,
       );
     }
 
@@ -71,12 +79,14 @@ export default async function BookPage({ params, searchParams }: Props) {
           marketingConsent: marketing,
         },
         specialRequests,
+        turnstileToken,
       });
       redirect(`/h/${slug}/book/${out.code}?lang=${lang}&lastName=${encodeURIComponent(lastName)}`);
     } catch (err) {
       if (err instanceof IbeApiError) {
+        const reason = err.status === 403 ? 'captcha' : err.status === 429 ? 'rate' : 'api';
         redirect(
-          `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&error=api`,
+          `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&error=${reason}`,
         );
       }
       throw err;
@@ -108,6 +118,8 @@ export default async function BookPage({ params, searchParams }: Props) {
           <div className="mt-3 rounded-xl bg-rose-50 px-4 py-3 text-xs text-rose-800 ring-1 ring-rose-200">
             {sp.error === 'gdpr' && (lang === 'es' ? 'Necesitamos tu consentimiento RGPD para procesar la reserva.' : 'We need your GDPR consent to process the booking.')}
             {sp.error === 'fields' && (lang === 'es' ? 'Faltan campos obligatorios.' : 'Required fields are missing.')}
+            {sp.error === 'captcha' && (lang === 'es' ? 'Completa la verificación anti-spam antes de continuar.' : 'Please complete the anti-spam check before continuing.')}
+            {sp.error === 'rate' && (lang === 'es' ? 'Demasiados intentos. Espera unos minutos.' : 'Too many attempts. Try again in a few minutes.')}
             {sp.error === 'api' && t(lang, 'errors.fetch')}
           </div>
         )}
@@ -153,6 +165,8 @@ export default async function BookPage({ params, searchParams }: Props) {
               </span>
             </label>
           </div>
+
+          <Turnstile siteKey={TURNSTILE_SITE_KEY} />
 
           <button
             type="submit"

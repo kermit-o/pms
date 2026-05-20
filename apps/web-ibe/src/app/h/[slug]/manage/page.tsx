@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Turnstile } from '@/components/turnstile';
 import {
   cancelReservation,
   getReservation,
@@ -8,6 +9,7 @@ import {
   type IbeReservationView,
 } from '@/lib/api';
 import { resolveLocale, t } from '@/lib/i18n';
+import { TURNSTILE_SITE_KEY } from '@/lib/turnstile';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +19,15 @@ interface Props {
     code?: string;
     lastName?: string;
     lang?: string;
-    status?: 'cancelled' | 'cancel_needs_accept' | 'cancel_fail' | 'resent' | 'resend_fail' | 'lookup_fail';
+    status?:
+      | 'cancelled'
+      | 'cancel_needs_accept'
+      | 'cancel_fail'
+      | 'cancel_captcha'
+      | 'resent'
+      | 'resend_fail'
+      | 'resend_captcha'
+      | 'lookup_fail';
     penalty?: string;
     currency?: string;
   }>;
@@ -44,8 +54,14 @@ export default async function ManagePage({ params, searchParams }: Props) {
   async function cancelAction(formData: FormData) {
     'use server';
     const accept = formData.get('acceptPenalty') === 'on';
+    const turnstileToken = String(formData.get('turnstileToken') ?? '').trim() || undefined;
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      redirect(
+        `/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(code)}&lastName=${encodeURIComponent(lastName)}&status=cancel_captcha`,
+      );
+    }
     try {
-      const out = await cancelReservation(slug, code, lastName, accept);
+      const out = await cancelReservation(slug, code, lastName, accept, turnstileToken);
       redirect(
         `/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(code)}&lastName=${encodeURIComponent(lastName)}&status=cancelled&penalty=${out.penalty}&currency=${out.currency}`,
       );
@@ -55,20 +71,36 @@ export default async function ManagePage({ params, searchParams }: Props) {
           `/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(code)}&lastName=${encodeURIComponent(lastName)}&status=cancel_needs_accept`,
         );
       }
+      if (err instanceof IbeApiError && err.status === 403) {
+        redirect(
+          `/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(code)}&lastName=${encodeURIComponent(lastName)}&status=cancel_captcha`,
+        );
+      }
       redirect(
         `/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(code)}&lastName=${encodeURIComponent(lastName)}&status=cancel_fail`,
       );
     }
   }
 
-  async function resendAction() {
+  async function resendAction(formData: FormData) {
     'use server';
+    const turnstileToken = String(formData.get('turnstileToken') ?? '').trim() || undefined;
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      redirect(
+        `/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(code)}&lastName=${encodeURIComponent(lastName)}&status=resend_captcha`,
+      );
+    }
     try {
-      await resendConfirmation(slug, code, lastName);
+      await resendConfirmation(slug, code, lastName, turnstileToken);
       redirect(
         `/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(code)}&lastName=${encodeURIComponent(lastName)}&status=resent`,
       );
-    } catch {
+    } catch (err) {
+      if (err instanceof IbeApiError && err.status === 403) {
+        redirect(
+          `/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(code)}&lastName=${encodeURIComponent(lastName)}&status=resend_captcha`,
+        );
+      }
       redirect(
         `/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(code)}&lastName=${encodeURIComponent(lastName)}&status=resend_fail`,
       );
@@ -168,6 +200,13 @@ export default async function ManagePage({ params, searchParams }: Props) {
         </Banner>
       )}
       {sp.status === 'cancel_fail' && <Banner kind="error">{t(lang, 'errors.fetch')}</Banner>}
+      {(sp.status === 'cancel_captcha' || sp.status === 'resend_captcha') && (
+        <Banner kind="warn">
+          {lang === 'es'
+            ? 'Completa la verificación anti-spam antes de continuar.'
+            : 'Please complete the anti-spam check before continuing.'}
+        </Banner>
+      )}
       {sp.status === 'resent' && (
         <Banner kind="success">
           {lang === 'es' ? 'Email de confirmación reenviado.' : 'Confirmation email resent.'}
@@ -208,7 +247,8 @@ export default async function ManagePage({ params, searchParams }: Props) {
       )}
 
       <section className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <form action={resendAction} className="sm:flex-1">
+        <form action={resendAction} className="sm:flex-1 space-y-2">
+          <Turnstile siteKey={TURNSTILE_SITE_KEY} />
           <button
             type="submit"
             className="w-full rounded-xl bg-white px-4 py-3 text-sm font-semibold text-aubergine-700 ring-1 ring-aubergine-200 hover:bg-aubergine-50"
@@ -227,6 +267,7 @@ export default async function ManagePage({ params, searchParams }: Props) {
                   : 'I accept the penalty if any.'}
               </span>
             </label>
+            <Turnstile siteKey={TURNSTILE_SITE_KEY} />
             <button
               type="submit"
               className="w-full rounded-xl bg-rose-700 px-4 py-3 text-sm font-semibold text-white hover:bg-rose-800"

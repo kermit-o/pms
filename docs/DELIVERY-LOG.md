@@ -80,6 +80,94 @@ Una o dos frases.
 
 ---
 
+## 2026-05-18 · [SECURITY] · Sprint 9 W4 — Anti-abuso IBE (Turnstile + blocklist + rate-limit slug+ip)
+
+**Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,
+`RUNBOOK.md`
+**Branch:** `claude/s9-w4-antiabuse`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- `RateLimitGuard` extendido a clave `(route, slug, ip)`. La cuota de
+  un IP que ataca el hotel A ya no quema cuota en el hotel B.
+- `Property.attributes.blockedIps: string[]` (nueva columna jsonb).
+  Migración `20260613000000_property_attributes`. El guard consulta
+  con cache de 30s y devuelve 403 antes de contar rate-limit cuando
+  la IP está listada.
+- Nuevo `TurnstileService` + `TurnstileGuard` que verifica
+  `cf-turnstile-response` contra
+  `challenges.cloudflare.com/turnstile/v0/siteverify` (REST, **sin dep
+  npm**). Si `TURNSTILE_SECRET_KEY` no está, el guard hace skip — dev
+  y hoteles sin tráfico adverso siguen funcionando.
+- `@RequireTurnstile()` aplicado a `POST reservations`, `POST cancel`,
+  `POST resend-confirmation`. Los DTOs Zod aceptan
+  `turnstileToken?: string`.
+- Métricas Prometheus en `:9464/metrics`:
+  - `public_ibe_rate_limit_hits_total{slug, route}`
+  - `public_ibe_blocklist_hits_total{slug}`
+  - `public_ibe_turnstile_failures_total{slug, reason}`
+  - `public_ibe_turnstile_verifications_total{slug, outcome}`
+- Web-IBE: nuevo `<Turnstile siteKey={...}/>` (client component) que
+  carga el script oficial CF y monta el widget con
+  `response-field-name=turnstileToken`. Integrado en `/h/<slug>/book`,
+  y en los forms cancel + resend de `/h/<slug>/manage`. Banner i18n
+  para los errores `captcha` y `rate`.
+- Cliente API web-ibe (`lib/api.ts`) reenvía `turnstileToken` opcional
+  en create/cancel/resend.
+- Env vars nuevas: `TURNSTILE_SECRET_KEY` (api), 
+  `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (web-ibe).
+- RUNBOOK §22 con runbook completo (configuración Fly, SQL para
+  bloqueo manual de IPs, claves de test CF, apagar el captcha sin
+  redeploy).
+
+**Por qué.**
+
+Sprint 9 plan §5 pedía estas tres capas como prerrequisito para
+exponer el IBE a tráfico hostil real. Cloudflare Turnstile elegido
+sobre alternativas porque (1) es gratis hasta volúmenes de hotel
+boutique, (2) cero dep npm — fetch REST directo, (3) se desactiva
+solo con quitar el secret. Rate-limit por slug evita que un ataque
+contra un solo hotel queme la cuota del resto del SaaS.
+
+**Archivos clave.**
+
+- `apps/api/src/public-ibe/rate-limit.guard.ts`
+- `apps/api/src/public-ibe/turnstile.service.ts`
+- `apps/api/src/public-ibe/turnstile.guard.ts`
+- `apps/api/src/public-ibe/public-ibe.metrics.ts`
+- `apps/api/src/public-ibe/public-ibe.controller.ts`
+- `apps/api/src/public-ibe/public-ibe.dto.ts`
+- `apps/api/src/config/env.schema.ts`
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260613000000_property_attributes/migration.sql`
+- `apps/web-ibe/src/components/turnstile.tsx`
+- `apps/web-ibe/src/lib/turnstile.ts`
+- `apps/web-ibe/src/app/h/[slug]/book/page.tsx`
+- `apps/web-ibe/src/app/h/[slug]/manage/page.tsx`
+- `apps/web-ibe/src/lib/api.ts`
+- `RUNBOOK.md` §22
+
+**Tests.**
+
+- 23 tests verdes en `public-ibe` (5 nuevos en `rate-limit.guard.spec`,
+  5 en `turnstile.service.spec`, 5 en `turnstile.guard.spec`).
+- `pnpm --filter @pms/api typecheck`, `lint` verdes.
+- `pnpm --filter @pms/web-ibe typecheck`, `lint` verdes.
+
+**Sigue pendiente.**
+
+- Configurar widget en dashboard Cloudflare y setear
+  `TURNSTILE_SECRET_KEY` (api) + `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+  (web-ibe) en Fly secrets (operación del PO).
+- 4 tests rotos pre-existentes (`reservations.service.spec` Decimal
+  mock, `business-day.service.spec` fechas hardcoded) sin tocar — no
+  introducidos en este workstream.
+- Rate-limit sigue siendo single-instance. Migración a Redis cuando
+  el piloto justifique multi-replica (Sprint 10+).
+
+---
+
 ## 2026-05-17 · [FEAT] · Sprint 9 W1 — Email transaccional real
 
 **Scope:** `packages/eventbus`, `apps/api/notifications`,
