@@ -77,6 +77,12 @@ export default function ReportsPage({ searchParams }: PageProps) {
           subtitle="IVA recaudado"
         />
         <ReportTile
+          href={`/reports/occupancy?propertyId=${propertyId}&from=${monthFirst}&to=${date}`}
+          enabled={!!propertyId}
+          title="Occupancy"
+          subtitle="Ocupación día a día (S12 W2)"
+        />
+        <ReportTile
           href={`/reports/in-house?propertyId=${propertyId}&businessDate=${date}`}
           enabled={!!propertyId}
           title="In-house"

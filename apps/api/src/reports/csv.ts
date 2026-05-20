@@ -1,3 +1,4 @@
+import type { OccupancyReportPayload } from './generators/occupancy-report';
 import type {
   ArrivalsDeparturesReportPayload,
   InHouseReportPayload,
@@ -88,6 +89,17 @@ export function inHouseReportToCsv(p: InHouseReportPayload): string {
       ]),
     );
   }
+  return build(lines);
+}
+
+export function occupancyReportToCsv(p: OccupancyReportPayload): string {
+  const lines: string[] = [
+    csvRow(['businessDate', 'totalRooms', 'occupied', 'occupancyPct']),
+  ];
+  for (const r of p.rows) {
+    lines.push(csvRow([r.businessDate, r.totalRooms, r.occupied, r.occupancyPct]));
+  }
+  lines.push(csvRow(['AVERAGE', '', '', p.averageOccupancyPct]));
   return build(lines);
 }
 

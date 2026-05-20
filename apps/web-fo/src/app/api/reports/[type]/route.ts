@@ -2,7 +2,14 @@ import { auth } from '@/auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
-const ALLOWED = new Set(['manager', 'revenue', 'tax', 'in-house', 'arrivals-departures']);
+const ALLOWED = new Set([
+  'manager',
+  'revenue',
+  'tax',
+  'in-house',
+  'arrivals-departures',
+  'occupancy',
+]);
 
 /**
  * Server-side CSV proxy. Forwards the access token from the NextAuth

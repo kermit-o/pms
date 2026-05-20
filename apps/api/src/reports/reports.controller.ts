@@ -6,6 +6,7 @@ import {
   arrivalsDeparturesReportToCsv,
   inHouseReportToCsv,
   managerReportToCsv,
+  occupancyReportToCsv,
   revenueReportToCsv,
   taxReportToCsv,
 } from './csv';
@@ -92,6 +93,30 @@ export class ReportsController {
     });
     if (query.format === 'csv') {
       return sendCsv(reply, `in-house-${query.businessDate}.csv`, inHouseReportToCsv(payload));
+    }
+    return payload;
+  }
+
+  @Get('occupancy')
+  @Roles(...READ_ROLES)
+  async occupancy(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Query() rawQuery: Record<string, string | undefined>,
+  ) {
+    const query = RangeReportQuery.parse(rawQuery);
+    const payload = await this.reports.occupancy(user, correlationIdOf(req), {
+      propertyId: query.propertyId,
+      from: query.from,
+      to: query.to,
+    });
+    if (query.format === 'csv') {
+      return sendCsv(
+        reply,
+        `occupancy-${query.from}-${query.to}.csv`,
+        occupancyReportToCsv(payload),
+      );
     }
     return payload;
   }

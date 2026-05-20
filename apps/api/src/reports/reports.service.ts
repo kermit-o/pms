@@ -4,6 +4,10 @@ import type { AuthUser } from '../auth';
 import { generateArrivalsDeparturesReport } from './generators/arrivals-departures-report';
 import { generateInHouseReport } from './generators/in-house-report';
 import { generateManagerReport } from './generators/manager-report';
+import {
+  generateOccupancyReport,
+  type OccupancyReportPayload,
+} from './generators/occupancy-report';
 import { generateRevenueReport } from './generators/revenue-report';
 import { generateTaxReport } from './generators/tax-report';
 import type {
@@ -88,6 +92,33 @@ export class ReportsService {
       generateArrivalsDeparturesReport({ tx, tenantId: user.tenantId }, args),
     );
   }
+
+  occupancy(
+    user: AuthUser,
+    correlationId: string,
+    args: { propertyId: string; from: string; to: string },
+  ): Promise<OccupancyReportPayload> {
+    if (args.from > args.to) {
+      throw new BadRequestException('from must be <= to');
+    }
+    // Hard cap a 366 días para no romper la API con queries de años.
+    const days = daysBetween(args.from, args.to);
+    if (days > 366) {
+      throw new BadRequestException('range exceeds 366 days');
+    }
+    return this.prisma.withTenant(tenantCtx(user, correlationId), (tx) =>
+      generateOccupancyReport(
+        { tx, tenantId: user.tenantId },
+        { propertyId: args.propertyId, range: { from: args.from, to: args.to } },
+      ),
+    );
+  }
+}
+
+function daysBetween(from: string, to: string): number {
+  return (
+    Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000) + 1
+  );
 }
 
 function tenantCtx(user: AuthUser, correlationId: string) {

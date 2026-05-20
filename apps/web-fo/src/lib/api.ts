@@ -1121,6 +1121,28 @@ export async function getTaxReport(
   return apiFetch(`/reports/tax?${params.toString()}`, { accessToken });
 }
 
+// Sprint 12 W2 — Occupancy multi-día.
+export interface OccupancyReport {
+  range: { from: string; to: string };
+  rows: Array<{
+    businessDate: string;
+    totalRooms: number;
+    occupied: number;
+    occupancyPct: number;
+  }>;
+  averageOccupancyPct: number;
+}
+
+export async function getOccupancyReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  from: string,
+  to: string,
+): Promise<OccupancyReport> {
+  const params = new URLSearchParams({ propertyId, from, to });
+  return apiFetch(`/reports/occupancy?${params.toString()}`, { accessToken });
+}
+
 // W4 — In-house + Arrivals/Departures
 
 export interface InHouseRow {

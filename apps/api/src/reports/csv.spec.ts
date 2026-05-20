@@ -3,6 +3,7 @@ import {
   arrivalsDeparturesReportToCsv,
   inHouseReportToCsv,
   managerReportToCsv,
+  occupancyReportToCsv,
   revenueReportToCsv,
   taxReportToCsv,
 } from './csv';
@@ -83,5 +84,21 @@ describe('CSV serialisers', () => {
       departures: [],
     });
     expect(ad).toContain('"arrival","BCN-A1","CONFIRMED"');
+  });
+
+  it('emits an AVERAGE row at the end of occupancy report (S12 W2)', () => {
+    const csv = occupancyReportToCsv({
+      range: { from: '2026-07-15', to: '2026-07-16' },
+      rows: [
+        { businessDate: '2026-07-15', totalRooms: 10, occupied: 5, occupancyPct: 0.5 },
+        { businessDate: '2026-07-16', totalRooms: 10, occupied: 8, occupancyPct: 0.8 },
+      ],
+      averageOccupancyPct: 0.65,
+    });
+    expect(csv).toContain('"businessDate","totalRooms","occupied","occupancyPct"');
+    expect(csv).toContain('"2026-07-15","10","5","0.5"');
+    expect(csv).toContain('"2026-07-16","10","8","0.8"');
+    expect(csv).toContain('"AVERAGE","","","0.65"');
+    expect(csv.endsWith('\r\n')).toBe(true);
   });
 });

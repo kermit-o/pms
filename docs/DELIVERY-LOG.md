@@ -80,6 +80,77 @@ Una o dos frases.
 
 ---
 
+## 2026-05-21 · [FEAT] · Sprint 12 W2 — Occupancy multi-día report + CSV (closure)
+
+**Scope:** `apps/api/reports`, `apps/web-fo/reports`
+**Branch:** `claude/s12-w2-reports-csv`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Hallazgo: el grueso de "Reports CSV export" del plan S12 W2 ya
+  estaba implementado en sprints anteriores (5 endpoints con
+  `?format=csv`, formatters en `reports/csv.ts`, proxy
+  `apps/web-fo/api/reports/[type]`, botón "Descargar CSV" en cada
+  página). W2 se convierte en un closure + lo único nuevo que
+  pedía el plan: **report de ocupación multi-día**.
+- Nuevo `generateOccupancyReport` en
+  `reports/generators/occupancy-report.ts`. Algoritmo:
+  - `totalRooms` = count rooms activas (no deleted, no OOO).
+  - `occupied` por día = count reservas con `status ∈
+    {CHECKED_IN, CONFIRMED}` y `arrival < nextDay AND departure > date`.
+  - `occupancyPct = occupied / totalRooms` (4 decimales).
+  - `averageOccupancyPct` sobre días con `totalRooms > 0`.
+  - Validación: rango max 366 días (V1 sin
+    `generate_series` Postgres).
+- Nuevo formatter `occupancyReportToCsv` con `AVERAGE` final.
+- Nuevo endpoint `GET /reports/occupancy?from=&to=&propertyId=`
+  (roles `tenant_admin | front_desk | night_auditor`).
+- Web-FO:
+  - Tile "Occupancy" en `/reports`.
+  - Página `/reports/occupancy` con filtros + tabla + botón
+    descarga CSV.
+  - `apps/web-fo/src/lib/api.ts` con `getOccupancyReport` +
+    `OccupancyReport` interface.
+  - Proxy `/api/reports/[type]` widening del whitelist con
+    `'occupancy'`.
+- Incluye cherry-pick de S12 W1 (catalog widening +
+  `enqueueEmail`) para que la rama sea independientemente verde
+  (typecheck antes fallaba por el cast narrow en
+  `NotificationsService.enqueueEmail`).
+
+**Por qué.**
+
+S12 plan §3 pedía reports CSV y citaba `occupancy` como uno de los
+tipos V1 — fue lo único que faltaba. El resto ya está shipped.
+Cierre del workstream + 1 valor real para el operador (vista de
+ocupación día a día para Excel, hasta 366 días por descarga).
+
+**Archivos clave.**
+
+- `apps/api/src/reports/generators/occupancy-report.ts` (+ .spec)
+- `apps/api/src/reports/csv.ts` (+ test extendido)
+- `apps/api/src/reports/reports.service.ts` (método `occupancy`)
+- `apps/api/src/reports/reports.controller.ts` (endpoint)
+- `apps/web-fo/src/app/reports/page.tsx` (tile)
+- `apps/web-fo/src/app/reports/occupancy/page.tsx` (nueva)
+- `apps/web-fo/src/app/api/reports/[type]/route.ts` (whitelist)
+- `apps/web-fo/src/lib/api.ts` (helper)
+
+**Tests.**
+
+- `occupancy-report.spec` × 4 (rows con ratio, 0 rooms = 0%,
+  rango vacío, fechas faltantes = 0 occupied).
+- `csv.spec` × 1 nuevo (AVERAGE row).
+- `pnpm --filter @pms/api test` → **325/325 passed (51 suites)**.
+- Typecheck + lint verdes en api y web-fo.
+
+**Sigue pendiente.**
+
+- Siguiente WS Sprint 12: W3 Pre-pago full PaymentIntent.
+
+---
+
 ## 2026-05-21 · [REFACTOR] · Sprint 12 W1 — Onboarding `enqueueEmail` + catálogo `onboarding_verify`
 
 **Scope:** `packages/eventbus/src/catalog/notifications.ts`,
