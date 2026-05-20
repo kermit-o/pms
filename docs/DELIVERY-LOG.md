@@ -90,6 +90,12 @@ Una o dos frases.
 **Scope:** `apps/api/public-onboarding`, `apps/api/notifications/templates`,
 `apps/web-fo/onboarding`, `packages/db`, `RUNBOOK.md`
 **Branch:** `claude/s9-w3-onboarding`
+## 2026-05-19 · [INTEGRATION] · Sprint 9 W2 — Channel Manager (SiteMinder skeleton + webhook OTA)
+
+**Scope:** `apps/api/channel-manager`, `apps/api/reservations`,
+`apps/api/public-ibe`, `apps/api/night-audit`, `packages/db`,
+`packages/eventbus`, `RUNBOOK.md`
+**Branch:** `claude/s9-w2-channel-manager`
 **Refs:** este commit
 
 **Qué cambió.**
@@ -242,6 +248,79 @@ tabla con limpieza nocturna.
   Postmark (envío caro por sí mismo) y en el TTL del token.
 - Página `/onboarding/done` enlaza al IBE, pero el IBE solo funcionará
   cuando el hotel publique el slug (`Property.publishedAt = now`).
+- Nuevo módulo `@Global() ChannelManagerModule` con tres flujos:
+  - **Push delta on-change** — invocado inline desde
+    `ReservationsService.create/cancel` y `PublicIbeService.create/cancel`.
+    Errores no propagan: si el CM falla, la reserva igualmente se crea.
+  - **Push nightly** — invocado tras `NightAuditService.run_completed`,
+    365 días de availability + rates.
+  - **Inbound webhook** — `POST /public/cm/:slug/webhook`, HMAC verificado,
+    idempotente por `externalRef`. Mapea `channelCode` →
+    `ReservationSource ∈ {BOOKING_COM, EXPEDIA, OTHER_OTA}`.
+- `ChannelManagerProvider` interface + implementación `SiteMinderProvider`
+  (fetch directo, sin SDK). Endpoints REST documentados; el JSON shape de
+  webhook está modelado contra docs públicas — confirmación contra cuenta
+  real del cliente queda como follow-up del primer piloto con CM.
+- Migración `20260614000000_channel_manager`:
+  - `properties.channel_manager_provider`, `channel_manager_property_id`,
+    `channel_manager_credentials_ref` (text, nullable).
+  - Tabla `channel_sync_runs` con enums `ChannelSyncKind` (4 valores) y
+    `ChannelSyncStatus` (4 valores). RLS por tenant.
+- Catálogo eventbus: `channel.sync_completed v1` y
+  `channel.inbound_reservation_received v1`.
+- Métricas Prometheus `channel_manager_{sync_total, sync_duration_ms,
+  inbound_total, webhook_rejections_total}`. Sin label por property
+  (consulta `channel_sync_runs` para detalle).
+- Env nuevas: `CM_SITEMINDER_API_BASE`, `CM_SITEMINDER_HMAC_SECRET`.
+  Sin ellas → no-op silencioso, el PMS sigue funcionando.
+- RUNBOOK §24 con configuración SQL por hotel, shape del webhook,
+  consulta de runs, y cómo apagar el canal sin redeploy.
+
+**Por qué.**
+
+Sprint 9 plan §3. Sin CM, el hotel canibaliza el directo cada vez que
+sube precios o disponibilidad por separado en cada OTA. El plan pedía
+un proveedor (SiteMinder) — el módulo está diseñado como provider
+abstracto para que añadir Cloudbeds / RoomCloud en Sprint 10 sea
+trivial. El push es on-change + nightly (no realtime puro) porque
+SiteMinder rate-limita a unos cientos de calls/min por hotel.
+
+**Archivos clave.**
+
+- `apps/api/src/channel-manager/{channel-manager.service,.controller,.metrics,types,index}.ts`
+- `apps/api/src/channel-manager/providers/siteminder.provider.ts`
+- `apps/api/src/reservations/reservations.service.ts` (wire pushDelta)
+- `apps/api/src/public-ibe/public-ibe.service.ts` (wire pushDelta)
+- `apps/api/src/night-audit/night-audit.service.ts` (wire nightlyPush)
+- `apps/api/src/app.module.ts`, `config/env.schema.ts`
+- `packages/db/prisma/schema.prisma` + migration
+  `20260614000000_channel_manager/migration.sql`
+- `packages/db/src/index.ts` (export `ChannelSyncKind`/`Status`/`Run`)
+- `packages/eventbus/src/catalog/channel-manager.ts` + index
+- `RUNBOOK.md` §24
+
+**Tests.**
+
+- `siteminder.provider.spec.ts` × 10 (HMAC, channel mapping, push HTTP).
+- `channel-manager.service.spec.ts` × 8 (inbound idempotency, bad sig,
+  unknown property, no provider, no room type; pushDelta no-op + skipped).
+- 60 tests verdes en suites tocados (channel-manager + public-ibe +
+  night-audit).
+- 4 fallos preexistentes (Decimal mock en reservations.create,
+  fechas hardcoded en business-day) **no introducidos** en este
+  workstream — son los mismos arrastrados desde sprint 8/9.
+- `pnpm --filter @pms/api typecheck`, `lint` verdes.
+- `pnpm --filter @pms/db build`, `@pms/eventbus build` verdes.
+
+**Sigue pendiente.**
+
+- Confirmar shape exacto del webhook contra una cuenta SiteMinder
+  real cuando el primer piloto se firme.
+- 2º provider (Cloudbeds Channel o RoomCloud) en Sprint 10.
+- Migración a `@nestjs/schedule` para el push nightly cuando aparezca
+  multi-property por tenant — V1 invoca inline desde NA.
+- 4 fallos preexistentes de tests siguen pendientes de fix (no
+  bloquean este workstream).
 
 ---
 

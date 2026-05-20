@@ -67,6 +67,11 @@ function buildService(opts: {
       key === 'IBE_PUBLIC_URL' ? 'https://book.aubergine.test' : undefined,
     ),
   };
+  const channelManager = {
+    pushDelta: vi.fn().mockResolvedValue(undefined),
+    runNightlyPush: vi.fn().mockResolvedValue(undefined),
+    processInboundBooking: vi.fn(),
+  };
   return {
     service: new PublicIbeService(
       prisma as never,
@@ -74,6 +79,7 @@ function buildService(opts: {
       stripe as never,
       notifications as never,
       config as never,
+      channelManager as never,
     ),
     prisma,
     events,
