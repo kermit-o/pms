@@ -1394,3 +1394,119 @@ si está definido lo usa el wrapper HTML. Defaults Aubergine.
 
 Quitar `POSTMARK_SERVER_TOKEN` → dry-run automático. No requiere
 redeploy si Fly secrets cambia (machine restart sí).
+
+## 22. Anti-abuso del IBE — Sprint 9 W4
+
+Tres capas defienden los endpoints públicos del Booking Engine
+(`/public/ibe/*`):
+
+1. **Bloqueo manual de IPs** por hotel.
+2. **Rate limit in-memory** por `(route, slug, ip)`.
+3. **Cloudflare Turnstile** en mutaciones (POST reservations, cancel,
+   resend-confirmation).
+
+Métricas en `:9464/metrics`:
+
+- `public_ibe_rate_limit_hits_total{slug, route}`
+- `public_ibe_blocklist_hits_total{slug}`
+- `public_ibe_turnstile_failures_total{slug, reason}`
+- `public_ibe_turnstile_verifications_total{slug, outcome}`
+
+Alerta sugerida: `rate_limit_hits > 100 / 5min` → review manual.
+
+### 22.1 Bloqueo manual de IPs
+
+Cada `Property` admite `attributes.blockedIps: string[]`. El guard
+consulta `findFirst` con cache de 30s para no machacar la DB. Cuando
+una IP listada hace cualquier request al IBE de ese hotel, recibe
+**HTTP 403 `blocked`** sin contar contra el rate-limit.
+
+```sql
+-- Bloquear una IP en producción (desde psql sobre pms-pg):
+UPDATE properties
+SET attributes = COALESCE(attributes, '{}'::jsonb)
+              || jsonb_build_object(
+                'blockedIps',
+                COALESCE(attributes->'blockedIps', '[]'::jsonb) || to_jsonb('1.2.3.4'::text)
+              )
+WHERE public_slug = 'hotel-berenjena';
+```
+
+Desbloquear es el filtro inverso (`jsonb_array_elements_text`). El
+cache se invalida solo tras 30s; en emergencia, `flyctl machine restart`
+del API la limpia inmediato.
+
+### 22.2 Rate limit
+
+Decoradores `@RateLimit({ max, windowMs })` en cada endpoint del
+controller. Buckets in-memory por proceso — **single-instance**. En
+multi-replica habrá inflación de cuota (cada réplica cuenta su propio
+bucket). Para piloto V1 basta; Sprint 10+ pasamos a Redis sorted-set
+si el patrón de tráfico lo pide.
+
+Cuotas vigentes (Sprint 9):
+
+| Endpoint | max | window |
+|---|---|---|
+| `GET /properties/:slug` | 60 | 60s |
+| `GET /properties/:slug/availability` | 30 | 60s |
+| `POST /properties/:slug/reservations` | 5 | 60min |
+| `GET /properties/:slug/reservations/:code` | 20 | 60s |
+| `POST .../cancel` | 5 | 60min |
+| `POST .../setup-intent` | 10 | 60s |
+| `POST .../confirm-setup-intent` | 10 | 60s |
+| `POST .../resend-confirmation` | 3 | 60min |
+
+La IP se extrae en este orden: `cf-connecting-ip` (cuando estamos tras
+Cloudflare) → `x-forwarded-for` (Fly proxy) → `req.ip` (fallback).
+
+### 22.3 Cloudflare Turnstile
+
+Captcha invisible/managed challenge sin coste. Endpoint oficial:
+`POST https://challenges.cloudflare.com/turnstile/v0/siteverify`.
+
+**Env vars:**
+
+- API: `TURNSTILE_SECRET_KEY` (Fly secret).
+- IBE: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (build-time, bundle del
+  cliente).
+
+Si **ambos** faltan, todo el sistema sigue funcionando (el guard hace
+`skip` y el componente no monta). Útil en dev y en hoteles que aún no
+ven tráfico adverso.
+
+El widget se monta en `/h/<slug>/book` y en los formularios de cancel +
+resend de `/h/<slug>/manage`. El token llega al API en el body como
+`turnstileToken` (o en el header `cf-turnstile-response`). Endpoints
+decorados con `@RequireTurnstile()`:
+
+- `POST /public/ibe/properties/:slug/reservations`
+- `POST .../cancel`
+- `POST .../resend-confirmation`
+
+Falla → `403 captcha_failed`. El IBE redirige al form con el banner
+"completa la verificación anti-spam" y el widget se re-monta para un
+nuevo desafío.
+
+**Test keys de Cloudflare (docs CF):**
+
+- Site key always-passes: `1x00000000000000000000AA`
+- Secret key always-passes: `1x0000000000000000000000000000000AA`
+
+Útiles en CI / staging sin emitir tráfico real a CF.
+
+### 22.4 Configurar en producción
+
+```bash
+# Crear widget en https://dash.cloudflare.com/?to=/:account/turnstile
+flyctl secrets set -a pms-api TURNSTILE_SECRET_KEY=0x...
+flyctl secrets set -a pms-web-ibe NEXT_PUBLIC_TURNSTILE_SITE_KEY=0x...
+# Rolling restart automático tras secrets set.
+```
+
+### 22.5 Apagar el captcha
+
+Borrar `TURNSTILE_SECRET_KEY` del API (`flyctl secrets unset`). El
+guard pasa de largo. El componente del IBE seguirá montado hasta que
+también se quite la `NEXT_PUBLIC_TURNSTILE_SITE_KEY` y se redeploye —
+mientras tanto el captcha se completa pero su token se ignora.

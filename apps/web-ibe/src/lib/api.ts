@@ -112,6 +112,7 @@ export interface CreateReservationInput {
     marketingConsent: boolean;
   };
   specialRequests?: string;
+  turnstileToken?: string;
 }
 
 export interface CreateReservationResult {
@@ -174,12 +175,13 @@ export async function cancelReservation(
   code: string,
   lastName: string,
   acceptPenalty: boolean,
+  turnstileToken?: string,
 ): Promise<CancelResult> {
   return fetchJson(
     `/public/ibe/properties/${encodeURIComponent(slug)}/reservations/${encodeURIComponent(code)}/cancel`,
     {
       method: 'POST',
-      body: JSON.stringify({ lastName, acceptPenalty }),
+      body: JSON.stringify({ lastName, acceptPenalty, turnstileToken }),
     },
   );
 }
@@ -188,12 +190,13 @@ export async function resendConfirmation(
   slug: string,
   code: string,
   lastName: string,
+  turnstileToken?: string,
 ): Promise<{ queued: true; email: string | null }> {
   return fetchJson(
     `/public/ibe/properties/${encodeURIComponent(slug)}/reservations/${encodeURIComponent(code)}/resend-confirmation`,
     {
       method: 'POST',
-      body: JSON.stringify({ lastName }),
+      body: JSON.stringify({ lastName, turnstileToken }),
     },
   );
 }
