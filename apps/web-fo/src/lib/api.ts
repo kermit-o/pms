@@ -1223,3 +1223,58 @@ export async function upsertCashReconciliation(
     body: JSON.stringify(input),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Public onboarding (Sprint 9 W3) — endpoints sin auth.
+// ---------------------------------------------------------------------------
+
+export async function publicOnboardingStart(input: {
+  email: string;
+  locale: 'es' | 'en';
+}): Promise<{ queued: true; email: string }> {
+  return apiFetch('/public/onboarding/start', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function publicOnboardingVerify(
+  token: string,
+): Promise<{ tenantId: string; setupToken: string; expiresAt: string; email: string }> {
+  return apiFetch('/public/onboarding/verify', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
+export interface PublicOnboardingSetupInput {
+  token: string;
+  hotel: {
+    name: string;
+    city: string;
+    country: string;
+    timezone: string;
+    currency: string;
+    locale: 'es-ES' | 'en-US';
+    roomsCount: number;
+  };
+  admin: { fullName: string };
+  acceptTerms: true;
+}
+
+export async function publicOnboardingSetup(
+  input: PublicOnboardingSetupInput,
+): Promise<{
+  tenantId: string;
+  propertyId: string;
+  propertySlug: string;
+  adminUserId: string;
+  adminEmail: string;
+  backofficeUrl: string;
+  ibeUrl: string;
+}> {
+  return apiFetch('/public/onboarding/setup', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}

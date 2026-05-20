@@ -1510,3 +1510,110 @@ Borrar `TURNSTILE_SECRET_KEY` del API (`flyctl secrets unset`). El
 guard pasa de largo. El componente del IBE seguirá montado hasta que
 también se quite la `NEXT_PUBLIC_TURNSTILE_SITE_KEY` y se redeploye —
 mientras tanto el captcha se completa pero su token se ignora.
+## 23. Onboarding wizard self-service — Sprint 9 W3
+
+El wizard permite que un hotel se cree solo, sin operador Aubergine. La
+provisión de **DB** es totalmente automática. La provisión de **Keycloak
+realm + admin user** queda como **paso manual V1** — el wizard envía un
+aviso al equipo y muestra al hotel "tus credenciales llegan en horas".
+Sprint 10+ automatizamos también Keycloak.
+
+### 23.1 Flujo
+
+```
+/onboarding                 (form email)
+       │  POST /public/onboarding/start
+       ▼
+   Email Postmark con token "verify" (TTL 24h, HMAC firmado)
+       │  click en el botón
+       ▼
+/onboarding/verify?token=…  (server component)
+       │  POST /public/onboarding/verify
+       ▼  upsert tenant (slug=pending-<hash>, onboarding_status=EMAIL_VERIFIED)
+/onboarding/setup?token=…   (form hotel + admin)
+       │  POST /public/onboarding/setup
+       ▼  crea Property + RoomTypes default (STD x N) + Rooms 101..101+N + User INVITED
+          y marca tenant onboarding_status=SETUP_DONE, slug=<derivado>.
+/onboarding/done            (resumen + propiedades creadas)
+```
+
+### 23.2 Tokens
+
+Formato compacto `base64url(payload).base64url(hmac)` con `node:crypto`
+— sin lib externa. Payload:
+
+```json
+{ "kind": "verify"|"setup", "email": "x@y", "tenantId": "uuid?",
+  "iat": 1747..., "exp": 1747..., "nonce": "hex8" }
+```
+
+Verificación constante en tiempo (`timingSafeEqual`). TTL 24h por
+defecto (env `ONBOARDING_TOKEN_TTL_HOURS`). Sin rotación de keys V1.
+
+### 23.3 Env vars
+
+```bash
+# Secret HMAC para firmar tokens (requerido en prod, autogen en dev).
+flyctl secrets set -a pms-api ONBOARDING_SECRET="$(openssl rand -hex 32)"
+
+# TTL del enlace de verificación (h). Default 24.
+flyctl secrets set -a pms-api ONBOARDING_TOKEN_TTL_HOURS=24
+
+# BACKOFFICE_PUBLIC_URL determina el `verifyUrl` del email.
+flyctl secrets set -a pms-api BACKOFFICE_PUBLIC_URL=https://pms-web-fo.fly.dev
+```
+
+Si `ONBOARDING_SECRET` falta en producción, el módulo se niega a
+arrancar (consistente con `PAIRING_SECRET`).
+
+### 23.4 Idempotencia
+
+- `start` con el mismo email N veces → N emails diferentes; el último
+  token gana. Sin tenant creado todavía (no llenamos la DB de fantasmas).
+- `verify` con el mismo token → upsert sobre slug `pending-<hash(email)>`
+  → siempre mismo tenant; se puede repetir.
+- `setup` con el mismo token verificado dos veces → primer call crea
+  todo, segundo call recibe `400 already_done`.
+
+### 23.5 Keycloak (paso manual V1)
+
+Tras `setup`:
+
+```bash
+# 1. Crear realm + client + admin user en Keycloak
+node scripts/keycloak-bootstrap.ts \
+  --tenant-slug=<tenant-slug> \
+  --admin-email=<admin-email> \
+  --temporary-password="$(openssl rand -base64 12)"
+
+# 2. Comunicar al hotel:
+#    - URL del back-office: https://pms-web-fo.fly.dev
+#    - Email del admin (lo que pusieron en el wizard)
+#    - Password temporal (cambio forzado al primer login)
+```
+
+Cuando Sprint 10 automatice esto, `setup` llamará directamente al
+Keycloak admin API y devolverá las credenciales temporales en el JSON
+de respuesta.
+
+### 23.6 Página `/onboarding/done`
+
+Muestra al hotel:
+- email del admin
+- tenant ID + slug público generados
+- link al IBE (`https://pms-web-ibe.fly.dev/h/<slug>`)
+- link al back-office (login)
+- aviso explícito de que el alta en Keycloak es **en curso (horas)**
+
+### 23.7 Limpiar tenants fantasma
+
+Si alguien hace `start` + `verify` y nunca completa `setup`, queda un
+Tenant con `onboarding_status='EMAIL_VERIFIED'` y `slug=pending-…`. Job
+de limpieza sugerido (cron nocturno, Sprint 10):
+
+```sql
+DELETE FROM tenants
+WHERE onboarding_status = 'EMAIL_VERIFIED'
+  AND slug LIKE 'pending-%'
+  AND created_at < NOW() - INTERVAL '7 days';
+```
