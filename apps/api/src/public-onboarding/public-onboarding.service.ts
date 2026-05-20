@@ -76,7 +76,16 @@ export class PublicOnboardingService implements OnModuleInit {
       this.secret,
     );
     const verifyUrl = this.buildVerifyUrl(token);
-    const out = await this.notifications.sendEmail({
+
+    // Sprint 12 W1: pasa por el NATS consumer (S11 W2) en lugar de
+    // sendEmail inline. dedupKey con timestamp para que `start` repetido
+    // reenvíe el email (no es idempotente sobre el mismo email — el
+    // usuario puede pedir reenvío).
+    const tenantId = this.publicActor;
+    const dedupKey = `onboarding-verify-${this.emailDedupHash(email)}-${Date.now()}`;
+    const out = await this.notifications.enqueueEmail({
+      tenantId,
+      dedupKey,
       template: 'onboarding_verify',
       to: email,
       locale: input.locale,
@@ -86,12 +95,26 @@ export class PublicOnboardingService implements OnModuleInit {
         ttlHours: String(this.ttlHours),
       },
     });
-    if (!out.ok) {
-      this.log.warn(`onboarding start email failed to=${email} reason=${out.error ?? 'unknown'}`);
+    if (out.inlineFallback && out.result && !out.result.ok) {
+      this.log.warn(
+        `onboarding start email failed to=${email} reason=${out.result.error ?? 'unknown'} (inline fallback)`,
+      );
       throw new ServiceUnavailableException('notification_failed');
     }
-    this.log.log(`onboarding started email=${email}`);
+    this.log.log(`onboarding started email=${email} enqueued=${out.enqueued}`);
     return { queued: true, email };
+  }
+
+  /** Sentinel tenant para eventos del onboarding (todavía no hay tenant
+   *  asignado en `start`). Mismo patrón que `PublicIbeService.publicActor`. */
+  private readonly publicActor = '00000000-0000-0000-0000-000000000000';
+
+  /** Hash corto del email para usar en dedupKey sin exponer la dirección. */
+  private emailDedupHash(email: string): string {
+    return createHmac('sha256', 'onboarding-dedup-namespace')
+      .update(email)
+      .digest('hex')
+      .slice(0, 12);
   }
 
   async verify(token: string): Promise<{

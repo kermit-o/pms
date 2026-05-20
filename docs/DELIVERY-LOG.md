@@ -80,6 +80,58 @@ Una o dos frases.
 
 ---
 
+## 2026-05-21 · [REFACTOR] · Sprint 12 W1 — Onboarding `enqueueEmail` + catálogo `onboarding_verify`
+
+**Scope:** `packages/eventbus/src/catalog/notifications.ts`,
+`apps/api/notifications`, `apps/api/public-onboarding`
+**Branch:** `claude/s12-w1-onboarding-enqueue`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Catálogo `emailSendRequestedV1.template` ampliado para aceptar
+  `onboarding_verify` (S9 W3 introdujo la plantilla pero el catálogo
+  NATS no la tenía — pendiente arrastrado desde S11 W2).
+- `NotificationsConsumer.handle()` widening del enum de template.
+- `NotificationsService.enqueueEmail()` elimina cast narrow al
+  publicar — el `template` se valida solo por Zod del schema.
+- `PublicOnboardingService.start()` migrado de `sendEmail` inline a
+  `enqueueEmail`. `dedupKey` con timestamp:
+  `onboarding-verify-<hashHmac(email)>-<ts>` para que resends
+  generen dedupKeys distintos.
+- Sentinel `tenantId = 00000000-0...` (patrón consistente con IBE).
+- Fallback inline preservado: si NATS no está y el fallback inline
+  también falla, `503 notification_failed` (mismo contrato V1).
+
+**Por qué.**
+
+Sprint 12 §2 — cierra el pendiente de S11 W2. Onboarding ya no
+acopla el request HTTP a Postmark: si Postmark cae, el wizard
+responde 200 OK y el email se procesa en background con retry
+exponencial (JetStream nak). Visible en `notification_outbox` y
+métricas `notification_consumer_events_total`.
+
+**Archivos clave.**
+
+- `packages/eventbus/src/catalog/notifications.ts`
+- `apps/api/src/notifications/notifications.consumer.ts`
+- `apps/api/src/notifications/notifications.service.ts`
+- `apps/api/src/public-onboarding/public-onboarding.service.ts`
+- `apps/api/src/public-onboarding/public-onboarding.service.spec.ts`
+
+**Tests.**
+
+- `public-onboarding.service.spec` actualizado: mock `enqueueEmail`
+  en vez de `sendEmail`, helper `captureToken` lee del nuevo mock.
+- `pnpm --filter @pms/api test` → **320/320 passed (50 suites)**.
+- Typecheck + lint verdes en `@pms/api`, `@pms/eventbus`.
+
+**Sigue pendiente.**
+
+- Siguiente WS Sprint 12: W2 Reports CSV export.
+
+---
+
 ## 2026-05-18 · [SECURITY] · Sprint 9 W4 — Anti-abuso IBE (Turnstile + blocklist + rate-limit slug+ip)
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,
