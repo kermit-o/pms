@@ -14,6 +14,7 @@ import { RoomsModule } from './rooms';
 import { BusinessDayModule } from './business-day';
 import { SesHospedajesModule } from './compliance/ses-hospedajes';
 import { CashModule } from './cash';
+import { ChannelManagerModule } from './channel-manager';
 import { CopilotModule } from './copilot';
 import { HousekeepingModule } from './housekeeping';
 import { NightAuditModule } from './night-audit';
@@ -47,6 +48,7 @@ import { ReportsModule } from './reports';
     PublicOnboardingModule,
     ReportsModule,
     CashModule,
+    ChannelManagerModule,
     HousekeepingModule,
   ],
 })

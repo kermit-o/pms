@@ -86,6 +86,12 @@ export const envSchema = z.object({
   ONBOARDING_SECRET: z.string().min(32).optional(),
   ONBOARDING_TOKEN_TTL_HOURS: z.coerce.number().int().min(1).max(72).default(24),
 
+  // Channel manager (Sprint 9 W2). Sin estos vars todo es no-op.
+  // CM_SITEMINDER_API_BASE: endpoint REST del provider.
+  // CM_SITEMINDER_HMAC_SECRET: shared secret para verificar webhooks.
+  CM_SITEMINDER_API_BASE: z.string().url().optional(),
+  CM_SITEMINDER_HMAC_SECRET: z.string().optional(),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])

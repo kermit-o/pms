@@ -62,6 +62,8 @@ function buildService(overrides: {
     propertyId: PROPERTY_ID,
     code: 'BCN-ABCDEF',
     cancelledAt: new Date('2026-06-10T10:00:00Z'),
+    arrivalDate: new Date('2026-07-15T00:00:00Z'),
+    departureDate: new Date('2026-07-17T00:00:00Z'),
   });
   const guestCreate = vi.fn().mockResolvedValue({ id: GUEST_ID });
   const roomFindFirst = vi.fn().mockResolvedValue(overrides.room ?? null);
@@ -85,8 +87,17 @@ function buildService(overrides: {
   };
 
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
+  const channelManager = {
+    pushDelta: vi.fn().mockResolvedValue(undefined),
+    runNightlyPush: vi.fn().mockResolvedValue(undefined),
+    processInboundBooking: vi.fn(),
+  };
 
-  const service = new ReservationsService(prisma as never, events as never);
+  const service = new ReservationsService(
+    prisma as never,
+    events as never,
+    channelManager as never,
+  );
 
   return { service, tx, prisma, events, calls: { reservationUpdate } };
 }

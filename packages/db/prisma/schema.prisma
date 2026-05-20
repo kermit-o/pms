@@ -120,6 +120,13 @@ model Property {
   // bloqueo manual de IPs abusivas en el IBE. Otros usos futuros: branding
   // de email, configuración de channel manager, etc.
   attributes  Json?
+  // Channel manager (Sprint 9 W2). `provider` = identificador del CM ("siteminder",
+  // "roomcloud", etc). `propertyId` = id que el CM asigna a este hotel.
+  // `credentialsRef` = nombre del secret (Fly) que almacena el API key del CM —
+  // nunca el secret en sí mismo en DB.
+  channelManagerProvider       String? @map("channel_manager_provider")
+  channelManagerPropertyId     String? @map("channel_manager_property_id")
+  channelManagerCredentialsRef String? @map("channel_manager_credentials_ref")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
@@ -139,10 +146,56 @@ model Property {
   housekeepingTasks   HousekeepingTask[]
   lostFoundItems      LostFoundItem[]
   cancellationPolicies CancellationPolicy[]
+  channelSyncRuns     ChannelSyncRun[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
   @@map("properties")
+}
+
+// ----------------------------------------------------------------------------
+// Channel manager sync runs (Sprint 9 W2). Una fila por intento de push o por
+// inbound webhook. Sirve para auditoría + dashboards de salud del canal.
+// ----------------------------------------------------------------------------
+
+model ChannelSyncRun {
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String                 @map("tenant_id") @db.Uuid
+  propertyId  String                 @map("property_id") @db.Uuid
+  provider    String
+  kind        ChannelSyncKind
+  status      ChannelSyncStatus      @default(IN_PROGRESS)
+  startedAt   DateTime               @default(now()) @map("started_at")
+  completedAt DateTime?              @map("completed_at")
+  error       String?
+  // {pushed, received, skipped, idempotent} — totales libres por kind.
+  totals      Json?
+  // Para inbound: id que el provider asigna a la reserva original (idempotency).
+  externalRef String?                @map("external_ref")
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, propertyId, startedAt])
+  @@index([tenantId, status])
+  @@map("channel_sync_runs")
+}
+
+enum ChannelSyncKind {
+  PUSH_AVAILABILITY
+  PUSH_RATES
+  PULL_RESERVATION
+  NIGHTLY_FULL
+
+  @@map("channel_sync_kind")
+}
+
+enum ChannelSyncStatus {
+  IN_PROGRESS
+  OK
+  FAILED
+  SKIPPED
+
+  @@map("channel_sync_status")
 }
 
 // ----------------------------------------------------------------------------

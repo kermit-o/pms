@@ -203,7 +203,18 @@ function buildService(opts: BuildOpts = {}) {
     withTenant: vi.fn(async (_ctx, fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
-  const service = new NightAuditService(prisma as never, events as never, new AnomalyService(), new AnomalyMetrics());
+  const channelManager = {
+    pushDelta: vi.fn().mockResolvedValue(undefined),
+    runNightlyPush: vi.fn().mockResolvedValue(undefined),
+    processInboundBooking: vi.fn(),
+  };
+  const service = new NightAuditService(
+    prisma as never,
+    events as never,
+    new AnomalyService(),
+    new AnomalyMetrics(),
+    channelManager as never,
+  );
   return { service, tx, events, stepRows };
 }
 

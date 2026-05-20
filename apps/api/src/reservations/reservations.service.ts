@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { Prisma, ReservationSource, ReservationStatus as PrismaReservationStatus, RoomStatus, HousekeepingTaskStatus, HousekeepingTaskType, GuaranteeType, GuaranteeStatus } from '@pms/db';
+import { ChannelManagerService } from '../channel-manager';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
@@ -32,6 +33,7 @@ export class ReservationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventbusService,
+    private readonly channelManager: ChannelManagerService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -190,6 +192,13 @@ export class ReservationsService {
 
       return { reservation, code, propertyId: property.id };
     });
+
+    // Push delta al CM si está configurado (no-op silencioso).
+    void this.channelManager
+      .pushDelta({ propertyId: result.propertyId, arrival: input.arrival, departure: input.departure })
+      .catch((err) =>
+        this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`),
+      );
 
     await this.events.publish('reservation.created', ctx, {
       reservationId: result.reservation.id,
@@ -526,9 +535,27 @@ export class ReservationsService {
           cancelledAt: new Date(),
           cancellationReason: input.reason,
         },
-        select: { id: true, propertyId: true, code: true, cancelledAt: true },
+        select: {
+          id: true,
+          propertyId: true,
+          code: true,
+          cancelledAt: true,
+          arrivalDate: true,
+          departureDate: true,
+        },
       });
     });
+
+    // Push delta al CM — cancelar libera inventario.
+    void this.channelManager
+      .pushDelta({
+        propertyId: cancelled.propertyId,
+        arrival: cancelled.arrivalDate.toISOString().slice(0, 10),
+        departure: cancelled.departureDate.toISOString().slice(0, 10),
+      })
+      .catch((err) =>
+        this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`),
+      );
 
     await this.events.publish('reservation.cancelled', ctx, {
       reservationId: cancelled.id,
