@@ -148,3 +148,91 @@ describe('renderTemplate', () => {
     expect(r.subject).toContain('Nueva reserva'); // ES fallback (no EN defined yet)
   });
 });
+
+describe('NotificationsService.enqueueEmail (S11 W2)', () => {
+  beforeEach(() => {
+    globalThis.fetch = vi.fn() as never;
+  });
+  afterEach(() => {
+    globalThis.fetch = FETCH_ORIG;
+  });
+
+  it('publishes to NATS when eventbus is healthy', async () => {
+    const events = {
+      isHealthy: vi.fn(() => true),
+      publish: vi.fn().mockResolvedValue({ id: 'evt-1', sequence: 1, type: 'email.send_requested' }),
+    };
+    const service = new NotificationsService(
+      buildConfig({ POSTMARK_SERVER_TOKEN: 'tk', NOTIFICATIONS_FROM: 'no-reply@a.test' }) as never,
+      undefined,
+      events as never,
+    );
+    const out = await service.enqueueEmail({
+      template: 'reservation_confirmation',
+      to: 'a@b.test',
+      locale: 'es',
+      params: { code: 'X', hotelName: 'H', guestFirstName: 'A', arrival: '1', departure: '2', roomTypeName: 'DBL', totalAmount: '1', currency: 'EUR', manageUrl: '' },
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      dedupKey: 'ibe-confirmation-X',
+    });
+    expect(out).toMatchObject({ enqueued: true, dedupKey: 'ibe-confirmation-X' });
+    expect(events.publish).toHaveBeenCalledWith(
+      'email.send_requested',
+      expect.objectContaining({ tenantId: '00000000-0000-0000-0000-000000000001' }),
+      expect.objectContaining({ template: 'reservation_confirmation', dedupKey: 'ibe-confirmation-X' }),
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('falls back to inline sendEmail when eventbus is not healthy', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ MessageID: 'pm-fallback' }),
+    } as never);
+    const events = {
+      isHealthy: vi.fn(() => false),
+      publish: vi.fn(),
+    };
+    const service = new NotificationsService(
+      buildConfig({ POSTMARK_SERVER_TOKEN: 'tk', NOTIFICATIONS_FROM: 'no-reply@a.test' }) as never,
+      undefined,
+      events as never,
+    );
+    const out = await service.enqueueEmail({
+      template: 'reservation_cancelled',
+      to: 'a@b.test',
+      locale: 'es',
+      params: { code: 'X', hotelName: 'H', guestFirstName: 'A', penalty: '0', currency: 'EUR' },
+      tenantId: '00000000-0000-0000-0000-000000000001',
+    });
+    expect(out.inlineFallback).toBe(true);
+    expect(out.enqueued).toBe(false);
+    expect(events.publish).not.toHaveBeenCalled();
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('falls back to inline when publish throws', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ MessageID: 'pm-fallback' }),
+    } as never);
+    const events = {
+      isHealthy: vi.fn(() => true),
+      publish: vi.fn().mockRejectedValue(new Error('NATS unavailable')),
+    };
+    const service = new NotificationsService(
+      buildConfig({ POSTMARK_SERVER_TOKEN: 'tk', NOTIFICATIONS_FROM: 'no-reply@a.test' }) as never,
+      undefined,
+      events as never,
+    );
+    const out = await service.enqueueEmail({
+      template: 'reservation_confirmation',
+      to: 'a@b.test',
+      locale: 'es',
+      params: { code: 'X', hotelName: 'H', guestFirstName: 'A', arrival: '1', departure: '2', roomTypeName: 'DBL', totalAmount: '1', currency: 'EUR', manageUrl: '' },
+      tenantId: '00000000-0000-0000-0000-000000000001',
+    });
+    expect(out.inlineFallback).toBe(true);
+    expect(out.result?.ok).toBe(true);
+  });
+});

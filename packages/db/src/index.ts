@@ -24,6 +24,7 @@ export {
   GuaranteeType,
   GuaranteeStatus,
   EmailSuppressionReason,
+  NotificationOutboxStatus,
 } from '@prisma/client';
 
 export type {
@@ -53,6 +54,7 @@ export type {
   DevicePairing,
   CancellationPolicy,
   EmailSuppression,
+  NotificationOutbox,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

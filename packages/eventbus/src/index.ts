@@ -14,3 +14,9 @@ export type {
 } from './catalog';
 export { buildStreamConfig, createNatsConnection, ensureStream } from './stream';
 export { EventPublisher, type PublishContext, type PublishResult } from './publisher';
+export {
+  Subscriber,
+  type SubscribeOptions,
+  type HandlerResult,
+  type EnvelopeHandler,
+} from './subscriber';

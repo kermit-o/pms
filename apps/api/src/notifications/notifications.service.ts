@@ -1,6 +1,8 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'node:crypto';
 import type { Env } from '../config/env.schema';
+import { EventbusService } from '../eventbus';
 import { EmailSuppressionsService } from './email-suppressions.service';
 import { renderTemplate, type Locale, type RenderedTemplate, type TemplateName } from './templates';
 
@@ -11,6 +13,29 @@ export interface SendEmailInput {
   bcc?: string[];
   locale?: Locale;
   params: Record<string, unknown>;
+}
+
+export interface EnqueueEmailInput extends SendEmailInput {
+  /**
+   * Sprint 11 W2 — clave de dedup. Si dos productores publican el mismo
+   * dedupKey, el consumer solo entrega una vez. Por defecto se genera un
+   * UUID v4 (envío único). Productores como `resendConfirmation` pueden
+   * usar `resend-<reservationId>-<timestamp>` para idempotencia explícita.
+   */
+  dedupKey?: string;
+  /** Contexto de tenant para la publicación del evento NATS. */
+  tenantId: string;
+  actorId?: string | null;
+  correlationId?: string | null;
+}
+
+export interface EnqueueResult {
+  enqueued: boolean;
+  dedupKey: string;
+  /** Si NATS no estaba listo, hicimos fallback a sendEmail inline. */
+  inlineFallback?: boolean;
+  /** Resultado del fallback inline si lo hubo. */
+  result?: { ok: true; messageId: string } | { ok: false; error: string };
 }
 
 export interface EmailProvider {
@@ -48,6 +73,7 @@ export class NotificationsService {
   constructor(
     config: ConfigService<Env, true>,
     @Optional() private readonly suppressions?: EmailSuppressionsService,
+    @Optional() private readonly events?: EventbusService,
   ) {
     const token = config.get('POSTMARK_SERVER_TOKEN', { infer: true });
     const from = config.get('NOTIFICATIONS_FROM', { infer: true });
@@ -82,6 +108,54 @@ export class NotificationsService {
     const locale = input.locale ?? 'es';
     const rendered = renderTemplate(input.template, locale, input.params);
     return this.provider.send(this.from, input, rendered);
+  }
+
+  /**
+   * Sprint 11 W2 — encola el envío como evento NATS `email.send_requested`.
+   * El `NotificationsConsumer` lo procesa de forma desacoplada (retry
+   * exponencial vía JetStream nak, dedup por `dedupKey` en
+   * `notification_outbox`).
+   *
+   * Si NATS no está disponible (boot fallido, dev sin docker), hace
+   * fallback a `sendEmail` inline para preservar el comportamiento V1.
+   * El productor recibe el resultado en `result` con `inlineFallback: true`.
+   */
+  async enqueueEmail(input: EnqueueEmailInput): Promise<EnqueueResult> {
+    const dedupKey = input.dedupKey ?? randomUUID();
+    if (!this.events || !this.events.isHealthy()) {
+      // Fallback inline cuando NATS no está disponible.
+      this.log.warn(
+        `enqueueEmail fallback to inline (NATS unavailable) template=${input.template} to=${input.to}`,
+      );
+      const result = await this.sendEmail(input);
+      return { enqueued: false, dedupKey, inlineFallback: true, result };
+    }
+    try {
+      await this.events.publish(
+        'email.send_requested',
+        {
+          tenantId: input.tenantId,
+          actorId: input.actorId ?? null,
+          correlationId: input.correlationId ?? null,
+        },
+        {
+          template: input.template as 'reservation_confirmation' | 'reservation_cancelled' | 'front_desk_new_reservation',
+          to: input.to,
+          cc: input.cc,
+          bcc: input.bcc,
+          locale: input.locale ?? 'es',
+          params: input.params,
+          dedupKey,
+        },
+      );
+      return { enqueued: true, dedupKey };
+    } catch (err) {
+      this.log.warn(
+        `enqueueEmail publish failed, falling back to inline: ${(err as Error).message}`,
+      );
+      const result = await this.sendEmail(input);
+      return { enqueued: false, dedupKey, inlineFallback: true, result };
+    }
   }
 }
 

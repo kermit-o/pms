@@ -284,6 +284,7 @@ export class PublicIbeService {
     // Email de confirmación al huésped (best-effort).
     await this.dispatchConfirmation({
       slug,
+      tenantId: property.tenantId,
       hotelName: property.name,
       code: reservationOut.code,
       lastName: input.guest.lastName,
@@ -445,6 +446,7 @@ export class PublicIbeService {
 
     if (result.guestEmail && result.guestFirstName) {
       await this.dispatchCancellation({
+        tenantId: property.tenantId,
         hotelName: property.name,
         code: result.code,
         guestFirstName: result.guestFirstName,
@@ -599,6 +601,7 @@ export class PublicIbeService {
     if (email && guest) {
       await this.dispatchConfirmation({
         slug,
+        tenantId: property.tenantId,
         hotelName: property.name,
         code: reservation.code,
         lastName: guest.lastName,
@@ -609,6 +612,8 @@ export class PublicIbeService {
         roomTypeName: reservation.roomType?.name || reservation.roomType?.code || '?',
         totalAmount: reservation.totalAmount.toString(),
         currency: reservation.currency,
+        // Resend explícito: rompe la dedup del envío inicial.
+        dedupSuffix: `-resend-${Date.now()}`,
       });
     }
     this.log.log(
@@ -654,6 +659,7 @@ export class PublicIbeService {
 
   private async dispatchConfirmation(p: {
     slug: string;
+    tenantId: string;
     hotelName: string;
     code: string;
     lastName: string;
@@ -664,13 +670,20 @@ export class PublicIbeService {
     roomTypeName: string;
     totalAmount: string;
     currency: string;
+    /** Sufijo opcional para forzar un nuevo dedup en resends. */
+    dedupSuffix?: string;
   }): Promise<void> {
     const ibe = this.config.get('IBE_PUBLIC_URL', { infer: true }) ?? '';
     const manageUrl = ibe
       ? `${ibe.replace(/\/$/, '')}/h/${encodeURIComponent(p.slug)}/manage?code=${encodeURIComponent(p.code)}&lastName=${encodeURIComponent(p.lastName)}`
       : '';
     try {
-      await this.notifications.sendEmail({
+      // Sprint 11 W2: encolamos vía NATS. Dedup key estable por código de
+      // reserva (los resends explícitos pasan por aquí via
+      // resendConfirmation y la dedup la rompemos abajo con un sufijo).
+      await this.notifications.enqueueEmail({
+        tenantId: p.tenantId,
+        dedupKey: `ibe-confirmation-${p.code}${p.dedupSuffix ?? ''}`,
         template: 'reservation_confirmation',
         to: p.guestEmail,
         locale: 'es',
@@ -693,6 +706,7 @@ export class PublicIbeService {
   }
 
   private async dispatchCancellation(p: {
+    tenantId: string;
     hotelName: string;
     code: string;
     guestFirstName: string;
@@ -701,7 +715,9 @@ export class PublicIbeService {
     currency: string;
   }): Promise<void> {
     try {
-      await this.notifications.sendEmail({
+      await this.notifications.enqueueEmail({
+        tenantId: p.tenantId,
+        dedupKey: `ibe-cancellation-${p.code}`,
         template: 'reservation_cancelled',
         to: p.guestEmail,
         locale: 'es',
