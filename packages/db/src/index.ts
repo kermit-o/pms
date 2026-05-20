@@ -25,6 +25,7 @@ export {
   GuaranteeStatus,
   ChannelSyncKind,
   ChannelSyncStatus,
+  EmailSuppressionReason,
 } from '@prisma/client';
 
 export type {
@@ -54,6 +55,7 @@ export type {
   DevicePairing,
   CancellationPolicy,
   ChannelSyncRun,
+  EmailSuppression,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

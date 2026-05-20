@@ -80,6 +80,10 @@ export const envSchema = z.object({
   POSTMARK_SERVER_TOKEN: z.string().optional(),
   NOTIFICATIONS_FROM: z.string().email().optional(),
   NOTIFICATIONS_REPLY_TO: z.string().email().optional(),
+  /** Webhook signing secret de Postmark (S11 W1). Verifica el header
+   *  x-postmark-signature. Sin él, el webhook responde 503 y el
+   *  service hace fallback al modo trust (logueado). */
+  POSTMARK_WEBHOOK_SECRET: z.string().optional(),
   /** Base URL del IBE público (para los enlaces "Gestionar mi reserva" en emails). */
   IBE_PUBLIC_URL: z.string().url().optional(),
   /** Base URL del back-office (para los enlaces "Abrir en back-office" en emails al hotel). */

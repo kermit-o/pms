@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.schema';
+import { EmailSuppressionsService } from './email-suppressions.service';
 import { renderTemplate, type Locale, type RenderedTemplate, type TemplateName } from './templates';
 
 export interface SendEmailInput {
@@ -44,7 +45,10 @@ export class NotificationsService {
   private readonly from: string;
   readonly mode: 'live' | 'dry_run';
 
-  constructor(config: ConfigService<Env, true>) {
+  constructor(
+    config: ConfigService<Env, true>,
+    @Optional() private readonly suppressions?: EmailSuppressionsService,
+  ) {
     const token = config.get('POSTMARK_SERVER_TOKEN', { infer: true });
     const from = config.get('NOTIFICATIONS_FROM', { infer: true });
     if (token && from) {
@@ -63,6 +67,18 @@ export class NotificationsService {
   async sendEmail(
     input: SendEmailInput,
   ): Promise<{ ok: true; messageId: string } | { ok: false; error: string }> {
+    // Sprint 11 W1: pre-check de suppression list. Si la suppression
+    // service no está inyectada (tests legacy o módulos antiguos), saltar
+    // — el comportamiento V1 sigue intacto.
+    if (this.suppressions) {
+      const status = await this.suppressions.isSuppressed(input.to);
+      if (status.suppressed) {
+        this.log.log(
+          `email[skipped] template=${input.template} to=${input.to} reason=suppressed (${status.reason})`,
+        );
+        return { ok: false, error: `suppressed:${status.reason}` };
+      }
+    }
     const locale = input.locale ?? 'es';
     const rendered = renderTemplate(input.template, locale, input.params);
     return this.provider.send(this.from, input, rendered);

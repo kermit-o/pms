@@ -1927,3 +1927,75 @@ para auditoría o trigger de invalidación de caché en otros módulos
 El rol `tenant_admin` se asigna en el realm del tenant. Cualquier
 usuario sin él recibe 403 al intentar guardar. Operadores normales
 (`front_desk`) pueden ver la configuración pero no modificarla.
+## 28. Postmark bounce/complaint webhook — Sprint 11 W1
+
+Endpoint público `POST /public/notifications/postmark` que recibe los
+eventos del webhook de Postmark. Las direcciones que hacen hard-bounce,
+spam-complaint o unsubscribe se añaden a `email_suppressions`
+(global, no por tenant). `NotificationsService.sendEmail` consulta la
+lista antes de invocar Postmark.
+
+### 28.1 Configuración en Postmark dashboard
+
+1. Server → Webhooks → Add webhook
+2. URL: `https://pms-api.fly.dev/public/notifications/postmark`
+3. Events: Bounce ✓, Spam complaint ✓, Subscription change ✓
+   (Delivery/Open/Click opcionales — el endpoint los acepta pero
+   solo loguea, sin coste).
+4. Webhook signing: enable, copia el secret.
+
+### 28.2 Env vars
+
+```bash
+flyctl secrets set -a pms-api \
+  POSTMARK_WEBHOOK_SECRET="<paste-del-dashboard>"
+```
+
+Sin el secret, el endpoint responde **503** — preferimos rechazar a
+aceptar bounces sin validar.
+
+### 28.3 Comportamiento por record type
+
+| RecordType | Acción |
+|---|---|
+| `Bounce` con `Type=HardBounce` | suppression `HARD_BOUNCE` |
+| `Bounce` con `Type` ≠ `HardBounce` | noop |
+| `SpamComplaint` | suppression `SPAM_COMPLAINT` |
+| `SubscriptionChange` con `SuppressSending=true` | suppression `UNSUBSCRIBE` |
+| `SubscriptionChange` con `SuppressSending=false` | reactivación (delete) |
+| Otros (Delivery, Open, Click, ...) | 200 OK sin acción |
+
+### 28.4 Métricas
+
+```
+postmark_webhook_records_total{record_type, subtype?}
+postmark_webhook_rejections_total{reason}  # bad_signature, no_secret
+email_suppressions_added_total{reason, source}
+email_send_skipped_suppressed_total{reason}
+```
+
+### 28.5 Reactivar un email manualmente
+
+```sql
+DELETE FROM email_suppressions WHERE email = 'guest@example.com';
+```
+
+O via psql con el script de soporte. Anota en RUNBOOK la razón
+(GDPR: hay que poder demostrar consentimiento al reactivar).
+
+### 28.6 Suprimir un email manualmente (soporte)
+
+```sql
+INSERT INTO email_suppressions (email, reason, detail, source)
+VALUES ('guest@example.com', 'MANUAL', 'reason text', 'support')
+ON CONFLICT (email) DO UPDATE
+  SET reason = EXCLUDED.reason,
+      detail = EXCLUDED.detail,
+      source = EXCLUDED.source;
+```
+
+### 28.7 Apagar el webhook
+
+Quitar `POSTMARK_WEBHOOK_SECRET` → endpoint vuelve a 503. La
+suppression list sigue activa (el pre-check en `sendEmail` lee la
+tabla, independientemente del webhook).
