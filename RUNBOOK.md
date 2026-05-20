@@ -1880,3 +1880,50 @@ WHERE  id = '<...>';
 
 Y manualmente completar el flujo (crear property + admin user) si no
 existía aún — RUNBOOK §23 cubre el flujo manual.
+## 27. Back-office admin de Property — Sprint 10 W4
+
+`/properties/[id]/settings` en el web-fo permite que el operador del
+hotel (rol `tenant_admin`) configure sin SQL las tres áreas de S9:
+
+1. **Booking Engine (IBE)** — publicar/despublicar con generación
+   automática de slug si falta. Slugs deben ser únicos por sistema.
+2. **Channel Manager** — selección de provider (V1: SiteMinder),
+   property ID del CM, y referencia al secret de Fly (no el secret
+   en sí — Fly lo inyecta vía env var).
+3. **IPs bloqueadas** — textarea con una IP por línea (IPv4/IPv6).
+   Reemplaza la lista completa al guardar.
+
+### 27.1 Endpoints API
+
+```
+GET  /properties/:id/settings           → estado actual de los 3 bloques
+PUT  /properties/:id/publish            → toggle IBE (body {publish, slug?})
+PUT  /properties/:id/channel-manager    → body {provider, channelManagerPropertyId, credentialsRef}
+PUT  /properties/:id/blocked-ips        → body {ips: string[]}
+```
+
+- `GET` accesible para `tenant_admin`, `front_desk`, `night_auditor`.
+- `PUT` solo para `tenant_admin`.
+- Idempotencia: cualquier PUT escribe el estado deseado; reintentar
+  produce el mismo resultado.
+
+### 27.2 Validaciones
+
+- `publish`: si la property no tiene `publicSlug`, se autogenera
+  `hotel-<hex6>` o se usa el `slug` enviado. Slugs ya tomados por
+  otro hotel devuelven `409 public_slug_taken:<slug>`.
+- `provider`: enum `'siteminder' | null`. `null` desactiva el CM.
+- `blockedIps`: Zod valida IPv4 (`xxx.xxx.xxx.xxx`) o IPv6
+  (caracteres hex y `:`). Lista deduplicada, max 500 entradas.
+
+### 27.3 Eventos
+
+Cada PUT publica `property.updated v1` con `changes: { ... }`. Útil
+para auditoría o trigger de invalidación de caché en otros módulos
+(RateLimitGuard's blocklist cache se invalida solo al cabo de 30s).
+
+### 27.4 Permisos en Keycloak
+
+El rol `tenant_admin` se asigna en el realm del tenant. Cualquier
+usuario sin él recibe 403 al intentar guardar. Operadores normales
+(`front_desk`) pueden ver la configuración pero no modificarla.
