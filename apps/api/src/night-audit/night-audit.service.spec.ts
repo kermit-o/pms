@@ -197,6 +197,9 @@ function buildService(opts: BuildOpts = {}) {
       ),
       findUnique: vi.fn().mockResolvedValue(null),
     },
+    tenant: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 
   const prisma = {
@@ -208,12 +211,14 @@ function buildService(opts: BuildOpts = {}) {
     runNightlyPush: vi.fn().mockResolvedValue(undefined),
     processInboundBooking: vi.fn(),
   };
+  const config = { get: vi.fn(() => 7) };
   const service = new NightAuditService(
     prisma as never,
     events as never,
     new AnomalyService(),
     new AnomalyMetrics(),
     channelManager as never,
+    config as never,
   );
   return { service, tx, events, stepRows };
 }
@@ -263,6 +268,7 @@ describe('NightAuditService.run', () => {
       'night_audit.step_completed', // SNAPSHOT_REPORTS
       'night_audit.step_completed', // DETECT_ANOMALIES
       'night_audit.step_completed', // CLOSE_DAY
+      'night_audit.step_completed', // CLEANUP_ORPHAN_TENANTS (S10 W3)
       'night_audit.run_completed',
     ]);
   });

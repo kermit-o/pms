@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NightAuditRunStatus, NightAuditStep, NightAuditStepStatus, Prisma } from '@pms/db';
 import { ChannelManagerService } from '../channel-manager';
+import type { Env } from '../config/env.schema';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
@@ -8,6 +10,7 @@ import { AnomalyMetrics } from './anomaly.metrics';
 import { AnomalyService } from './anomaly.service';
 import { ListAnomaliesQuery, ListRunsQuery, RunNightAuditDto } from './dto';
 import type { StepContext, StepRunner } from './step';
+import { CleanupOrphanTenantsStep } from './steps/cleanup-orphan-tenants';
 import { CloseDayStep } from './steps/close-day';
 import { DetectAnomaliesStep } from './steps/detect-anomalies';
 import { MarkNoShowsStep } from './steps/mark-no-shows';
@@ -53,7 +56,9 @@ export class NightAuditService {
     private readonly anomaly: AnomalyService,
     private readonly anomalyMetrics: AnomalyMetrics,
     private readonly channelManager: ChannelManagerService,
+    config: ConfigService<Env, true>,
   ) {
+    const orphanTtlDays = config.get('ORPHAN_TENANT_TTL_DAYS', { infer: true });
     this.pipeline = [
       new PostRoomChargesStep(),
       new PostTaxesStep(),
@@ -62,6 +67,11 @@ export class NightAuditService {
       new SnapshotReportsStep(),
       new DetectAnomaliesStep(this.anomaly, this.anomalyMetrics),
       new CloseDayStep(),
+      // Limpieza global (no operacional). Si falla, no debe romper el
+      // cierre del día — el orchestrator marca el step como FAILED y el
+      // run global como COMPLETED salvo que CLOSE_DAY también haya
+      // fallado.
+      new CleanupOrphanTenantsStep(orphanTtlDays),
     ];
   }
 

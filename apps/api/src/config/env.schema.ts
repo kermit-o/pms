@@ -102,6 +102,11 @@ export const envSchema = z.object({
   CM_SITEMINDER_API_BASE: z.string().url().optional(),
   CM_SITEMINDER_HMAC_SECRET: z.string().optional(),
 
+  // Cleanup nocturno de tenants huérfanos del onboarding (Sprint 10 W3).
+  // Días sin completar setup tras los cuales el tenant se soft-deletea.
+  // 0 desactiva el paso.
+  ORPHAN_TENANT_TTL_DAYS: z.coerce.number().int().min(0).max(90).default(7),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])

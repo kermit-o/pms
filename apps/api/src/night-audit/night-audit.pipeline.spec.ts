@@ -193,6 +193,9 @@ function buildFakes() {
         currency: 'EUR',
       }),
     },
+    tenant: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 
   const prisma = {
@@ -204,18 +207,20 @@ function buildFakes() {
     runNightlyPush: vi.fn().mockResolvedValue(undefined),
     processInboundBooking: vi.fn(),
   };
+  const config = { get: vi.fn(() => 7) };
   const service = new NightAuditService(
     prisma as never,
     events as never,
     new AnomalyService(),
     new AnomalyMetrics(),
     channelManager as never,
+    config as never,
   );
   return { service, tx, events, getRunRow: () => runRow };
 }
 
 describe('NightAuditService — full pipeline integration', () => {
-  it('walks all 7 steps end-to-end and reports totals from each step', async () => {
+  it('walks all 8 steps end-to-end and reports totals from each step', async () => {
     const { service, tx, events } = buildFakes();
     const summary = await service.run(user, 'corr', {
       propertyId: PROPERTY_ID,
@@ -226,18 +231,22 @@ describe('NightAuditService — full pipeline integration', () => {
     // 1 room charge + 1 tax + 1 package CHARGE.
     expect(tx.folioEntry.create).toHaveBeenCalledTimes(3);
     expect(tx.businessDayState.create).toHaveBeenCalledOnce();
+    // Sprint 10 W3: cleanup step ejecuta updateMany aunque no encuentre filas.
+    expect(tx.tenant.updateMany).toHaveBeenCalledOnce();
 
-    // 1 run_started + 7 step_completed (incluye DETECT_ANOMALIES) + 1 run_completed.
+    // 1 run_started + 8 step_completed (incluye DETECT_ANOMALIES y
+    // CLEANUP_ORPHAN_TENANTS) + 1 run_completed.
     const types = events.publish.mock.calls.map((c) => c[0]);
     expect(types[0]).toBe('night_audit.run_started');
     expect(types.at(-1)).toBe('night_audit.run_completed');
-    expect(types.filter((t) => t === 'night_audit.step_completed')).toHaveLength(7);
+    expect(types.filter((t) => t === 'night_audit.step_completed')).toHaveLength(8);
 
     // Totals propagated from each step into NightAuditRun.totals.
     expect(summary.totals.roomChargesPosted).toBe(1);
     expect(summary.totals.taxesPosted).toBe(1);
     expect(summary.totals.packagesPosted).toBe(1);
     expect(summary.totals.snapshotsWritten).toBe(5);
+    expect(summary.totals.deletedOrphanTenants).toBe(0);
   });
 
   it('is idempotent at the service surface when the day is already COMPLETED', async () => {

@@ -775,6 +775,7 @@ enum NightAuditStep {
   SNAPSHOT_REPORTS
   DETECT_ANOMALIES
   CLOSE_DAY
+  CLEANUP_ORPHAN_TENANTS
 
   @@map("night_audit_step")
 }

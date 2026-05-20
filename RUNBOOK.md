@@ -1814,3 +1814,69 @@ flyctl secrets unset -a pms-api \
 ```
 
 Wizard vuelve al modo manual sin redeploy (refresca al primer setup).
+
+## 26. Cleanup nocturno de tenants huérfanos — Sprint 10 W3
+
+El step `CLEANUP_ORPHAN_TENANTS` del pipeline Night Audit barre los
+tenants que quedaron a medio onboarding tras 7 días sin completar
+`setup`.
+
+### 26.1 Criterio
+
+```sql
+UPDATE tenants
+SET    deleted_at = NOW()
+WHERE  onboarding_status = 'EMAIL_VERIFIED'
+  AND  slug LIKE 'pending-%'
+  AND  created_at < NOW() - INTERVAL '7 days'
+  AND  deleted_at IS NULL;
+```
+
+Se ejecuta al final del pipeline NA (tras `CLOSE_DAY`). Si falla, no
+revierte el cierre del día — el orchestrator marca el step como
+`FAILED` pero el `NightAuditRun.status` queda `COMPLETED` si los
+steps operacionales (room charges, taxes, packages, NS, snapshot,
+anomalies, close-day) terminaron OK.
+
+### 26.2 Configuración
+
+```bash
+# Cambiar el TTL (default 7 días). 0 desactiva el paso.
+flyctl secrets set -a pms-api ORPHAN_TENANT_TTL_DAYS=14
+```
+
+### 26.3 Idempotencia y concurrencia
+
+Multi-property: si hay N hoteles cerrando la noche, este paso se
+ejecuta N veces. La primera borra; las demás encuentran 0 filas
+(`deletedAt IS NULL` ya no matchea). Sin contención porque cada
+`updateMany` es una transacción corta.
+
+### 26.4 Auditoría
+
+Inspeccionar los runs recientes del step:
+
+```sql
+SELECT runs.business_date,
+       step.completed_at,
+       step.result->>'deleted'   AS deleted,
+       step.result->>'ttlDays'   AS ttl_days,
+       step.status
+FROM   night_audit_run_steps step
+JOIN   night_audit_runs runs ON runs.id = step.run_id
+WHERE  step.step = 'CLEANUP_ORPHAN_TENANTS'
+ORDER  BY step.completed_at DESC
+LIMIT  20;
+```
+
+### 26.5 Reactivar un tenant borrado por error
+
+```sql
+UPDATE tenants
+SET    deleted_at = NULL,
+       onboarding_status = 'SETUP_DONE'
+WHERE  id = '<...>';
+```
+
+Y manualmente completar el flujo (crear property + admin user) si no
+existía aún — RUNBOOK §23 cubre el flujo manual.
