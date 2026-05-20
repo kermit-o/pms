@@ -10,12 +10,41 @@ function buildConfig(env: Record<string, string | undefined>) {
   };
 }
 
+function suppressionsStub(suppressed = false) {
+  return {
+    isSuppressed: vi.fn().mockResolvedValue(
+      suppressed ? { suppressed: true, reason: 'HARD_BOUNCE' } : { suppressed: false },
+    ),
+    upsert: vi.fn(),
+    remove: vi.fn(),
+  };
+}
+
 describe('NotificationsService', () => {
   beforeEach(() => {
     globalThis.fetch = vi.fn() as never;
   });
   afterEach(() => {
     globalThis.fetch = FETCH_ORIG;
+  });
+
+  it('skips send when recipient is suppressed (S11 W1)', async () => {
+    const service = new NotificationsService(
+      buildConfig({
+        POSTMARK_SERVER_TOKEN: 'tk',
+        NOTIFICATIONS_FROM: 'no-reply@aubergine.test',
+      }) as never,
+      suppressionsStub(true) as never,
+    );
+    const out = await service.sendEmail({
+      template: 'reservation_confirmation',
+      to: 'bounced@test',
+      locale: 'es',
+      params: { code: 'X', hotelName: 'H', guestFirstName: 'A', arrival: '1', departure: '2', roomTypeName: 'DBL', totalAmount: '1', currency: 'EUR', manageUrl: '' },
+    });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error).toBe('suppressed:HARD_BOUNCE');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('falls back to dry_run when POSTMARK_SERVER_TOKEN is missing', async () => {

@@ -80,6 +80,73 @@ Una o dos frases.
 
 ---
 
+## 2026-05-20 · [SECURITY] · Sprint 11 W1 — Postmark webhook + email suppression list
+
+**Scope:** `apps/api/notifications`, `packages/db`, `RUNBOOK.md`
+**Branch:** `claude/s11-w1-postmark-webhook`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nueva tabla `email_suppressions` (global al SaaS, sin RLS):
+  `email citext PK`, `reason` enum (`HARD_BOUNCE`, `SPAM_COMPLAINT`,
+  `UNSUBSCRIBE`, `MANUAL`), `detail`, `source`, `created_at`.
+  Migración `20260615000000_email_suppressions`.
+- Nuevo `EmailSuppressionsService` con `isSuppressed/upsert/remove`.
+  Normaliza emails (lowercase, trim), trunca `detail` a 500 chars.
+  Métricas `email_suppressions_added_total{reason, source}` +
+  `email_send_skipped_suppressed_total{reason}`.
+- `NotificationsService.sendEmail` ahora hace pre-check antes de
+  invocar Postmark. Si la email está suprimida, devuelve
+  `{ ok: false, error: 'suppressed:<reason>' }` sin tocar la red.
+- Nuevo `PostmarkWebhookController` en
+  `POST /public/notifications/postmark`:
+  - HMAC sha256 sobre body crudo (`x-postmark-signature` +
+    `POSTMARK_WEBHOOK_SECRET`).
+  - Sin secret → 503; firma incorrecta → 403.
+  - Soporta `Bounce` (solo HardBounce suprime), `SpamComplaint`,
+    `SubscriptionChange` (suppress o reactiva). Otros tipos → 200
+    noop con log.
+- Env nuevo opcional `POSTMARK_WEBHOOK_SECRET`. Sin él el webhook
+  responde 503 pero el resto del sistema sigue.
+- RUNBOOK §28 con setup en Postmark dashboard, comportamiento por
+  record type, métricas, comandos SQL para suprimir/reactivar.
+
+**Por qué.**
+
+Sprint 11 §2 — sin tratamiento de bounces, un solo email malo
+degrada la reputación del dominio remitente. Suppression list
+global evita reintentar emails muertos desde cualquier hotel.
+
+**Archivos clave.**
+
+- `apps/api/src/notifications/postmark-webhook.controller.ts` (+ .spec)
+- `apps/api/src/notifications/email-suppressions.service.ts` (+ .spec)
+- `apps/api/src/notifications/notifications.{service,index}.ts`
+- `apps/api/src/config/env.schema.ts`
+- `packages/db/prisma/schema.prisma` + migration
+  `20260615000000_email_suppressions`
+- `packages/db/src/index.ts`
+- `RUNBOOK.md` §28
+
+**Tests.**
+
+- `email-suppressions.service.spec` × 6.
+- `postmark-webhook.controller.spec` × 9 (todos los record types +
+  ambos códigos de error).
+- `notifications.service.spec`: 1 nuevo caso (suppressed skip).
+- `pnpm --filter @pms/api test` → **237/237 passed (40 suites)**.
+  Cherry-pick S10 W2 incluido.
+- Typecheck + lint verdes.
+
+**Sigue pendiente.**
+
+- Configurar webhook en Postmark dashboard apuntando a
+  `https://pms-api.fly.dev/public/notifications/postmark` y
+  `flyctl secrets set -a pms-api POSTMARK_WEBHOOK_SECRET=...`.
+
+---
+
 ## 2026-05-19 · [FIX] · Sprint 10 W2 — Fix 4 tests preexistentes (CI 100% verde)
 
 **Scope:** `apps/api/src/reservations/reservations.service.spec.ts`,

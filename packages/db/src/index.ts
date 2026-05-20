@@ -23,6 +23,7 @@ export {
   NightAuditAnomalySeverity,
   GuaranteeType,
   GuaranteeStatus,
+  EmailSuppressionReason,
 } from '@prisma/client';
 
 export type {
@@ -51,6 +52,7 @@ export type {
   LostFoundItem,
   DevicePairing,
   CancellationPolicy,
+  EmailSuppression,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';
