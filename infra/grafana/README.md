@@ -13,6 +13,12 @@ infra/grafana/
   dashboards/
     api-health.json         # SLOs API + status mix + rutas top
     housekeeping.json       # 9 series hsk_* de S4 W5
+    copilot.json            # Anthropic API + tool calls (S6)
+    night-audit.json        # Pipeline NA + anomaly detection (S3/S6)
+    ibe.json                # Anti-abuse (rate-limit, blocklist, Turnstile) — S11 W4
+    channel-manager.json    # Sync runs + inbound OTA + webhook health — S11 W4
+    payments.json           # Stripe webhook health + event age — S11 W4
+    notifications.json      # Consumer outcomes + suppressions + Postmark webhook — S11 W4
 ```
 
 ## Cómo se cargan

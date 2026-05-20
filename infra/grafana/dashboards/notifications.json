@@ -1,0 +1,155 @@
+{
+  "title": "Aubergine — Notifications (Email)",
+  "uid": "aubergine-notifications",
+  "tags": ["aubergine", "notifications", "postmark"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Emails delivered (1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(notification_consumer_events_total{job=\"pms-api\",outcome=\"delivered\"}[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Consumer failures (1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "description": "outcome ∈ {failed, error}. > 5/h sostenido = Postmark caído o template roto.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(notification_consumer_events_total{job=\"pms-api\",outcome=~\"failed|error\"}[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Suppressions added (24h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "description": "Bounces / complaints añadidos a email_suppressions. Picos = email mal segmentado o dominio cambiado.",
+      "targets": [
+        {
+          "expr": "sum(increase(email_suppressions_added_total{job=\"pms-api\"}[24h]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Webhook rejections (1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "description": "Postmark webhook bad_signature o no_secret. > 0 sostenido = ataque o config rota.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(postmark_webhook_rejections_total{job=\"pms-api\"}[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Consumer outcomes",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "description": "outcome ∈ {delivered, suppressed, failed, error, idempotent_ack}.",
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(notification_consumer_events_total{job=\"pms-api\"}[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Delivered por template",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by (template) (rate(notification_consumer_events_total{job=\"pms-api\",outcome=\"delivered\"}[5m]))",
+          "legendFormat": "{{template}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Suppressions añadidas por reason",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "description": "reason ∈ {HARD_BOUNCE, SPAM_COMPLAINT, UNSUBSCRIBE, MANUAL}.",
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(email_suppressions_added_total{job=\"pms-api\"}[15m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Emails saltados por suppression",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "description": "Si crece, hay productores intentando enviar a emails en la blacklist — revisar quién.",
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(email_send_skipped_suppressed_total{job=\"pms-api\"}[5m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Postmark webhook records por type",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "description": "record_type ∈ {bounce, complaint, subscription_change, other}.",
+      "targets": [
+        {
+          "expr": "sum by (record_type) (rate(postmark_webhook_records_total{job=\"pms-api\"}[5m]))",
+          "legendFormat": "{{record_type}}"
+        }
+      ]
+    }
+  ]
+}

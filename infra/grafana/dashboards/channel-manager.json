@@ -1,0 +1,141 @@
+{
+  "title": "Aubergine — Channel Manager",
+  "uid": "aubergine-channel-manager",
+  "tags": ["aubergine", "channel-manager", "ota"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Syncs OK (1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(increase(channel_manager_sync_total{job=\"pms-api\",status=\"OK\"}[1h]))" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Syncs FAILED (1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "description": "Si > 0 sostenido, revisar logs del provider.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "expr": "sum(increase(channel_manager_sync_total{job=\"pms-api\",status=\"FAILED\"}[1h]))" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Inbound reservations (24h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "description": "Bookings OTA recibidos via webhook.",
+      "targets": [
+        { "expr": "sum(increase(channel_manager_inbound_total{job=\"pms-api\"}[24h]))" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Webhook rejections (1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "description": "Si > 0, posible attacker probando firmas o config mal.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "expr": "sum(increase(channel_manager_webhook_rejections_total{job=\"pms-api\"}[1h]))" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Syncs por kind + status",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by (kind, status) (rate(channel_manager_sync_total{job=\"pms-api\"}[5m]))",
+          "legendFormat": "{{kind}} · {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Sync duration (p50/p95/p99)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le, kind) (rate(channel_manager_sync_duration_ms_bucket{job=\"pms-api\"}[5m])))",
+          "legendFormat": "p50 · {{kind}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, kind) (rate(channel_manager_sync_duration_ms_bucket{job=\"pms-api\"}[5m])))",
+          "legendFormat": "p95 · {{kind}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, kind) (rate(channel_manager_sync_duration_ms_bucket{job=\"pms-api\"}[5m])))",
+          "legendFormat": "p99 · {{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Inbound bookings por source + outcome",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "description": "source ∈ {BOOKING_COM, EXPEDIA, OTHER_OTA}; outcome ∈ {created, updated}.",
+      "targets": [
+        {
+          "expr": "sum by (source, outcome) (rate(channel_manager_inbound_total{job=\"pms-api\"}[15m]))",
+          "legendFormat": "{{source}} · {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Webhook rejections por reason",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "description": "reason ∈ {bad_signature, no_provider, parse_error, unknown_property, no_secret}.",
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(channel_manager_webhook_rejections_total{job=\"pms-api\"}[5m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    }
+  ]
+}
