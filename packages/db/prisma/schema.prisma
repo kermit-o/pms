@@ -21,13 +21,17 @@ datasource db {
 // ----------------------------------------------------------------------------
 
 model Tenant {
-  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  slug      String       @unique
-  name      String
-  status    TenantStatus @default(TRIAL)
-  createdAt DateTime     @default(now()) @map("created_at")
-  updatedAt DateTime     @updatedAt @map("updated_at")
-  deletedAt DateTime?    @map("deleted_at")
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug             String       @unique
+  name             String
+  status           TenantStatus @default(TRIAL)
+  // Onboarding wizard (Sprint 9 W3): rastrea el estado del self-service.
+  // NULL en tenants creados manualmente / seeded. Para hoteles activos en
+  // producción, esto se ignora — solo describe el origen.
+  onboardingStatus String?      @map("onboarding_status")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  deletedAt        DateTime?    @map("deleted_at")
 
   users              User[]
   properties         Property[]

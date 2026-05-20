@@ -14,6 +14,8 @@ export default function middleware(req: NextRequest) {
     path === '/login' ||
     path === '/api/health' ||
     path.startsWith('/api/auth') ||
+    path.startsWith('/api/onboarding') ||
+    path.startsWith('/onboarding') ||
     path.startsWith('/_next') ||
     path === '/favicon.ico';
 

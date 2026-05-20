@@ -80,6 +80,12 @@ export const envSchema = z.object({
   // el guard hace skip (útil en dev y para hoteles sin tráfico adverso).
   TURNSTILE_SECRET_KEY: z.string().optional(),
 
+  // Onboarding wizard (Sprint 9 W3). Secret HMAC para firmar los tokens
+  // de verificación email + setup. En prod la API se niega a arrancar sin
+  // este secret; en dev se auto-genera (proceso) si falta.
+  ONBOARDING_SECRET: z.string().min(32).optional(),
+  ONBOARDING_TOKEN_TTL_HOURS: z.coerce.number().int().min(1).max(72).default(24),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])
