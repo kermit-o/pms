@@ -61,6 +61,8 @@ function buildService(opts: {
   };
   const notifications = {
     sendEmail: vi.fn().mockResolvedValue({ ok: true, messageId: 'm1' }),
+    // Sprint 11 W2: PublicIbeService.dispatch* ahora usa enqueueEmail.
+    enqueueEmail: vi.fn().mockResolvedValue({ enqueued: true, dedupKey: 'k' }),
   };
   const config = {
     get: vi.fn().mockImplementation((key: string) =>

@@ -2058,3 +2058,104 @@ flyctl secrets set -a pms-api STRIPE_WEBHOOK_SECRET=whsec_new_...
 #    secret viejo fallarán con 403. Stripe reintentará automáticamente
 #    con el nuevo en el siguiente envío.
 ```
+
+## 30. Consumer NATS de emails — Sprint 11 W2
+
+`NotificationsConsumer` subscribe durable a `pms.events.email.send_requested`
+y procesa los envíos de forma desacoplada del request HTTP. Auditoría
+en `notification_outbox`.
+
+### 30.1 Productor
+
+```ts
+await notifications.enqueueEmail({
+  tenantId,
+  dedupKey: 'ibe-confirmation-BBM-1',  // opcional, default UUID
+  template: 'reservation_confirmation',
+  to: 'guest@hotel.test',
+  locale: 'es',
+  params: { ... },
+});
+```
+
+Si NATS no está disponible, `enqueueEmail` hace fallback a
+`sendEmail` inline para preservar el comportamiento V1 (devuelve
+`inlineFallback: true`).
+
+### 30.2 Consumer
+
+- Subject: `pms.events.email.send_requested`.
+- Durable: `notifications-email`.
+- AckPolicy: explicit.
+- max_deliver: 5.
+- ack_wait: 30s entre reintentos.
+- batchSize: 8 mensajes en flight.
+
+### 30.3 Outbox y dedup
+
+Cada evento entrante:
+1. Lookup en `notification_outbox` por `dedup_key`. Si está
+   `DELIVERED`/`SUPPRESSED` → ack inmediato (re-entrega idempotente).
+2. Upsert outbox con `status='PENDING'` + `attempts++`.
+3. Pre-check de suppression list. Si suprimido → status
+   `SUPPRESSED`, **term** (no más reintentos).
+4. `sendEmail`. Éxito → `DELIVERED` + ack. Error
+   `suppressed:...` → `SUPPRESSED` + term. Otro error → `FAILED` +
+   nak (JetStream reintenta tras ack_wait).
+5. Excepción en handler → `FAILED` + nak.
+
+Tras `max_deliver` redeliveries, JetStream termina el mensaje al
+DLQ implícito (queda visible en el stream con `state=ack pending=0`
+pero `redelivered=5`).
+
+### 30.4 Métricas
+
+```
+notification_consumer_events_total{template, outcome}
+  outcome ∈ {delivered, suppressed, failed, error, idempotent_ack}
+```
+
+Alertas sugeridas:
+- `rate(notification_consumer_events_total{outcome="failed"}[5m]) > 0.1`
+  → fallos transitorios o Postmark caído.
+- Inspect outbox con `status='FAILED'` y `attempts >= 5` para casos
+  que agotaron reintentos.
+
+### 30.5 Auditoría
+
+```sql
+SELECT dedup_key, template, recipient, status, attempts,
+       last_error, created_at, delivered_at
+FROM notification_outbox
+ORDER BY created_at DESC
+LIMIT 50;
+```
+
+Re-enviar manualmente un email atascado:
+
+```sql
+-- Marcar la fila como PENDING para que el consumer la reintente.
+-- (Solo funciona si el envelope está aún en JetStream — fuera de
+--  los 5 días de retention, hay que generar un nuevo evento.)
+UPDATE notification_outbox
+SET    status = 'PENDING',
+       attempts = 0,
+       last_error = NULL
+WHERE  dedup_key = 'ibe-confirmation-BBM-1';
+```
+
+### 30.6 Dev / test
+
+`NotificationsConsumer` se desactiva automáticamente cuando
+`NODE_ENV=test` (los tests unitarios llaman a `handle()` directamente
+sin pasar por NATS). En dev sin docker NATS, `enqueueEmail` hace
+fallback inline y el outbox no se llena.
+
+### 30.7 Sites migrados desde sendEmail inline
+
+| Site | Antes (S9 W1) | Ahora (S11 W2) |
+|---|---|---|
+| `PublicIbeService.dispatchConfirmation` | `sendEmail` inline | `enqueueEmail` con `dedup=ibe-confirmation-{code}` |
+| `PublicIbeService.dispatchCancellation` | `sendEmail` inline | `enqueueEmail` con `dedup=ibe-cancellation-{code}` |
+| `PublicIbeService.resendConfirmation` | reuses dispatchConfirmation | dispatchConfirmation con `dedupSuffix=-resend-<ts>` |
+| `PublicOnboardingService.start` (S9 W3) | `sendEmail` inline | **pendiente** — migrar tras merge S9 W3 |

@@ -103,6 +103,94 @@ Una o dos frases.
 
 **Scope:** `docs/SPRINT-11-PLAN.md`
 **Branch:** `claude/s11-plan`
+## 2026-05-20 · [FEAT] · Sprint 11 W2 — NATS consumer de email + outbox
+
+**Scope:** `apps/api/notifications`, `apps/api/public-ibe`,
+`apps/api/eventbus`, `packages/eventbus`, `packages/db`, `RUNBOOK.md`
+**Branch:** `claude/s11-w2-email-consumer`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- `@pms/eventbus` añade `Subscriber` class: wrapper minimalista sobre
+  JetStream pull-consumer. Crea/actualiza durable con
+  `AckPolicy.Explicit`, valida envelope + payload contra catálogo,
+  delega al handler (devuelve `ack`/`nak`/`term`).
+- `EventbusService` expone `subscribe(type, opts, handler)` +
+  `isHealthy()`. Subscribers se drenan en `onModuleDestroy` antes
+  del nc.drain.
+- Nueva tabla `notification_outbox` (sin RLS, global) con
+  `dedup_key` unique, `template`, `recipient`, `locale`, `params`
+  jsonb, `status` (PENDING/DELIVERED/FAILED/SUPPRESSED), `attempts`,
+  timestamps. Migración `20260615100000_notification_outbox`.
+- Nuevo `NotificationsConsumer`:
+  - Subscribe durable `notifications-email` a
+    `email.send_requested` con max_deliver=5, ack_wait=30s.
+  - Dedup contra outbox por `dedupKey` (default = envelope.id).
+  - Re-entregas DELIVERED/SUPPRESSED → ack idempotente.
+  - Suppression → status `SUPPRESSED` + term (no más reintentos).
+  - Provider OK → `DELIVERED` + ack.
+  - Provider error transitorio → `FAILED` + nak (retry vía
+    JetStream con back-off implícito).
+  - Auto-desactivado en `NODE_ENV=test` (tests llaman `handle()`
+    directamente sin NATS).
+- `NotificationsService.enqueueEmail(input)`:
+  - Publica `email.send_requested` cuando NATS healthy.
+  - Fallback inline a `sendEmail` cuando `isHealthy()=false` o
+    publish lanza. Devuelve `inlineFallback: true`.
+- 3 sites de `PublicIbeService` migrados: `dispatchConfirmation`,
+  `dispatchCancellation`, `resendConfirmation`. Dedup keys
+  determinísticos por código + sufijo `-resend-<ts>` para forzar
+  re-envío en resends explícitos.
+- Métrica `notification_consumer_events_total{template, outcome}`
+  con outcomes {delivered, suppressed, failed, error,
+  idempotent_ack}.
+- RUNBOOK §30 con configuración, métricas, auditoría SQL, dev/test
+  y los 3 sites migrados.
+
+**Por qué.**
+
+Sprint 11 §3. Un fallo transitorio de Postmark devolvía `503` al
+huésped a mitad del booking. Desacoplando vía NATS, los reintentos
+pasan a JetStream (back-off implícito vía `ack_wait`) y el huésped
+recibe `200 OK` siempre — el email se procesa en background.
+
+**Archivos clave.**
+
+- `packages/eventbus/src/subscriber.ts` (+ export en index)
+- `apps/api/src/eventbus/eventbus.service.ts`
+- `apps/api/src/notifications/notifications.consumer.ts` (+ .spec)
+- `apps/api/src/notifications/notifications.service.ts` (enqueueEmail)
+- `apps/api/src/notifications/notifications.service.spec.ts` (3 nuevos)
+- `apps/api/src/notifications/index.ts`
+- `apps/api/src/public-ibe/public-ibe.service.ts` (3 sites)
+- `apps/api/src/public-ibe/public-ibe.service.spec.ts` (mock)
+- `packages/db/prisma/schema.prisma` + migration
+  `20260615100000_notification_outbox`
+- `packages/db/src/index.ts`
+- `RUNBOOK.md` §30
+
+**Tests.**
+
+- `notifications.consumer.spec` × 8 (idempotent acks, happy path,
+  suppression via service/response, transient nak, exception nak,
+  envelopeId fallback dedup).
+- `notifications.service.spec` × 3 nuevos `enqueueEmail` (publish
+  ok, fallback NATS down, fallback publish throws).
+- `pnpm --filter @pms/api test` → **248/248 passed (41 suites)**.
+  Cherry-pick S10 W2 + W1 included.
+- Typecheck + lint verdes en `@pms/eventbus`, `@pms/db`, `@pms/api`.
+
+**Sigue pendiente.**
+
+- Migrar `PublicOnboardingService.start` (S9 W3) a `enqueueEmail`
+  tras merge de S9 W3.
+- Extender catálogo `email.send_requested` para aceptar
+  `onboarding_verify` template (S9 W3).
+- Dashboard Grafana del consumer (S11 W4).
+
+---
+
 ## 2026-05-20 · [SECURITY] · Sprint 11 W1 — Postmark webhook + email suppression list
 
 **Scope:** `apps/api/notifications`, `packages/db`, `RUNBOOK.md`

@@ -26,6 +26,7 @@ export {
   ChannelSyncKind,
   ChannelSyncStatus,
   EmailSuppressionReason,
+  NotificationOutboxStatus,
 } from '@prisma/client';
 
 export type {
@@ -56,6 +57,7 @@ export type {
   CancellationPolicy,
   ChannelSyncRun,
   EmailSuppression,
+  NotificationOutbox,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

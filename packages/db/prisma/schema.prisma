@@ -1149,3 +1149,40 @@ enum EmailSuppressionReason {
 
   @@map("email_suppression_reason")
 }
+
+// ============================================================================
+// Sprint 11 W2 — Notification outbox
+//
+// Auditoría + dedup del consumer NATS de emails. Una fila por evento
+// `email.send_requested` procesado. `dedupKey` = envelope.id (UUID v4 del
+// publisher); consumers re-entregados consultan esta tabla antes de
+// reenviar a Postmark.
+// ============================================================================
+
+model NotificationOutbox {
+  id          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dedupKey    String                @unique @map("dedup_key")
+  template    String
+  recipient   String                @db.Citext
+  locale      String                @default("es")
+  params      Json
+  status      NotificationOutboxStatus @default(PENDING)
+  attempts    Int                   @default(0)
+  lastError   String?               @map("last_error")
+  messageId   String?               @map("message_id")
+  createdAt   DateTime              @default(now()) @map("created_at")
+  deliveredAt DateTime?             @map("delivered_at")
+  failedAt    DateTime?             @map("failed_at")
+
+  @@index([status, createdAt])
+  @@map("notification_outbox")
+}
+
+enum NotificationOutboxStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  SUPPRESSED
+
+  @@map("notification_outbox_status")
+}
