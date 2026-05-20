@@ -80,6 +80,41 @@ Una o dos frases.
 
 ---
 
+## 2026-05-21 · [DOCS] · Sprint 12 plan — Operador productivity + cierre loose ends
+
+**Scope:** `docs/SPRINT-12-PLAN.md`
+**Branch:** `claude/s12-plan`
+**Refs:** este commit
+
+**Qué cambió.**
+
+- Nuevo `docs/SPRINT-12-PLAN.md` con 4 workstreams:
+  - **W1** — cierra pending S11 W2: migrar
+    `PublicOnboardingService.start` a `enqueueEmail` + extender
+    catálogo `email.send_requested` para `onboarding_verify`.
+  - **W2** — Reports export CSV desde `night_audit_snapshots`
+    (`daily_revenue`, `occupancy`, `tax_breakdown`,
+    `cash_movements`). Botón "Descargar CSV" en `/reports/[type]`.
+  - **W3** — Pre-pago full PaymentIntent on-session como alternativa
+    al SetupIntent. Selector tarifa flexible/no-reembolsable en IBE.
+  - **W4** — Calendar drag & drop check-in/check-out/cambio de
+    habitación. HTML5 DnD nativo, sin libs.
+- Cero migraciones, cero deps npm nuevas.
+- Orden sugerido: W1 → W2 → W3 → W4.
+
+**Por qué.**
+
+Producción ya tiene las 4 patas críticas (S9-S11). S12 prioriza
+productividad del operador del hotel y cierra la deuda de S11 W2
+(catálogo + onboarding). Reports PDF, memoria V1.1, 2º CM provider
+y loyalty quedan explícitamente fuera (Sprint 13+).
+
+**Archivos clave.**
+
+- `docs/SPRINT-12-PLAN.md`
+
+---
+
 ## 2026-05-18 · [SECURITY] · Sprint 9 W4 — Anti-abuso IBE (Turnstile + blocklist + rate-limit slug+ip)
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,
