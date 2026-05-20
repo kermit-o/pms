@@ -99,6 +99,10 @@ Una o dos frases.
 **Scope:** `apps/api/properties`, `apps/web-fo/properties`,
 `RUNBOOK.md`
 **Branch:** `claude/s10-w4-admin-ui-v2`
+## 2026-05-19 · [DOCS] · Sprint 11 plan — Production hardening pre-piloto
+
+**Scope:** `docs/SPRINT-11-PLAN.md`
+**Branch:** `claude/s11-plan`
 **Refs:** este commit
 
 **Qué cambió.**
@@ -561,6 +565,29 @@ workstreams (W1 Auto-Keycloak, W3 Cleanup nocturno, W4 Admin UI).
 
 - `pnpm --filter @pms/api test` → **221/221 passed (38 suites)**.
 - `pnpm --filter @pms/api lint` verde.
+- Nuevo `docs/SPRINT-11-PLAN.md` con cuatro workstreams enfocados a
+  endurecer el sistema antes del primer piloto:
+  - **W1 Postmark bounce/complaint webhook** — suppression list +
+    pre-check en sendEmail.
+  - **W2 NATS consumer de email** — desacopla envío del request,
+    outbox table con dedup + retry exponencial via JetStream.
+  - **W3 Stripe webhook hardening** — firma estricta (403 en
+    mismatch), métricas por tipo + log de eventos unknown.
+  - **W4 Grafana dashboards** — 4 JSON importables (IBE, CM,
+    payments, notifications).
+- Cero deps npm nuevas. Forward-only migrations
+  (`email_suppressions`, `notification_outbox`).
+- Orden sugerido: W1 → W3 → W2 → W4.
+
+**Por qué.**
+
+S10 cerró los gaps V1 del wizard + admin. S11 endurece lo que tiene
+que aguantar tráfico real sin reventar la reputación del dominio
+ni perder eventos.
+
+**Archivos clave.**
+
+- `docs/SPRINT-11-PLAN.md`
 
 ---
 
