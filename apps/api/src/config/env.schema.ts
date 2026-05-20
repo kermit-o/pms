@@ -15,6 +15,16 @@ export const envSchema = z.object({
   KEYCLOAK_REALM: z.string().min(1),
   KEYCLOAK_CLIENT_ID: z.string().min(1),
 
+  // Auto-Keycloak en onboarding (Sprint 10 W1). El wizard usa el admin
+  // REST API para crear realm + clients + admin user automáticamente. Si
+  // estas vars faltan, el wizard cae al modo "manual fallback" (V1 S9 W3).
+  KEYCLOAK_ADMIN_BASE_URL: z.string().url().optional(),
+  KEYCLOAK_ADMIN_CLIENT_ID: z.string().min(1).optional(),
+  KEYCLOAK_ADMIN_CLIENT_SECRET: z.string().min(1).optional(),
+  /** URI base donde el web-fo está expuesto. Para configurar el redirect-uri
+   *  del client pms-fo nuevo. Default = BACKOFFICE_PUBLIC_URL. */
+  KEYCLOAK_FO_REDIRECT_URI_BASE: z.string().url().optional(),
+
   // Secret HMAC para pairing tokens (login QR HSK). Si no se setea, en dev
   // se autogenera (proceso) y en prod la API se niega a arrancar — los
   // tokens emitidos por una replica no serian validos en otra.
