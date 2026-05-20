@@ -113,6 +113,8 @@ export interface CreateReservationInput {
   };
   specialRequests?: string;
   turnstileToken?: string;
+  /** Sprint 12 W3 — 'setup' (default) o 'charge' (pre-pago non-refundable). */
+  paymentMode?: 'setup' | 'charge';
 }
 
 export interface CreateReservationResult {
@@ -122,6 +124,7 @@ export interface CreateReservationResult {
   departure: string;
   totalAmount: string;
   currency: string;
+  paymentMode: 'setup' | 'charge';
 }
 
 export async function createReservation(
@@ -144,6 +147,35 @@ export async function publicSetupIntent(
     {
       method: 'POST',
       body: JSON.stringify({ lastName }),
+    },
+  );
+}
+
+export async function publicPaymentIntent(
+  slug: string,
+  code: string,
+  lastName: string,
+): Promise<{ clientSecret: string; publishableKey: string; paymentIntentId: string }> {
+  return fetchJson(
+    `/public/ibe/properties/${encodeURIComponent(slug)}/reservations/${encodeURIComponent(code)}/payment-intent`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ lastName }),
+    },
+  );
+}
+
+export async function publicConfirmPaymentIntent(
+  slug: string,
+  code: string,
+  lastName: string,
+  paymentIntentId: string,
+): Promise<{ status: string; brand: string | null; last4: string | null }> {
+  return fetchJson(
+    `/public/ibe/properties/${encodeURIComponent(slug)}/reservations/${encodeURIComponent(code)}/confirm-payment-intent`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ lastName, paymentIntentId }),
     },
   );
 }

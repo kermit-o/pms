@@ -314,6 +314,7 @@ export class PublicIbeService {
       departure: input.departure,
       totalAmount: reservationOut.totalAmount.toString(),
       currency: reservationOut.currency,
+      paymentMode: input.paymentMode,
     };
   }
 
@@ -342,6 +343,15 @@ export class PublicIbeService {
             select: { name: true, hoursBeforeArrival: true, penaltyPct: true },
           },
           roomType: { select: { code: true, name: true } },
+          folio: {
+            select: {
+              entries: {
+                where: { idempotencyKey: { startsWith: 'pi-charge-' } },
+                select: { id: true },
+                take: 1,
+              },
+            },
+          },
           guests: {
             where: { isPrimary: true },
             take: 1,
@@ -351,7 +361,8 @@ export class PublicIbeService {
       }),
     );
     if (!row) throw new NotFoundException('Reservation not found');
-    const cancellable = canCancel(row);
+    const prePaid = (row.folio?.entries?.length ?? 0) > 0;
+    const cancellable = !prePaid && canCancel(row);
     return {
       code: row.code,
       status: row.status,
@@ -364,9 +375,11 @@ export class PublicIbeService {
         : { code: '?', name: '?' },
       guest: row.guests[0]!.guest,
       cancellable,
-      cancellationPolicy: row.cancellationPolicy
-        ? `${row.cancellationPolicy.name}: gratis ${row.cancellationPolicy.hoursBeforeArrival}h antes de llegada; tras ese plazo penalización ${row.cancellationPolicy.penaltyPct}%`
-        : null,
+      cancellationPolicy: prePaid
+        ? 'Tarifa no reembolsable — pago efectuado en la reserva.'
+        : row.cancellationPolicy
+          ? `${row.cancellationPolicy.name}: gratis ${row.cancellationPolicy.hoursBeforeArrival}h antes de llegada; tras ese plazo penalización ${row.cancellationPolicy.penaltyPct}%`
+          : null,
     };
   }
 
@@ -408,6 +421,21 @@ export class PublicIbeService {
         existing.status === ReservationStatus.NO_SHOW
       ) {
         throw new ConflictException(`Reserva en estado ${existing.status} no cancelable`);
+      }
+      // Sprint 12 W3 — Pre-pago non-refundable: si existe un folio entry
+      // con idempotencyKey `pi-charge-*` la reserva fue cobrada upfront y
+      // no es cancelable desde el IBE público.
+      const prePaid = await tx.folioEntry.findFirst({
+        where: {
+          folio: { reservationId: existing.id },
+          idempotencyKey: { startsWith: 'pi-charge-' },
+        },
+        select: { id: true },
+      });
+      if (prePaid) {
+        throw new ConflictException(
+          'Tarifa no reembolsable — la reserva fue pre-pagada y no admite cancelación.',
+        );
       }
 
       const policy = existing.cancellationPolicy;
@@ -521,6 +549,43 @@ export class PublicIbeService {
       lastName,
     );
     return this.stripe.confirmSetupIntent(user, correlationId, reservationId);
+  }
+
+  /**
+   * Sprint 12 W3 — Pre-pago full PaymentIntent on-session. Idempotente
+   * por reservationId (Stripe-native). El huésped confirma vía Stripe
+   * Elements con `confirmPayment()` en lugar de `confirmSetup()`.
+   */
+  async createPaymentIntent(
+    slug: string,
+    code: string,
+    lastName: string,
+  ): Promise<{ clientSecret: string; publishableKey: string; paymentIntentId: string }> {
+    const { reservationId, user, correlationId } = await this.resolvePublicReservation(
+      slug,
+      code,
+      lastName,
+    );
+    return this.stripe.createPaymentIntent(user, correlationId, reservationId);
+  }
+
+  /**
+   * Fallback al webhook tras `stripe.confirmPayment()` en el browser:
+   * verifica el PI desde el server y marca la reserva SECURED + postea
+   * el cobro en el folio idempotentemente.
+   */
+  async confirmPaymentIntent(
+    slug: string,
+    code: string,
+    lastName: string,
+    paymentIntentId: string,
+  ): Promise<{ status: string; brand: string | null; last4: string | null }> {
+    const { reservationId, user, correlationId } = await this.resolvePublicReservation(
+      slug,
+      code,
+      lastName,
+    );
+    return this.stripe.confirmPaymentIntent(user, correlationId, reservationId, paymentIntentId);
   }
 
   /**

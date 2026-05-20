@@ -3,12 +3,13 @@ import { notFound } from 'next/navigation';
 import { getReservation, IbeApiError } from '@/lib/api';
 import { resolveLocale, t } from '@/lib/i18n';
 import { StripeCardCapture } from './stripe-card-capture';
+import { StripeChargePayment } from './stripe-charge-payment';
 
 export const dynamic = 'force-dynamic';
 
 interface Props {
   params: Promise<{ slug: string; code: string }>;
-  searchParams: Promise<{ lang?: string; lastName?: string }>;
+  searchParams: Promise<{ lang?: string; lastName?: string; paymentMode?: string }>;
 }
 
 export default async function ConfirmationPage({ params, searchParams }: Props) {
@@ -16,6 +17,7 @@ export default async function ConfirmationPage({ params, searchParams }: Props) 
   const sp = await searchParams;
   const lang = resolveLocale(sp);
   const lastName = sp.lastName ?? '';
+  const paymentMode: 'setup' | 'charge' = sp.paymentMode === 'charge' ? 'charge' : 'setup';
 
   if (!lastName) {
     notFound();
@@ -80,7 +82,29 @@ export default async function ConfirmationPage({ params, searchParams }: Props) 
           <Stat label={lang === 'es' ? 'Total' : 'Total'} value={`${view.totalAmount} ${view.currency}`} />
         </section>
 
-        {view.status === 'CONFIRMED' && (
+        {view.status === 'CONFIRMED' && paymentMode === 'charge' && (
+          <section className="mt-6 rounded-2xl bg-amber-50 p-5 shadow-sm ring-1 ring-amber-200">
+            <h3 className="text-sm font-semibold text-amber-900">
+              {lang === 'es' ? 'Paga ahora (tarifa no reembolsable)' : 'Pay now (non-refundable rate)'}
+            </h3>
+            <p className="mt-1 text-xs text-amber-900/80">
+              {lang === 'es'
+                ? `Importe a cobrar: ${view.totalAmount} ${view.currency}. Stripe procesa el cobro directamente — el PAN no pasa por nuestros servidores. La reserva queda confirmada y no admite cancelación tras el pago.`
+                : `Amount to charge: ${view.totalAmount} ${view.currency}. Stripe processes the payment directly — the PAN never touches our servers. The booking becomes non-refundable after charge.`}
+            </p>
+            <div className="mt-3">
+              <StripeChargePayment
+                slug={slug}
+                code={view.code}
+                lastName={lastName}
+                lang={lang}
+                amount={view.totalAmount}
+                currency={view.currency}
+              />
+            </div>
+          </section>
+        )}
+        {view.status === 'CONFIRMED' && paymentMode !== 'charge' && (
           <section className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100">
             <h3 className="text-sm font-semibold text-aubergine-700">
               {lang === 'es' ? 'Asegura tu reserva (opcional)' : 'Secure your booking (optional)'}

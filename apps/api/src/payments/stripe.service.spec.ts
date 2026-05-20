@@ -242,12 +242,24 @@ describe('StripeService.handleWebhook (S11 W3 hardening)', () => {
   it('returns outcome=unknown_type for events we do not handle', async () => {
     const { service, reservationUpdateMany } = buildServiceForWebhook();
     stripeMock.webhooks.constructEvent.mockReturnValueOnce({
-      type: 'payment_intent.succeeded',
+      type: 'customer.created',
       created: Math.floor(Date.now() / 1000),
       data: { object: {} },
     });
     const out = await service.handleWebhook(Buffer.from('{}'), 'sig');
     expect(out.outcome).toBe('unknown_type');
+    expect(reservationUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('payment_intent.succeeded with kind != reservation_charge is a noop', async () => {
+    const { service, reservationUpdateMany } = buildServiceForWebhook();
+    stripeMock.webhooks.constructEvent.mockReturnValueOnce({
+      type: 'payment_intent.succeeded',
+      created: Math.floor(Date.now() / 1000),
+      data: { object: { id: 'pi_1', metadata: { kind: 'no_show_charge' } } },
+    });
+    const out = await service.handleWebhook(Buffer.from('{}'), 'sig');
+    expect(out.outcome).toBe('handled');
     expect(reservationUpdateMany).not.toHaveBeenCalled();
   });
 
@@ -261,5 +273,157 @@ describe('StripeService.handleWebhook (S11 W3 hardening)', () => {
     const out = await service.handleWebhook(Buffer.from('{}'), 'sig');
     expect(out.outcome).toBe('handled');
     expect(reservationUpdateMany).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sprint 12 W3 — Pre-pago full PaymentIntent on-session
+// ---------------------------------------------------------------------------
+
+function buildServiceForPI(opts: { reservation?: unknown; folio?: unknown; existingEntry?: unknown } = {}) {
+  const reservationFindFirst = vi.fn().mockResolvedValue(
+    opts.reservation ?? {
+      id: RES_ID,
+      code: 'BCN-PI',
+      totalAmount: '120.00',
+      currency: 'EUR',
+      stripeCustomerId: 'cus_pi',
+      guests: [{ guest: { firstName: 'A', lastName: 'B', email: 'a@b.test', phone: null } }],
+    },
+  );
+  const reservationUpdate = vi.fn().mockResolvedValue({});
+  const reservationUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+  const folioFindFirst = vi.fn().mockResolvedValue(
+    opts.folio ?? { id: 'f-1', balance: '120.00', currency: 'EUR', status: 'OPEN' },
+  );
+  const folioEntryFindFirst = vi.fn().mockResolvedValue(opts.existingEntry ?? null);
+  const transactionFn = vi.fn(async (cb: (tx: unknown) => unknown) =>
+    cb({
+      folioEntry: { create: vi.fn().mockResolvedValue({ id: 'fe-new' }) },
+      folio: { update: vi.fn().mockResolvedValue({}) },
+    }),
+  );
+  const prisma = {
+    withTenant: vi.fn(async (_ctx: unknown, fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        reservation: { findFirst: reservationFindFirst, update: reservationUpdate },
+      }),
+    ),
+    reservation: { updateMany: reservationUpdateMany },
+    folio: { findFirst: folioFindFirst },
+    folioEntry: { findFirst: folioEntryFindFirst },
+    $transaction: transactionFn,
+  };
+  const folio = { addCharge: vi.fn() };
+  const config = {
+    get: vi.fn((key: string) => {
+      if (key === 'STRIPE_SECRET_KEY') return 'sk_test_x';
+      if (key === 'STRIPE_PUBLISHABLE_KEY') return 'pk_test_x';
+      if (key === 'STRIPE_WEBHOOK_SECRET') return 'whsec_test_x';
+      return undefined;
+    }),
+  };
+  return {
+    service: new StripeService(prisma as never, folio as never, config as never),
+    prisma,
+    reservationUpdateMany,
+    folioEntryFindFirst,
+    transactionFn,
+  };
+}
+
+describe('StripeService.createPaymentIntent (S12 W3)', () => {
+  it('creates PI with totalAmount * 100 cents and idempotencyKey', async () => {
+    const { service } = buildServiceForPI();
+    stripeMock.paymentIntents.create.mockResolvedValueOnce({
+      id: 'pi_new',
+      client_secret: 'pi_new_secret_x',
+    });
+    const out = await service.createPaymentIntent(user, 'cid', RES_ID);
+    expect(out.clientSecret).toBe('pi_new_secret_x');
+    expect(out.publishableKey).toBe('pk_test_x');
+    expect(out.paymentIntentId).toBe('pi_new');
+    expect(stripeMock.paymentIntents.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 12000,
+        currency: 'eur',
+        customer: 'cus_pi',
+        payment_method_types: ['card'],
+        metadata: expect.objectContaining({ reservationId: RES_ID, kind: 'reservation_charge' }),
+      }),
+      expect.objectContaining({ idempotencyKey: `pi-charge-${RES_ID}` }),
+    );
+  });
+
+  it('rejects reservations with no totalAmount', async () => {
+    const { service } = buildServiceForPI({
+      reservation: {
+        id: RES_ID,
+        code: 'X',
+        totalAmount: '0.00',
+        currency: 'EUR',
+        stripeCustomerId: 'cus_x',
+        guests: [],
+      },
+    });
+    await expect(service.createPaymentIntent(user, 'cid', RES_ID)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+});
+
+describe('StripeService.handleWebhook payment_intent.succeeded (S12 W3)', () => {
+  it('marks reservation SECURED + posts folio PAYMENT entry idempotently', async () => {
+    const { service, reservationUpdateMany, transactionFn } = buildServiceForPI();
+    stripeMock.webhooks.constructEvent.mockReturnValueOnce({
+      type: 'payment_intent.succeeded',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'pi_ok',
+          amount: 12000,
+          payment_method: 'pm_card_visa',
+          latest_charge: 'ch_ok',
+          metadata: {
+            kind: 'reservation_charge',
+            reservationId: RES_ID,
+            tenantId: '11111111-1111-1111-1111-111111111111',
+          },
+        },
+      },
+    });
+    stripeMock.paymentMethods.retrieve.mockResolvedValueOnce({
+      card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2030 },
+    });
+    const out = await service.handleWebhook(Buffer.from('{}'), 'sig');
+    expect(out.outcome).toBe('handled');
+    expect(reservationUpdateMany).toHaveBeenCalledOnce();
+    expect(transactionFn).toHaveBeenCalledOnce();
+  });
+
+  it('skips folio insert when an entry with idempotencyKey already exists', async () => {
+    const { service, transactionFn } = buildServiceForPI({
+      existingEntry: { id: 'fe-dup' },
+    });
+    stripeMock.webhooks.constructEvent.mockReturnValueOnce({
+      type: 'payment_intent.succeeded',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'pi_dup',
+          amount: 12000,
+          payment_method: 'pm_x',
+          metadata: {
+            kind: 'reservation_charge',
+            reservationId: RES_ID,
+            tenantId: '11111111-1111-1111-1111-111111111111',
+          },
+        },
+      },
+    });
+    stripeMock.paymentMethods.retrieve.mockResolvedValueOnce({ card: null });
+    const out = await service.handleWebhook(Buffer.from('{}'), 'sig');
+    expect(out.outcome).toBe('handled');
+    expect(transactionFn).not.toHaveBeenCalled();
   });
 });

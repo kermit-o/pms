@@ -20,6 +20,10 @@ const ChargeNoShowDto = z.object({
   description: z.string().min(1).max(200).optional(),
 });
 
+const ConfirmPaymentIntentDto = z.object({
+  paymentIntentId: z.string().min(3).max(120),
+});
+
 const FRONT_DESK_ROLES = ['tenant_admin', 'front_desk'] as const;
 
 @Controller('payments/stripe')
@@ -52,6 +56,38 @@ export class StripeController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.stripe.confirmSetupIntent(user, correlationIdOf(req), id);
+  }
+
+  /**
+   * Sprint 12 W3 — Pre-pago on-session. Crea (o reusa idempotentemente)
+   * un PaymentIntent contra la reserva. La web monta Stripe Elements con
+   * el client_secret devuelto y llama a `confirmPayment()`.
+   */
+  @Post('reservations/:id/payment-intent')
+  @Roles(...FRONT_DESK_ROLES)
+  async createPaymentIntent(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.stripe.createPaymentIntent(user, correlationIdOf(req), id);
+  }
+
+  /**
+   * Fallback al webhook (igual que SetupIntent): el frontend pasa el
+   * `paymentIntentId` tras `confirmPayment()`, el server lo lee de
+   * Stripe y posta el cobro idempotentemente.
+   */
+  @Post('reservations/:id/confirm-payment-intent')
+  @Roles(...FRONT_DESK_ROLES)
+  async confirmPaymentIntent(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = ConfirmPaymentIntentDto.parse(body);
+    return this.stripe.confirmPaymentIntent(user, correlationIdOf(req), id, input.paymentIntentId);
   }
 
   /**

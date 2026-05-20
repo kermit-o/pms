@@ -100,11 +100,16 @@ export default async function AvailabilityPage({ params, searchParams }: Props) 
                 </div>
 
                 {r.available > 0 && (
-                  <BookButton
+                  <RateOptions
                     slug={slug}
                     lang={lang}
-                    label={t(lang, 'avail.book')}
-                    href={`/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${r.roomTypeId}&lang=${lang}`}
+                    arrival={arrival}
+                    departure={departure}
+                    adults={adults}
+                    children={children}
+                    roomTypeId={r.roomTypeId}
+                    totalForStay={r.totalForStay}
+                    currency={r.currency}
                   />
                 )}
               </li>
@@ -120,22 +125,54 @@ export default async function AvailabilityPage({ params, searchParams }: Props) 
   );
 }
 
-function BookButton({
-  href,
-  label,
+/**
+ * Sprint 12 W3 — dos tarifas por roomType:
+ *  - Flexible (default): tarjeta como garantía (SetupIntent), paga al llegar.
+ *  - No reembolsable -10%: pre-pago full upfront (PaymentIntent on-session).
+ */
+function RateOptions({
+  slug,
+  lang,
+  arrival,
+  departure,
+  adults,
+  children,
+  roomTypeId,
+  totalForStay,
+  currency,
 }: {
   slug: string;
   lang: 'es' | 'en';
-  href: string;
-  label: string;
+  arrival: string;
+  departure: string;
+  adults: number;
+  children: number;
+  roomTypeId: string;
+  totalForStay: string;
+  currency: string;
 }) {
+  const baseHref = `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}`;
+  const nonRefundable = (Number(totalForStay) * 0.9).toFixed(2);
   return (
-    <div className="mt-3">
+    <div className="mt-3 grid gap-2 sm:grid-cols-2">
       <Link
-        href={href}
-        className="inline-block rounded-xl bg-aubergine-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-aubergine-800"
+        href={`${baseHref}&paymentMode=setup`}
+        className="block rounded-xl bg-aubergine-700 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-aubergine-800"
       >
-        {label}
+        {lang === 'es' ? 'Tarifa flexible' : 'Flexible rate'}
+        <span className="block text-[10px] font-normal opacity-90">
+          {lang === 'es' ? 'Paga al llegar · tarjeta como garantía' : 'Pay on arrival · card guarantee'}
+        </span>
+      </Link>
+      <Link
+        href={`${baseHref}&paymentMode=charge`}
+        className="block rounded-xl bg-amber-700 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-amber-800"
+      >
+        {lang === 'es' ? 'No reembolsable −10%' : 'Non-refundable −10%'}
+        <span className="block text-[10px] font-normal opacity-90">
+          {Number(nonRefundable).toFixed(0)} {currency} ·{' '}
+          {lang === 'es' ? 'pago inmediato' : 'pay now'}
+        </span>
       </Link>
     </div>
   );

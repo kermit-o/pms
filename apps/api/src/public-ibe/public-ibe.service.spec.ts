@@ -144,6 +144,7 @@ describe('PublicIbeService', () => {
           gdprConsent: false as never,
           marketingConsent: false,
         },
+        paymentMode: 'setup',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -162,6 +163,7 @@ describe('PublicIbeService', () => {
         gdprConsent: true,
         marketingConsent: true,
       },
+      paymentMode: 'setup',
     });
     expect(out.code).toMatch(/HTL-/);
     expect(tx.guest.create).toHaveBeenCalledOnce();

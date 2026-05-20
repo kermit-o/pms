@@ -34,6 +34,8 @@ export interface PublicReservationCreateResult {
   departure: string;
   totalAmount: string;
   currency: string;
+  /** 'setup' = card guarantee; 'charge' = pre-pago non-refundable. */
+  paymentMode: 'setup' | 'charge';
 }
 
 export interface PublicReservationView {

@@ -40,6 +40,9 @@ export class StripeService {
   // Sprint 11 W3: hardening + observabilidad del webhook de Stripe.
   private readonly webhookEvents: Counter;
   private readonly webhookEventAge: Histogram;
+  // Sentinel actor para escrituras desde webhook sin AuthUser
+  // (mismo UUID que PublicIbeService/PublicOnboardingService).
+  private readonly publicActorUuid = '00000000-0000-0000-0000-000000000000';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -244,8 +247,146 @@ export class StripeService {
   }
 
   /**
-   * Webhook handler. Solo procesamos setup_intent.succeeded por ahora —
-   * marca la reserva SECURED y guarda los datos visibles de la tarjeta.
+   * Sprint 12 W3 — Pre-pago on-session. Crea (o reusa) un PaymentIntent
+   * para que el huésped confirme y pague upfront desde Stripe Elements.
+   *
+   * - Reusa el `Customer` existente; si no hay, lo crea con los datos del
+   *   huésped primario igual que `createSetupIntent`.
+   * - Idempotencia: `idempotencyKey = pi-charge-<reservationId>`. Stripe
+   *   cachea la primera respuesta 24h → si el cliente reabre Elements,
+   *   recibe el mismo `clientSecret` y la misma PI.
+   * - Metadata `{ reservationId, tenantId, kind: 'reservation_charge' }`
+   *   permite al webhook `payment_intent.succeeded` mapear de vuelta.
+   * - El monto y la moneda vienen del `reservation.totalAmount/currency`
+   *   — no se aceptan inputs del cliente para evitar manipulación.
+   */
+  async createPaymentIntent(
+    user: AuthUser,
+    correlationId: string,
+    reservationId: string,
+  ): Promise<{ clientSecret: string; publishableKey: string; paymentIntentId: string }> {
+    const stripe = this.requireStripe();
+    const pk = this.publishableKey;
+    if (!pk) {
+      throw new ServiceUnavailableException('STRIPE_PUBLISHABLE_KEY no configurada');
+    }
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId };
+    const reservation = await this.prisma.withTenant(ctx, (tx) =>
+      tx.reservation.findFirst({
+        where: { id: reservationId, deletedAt: null },
+        select: {
+          id: true,
+          code: true,
+          totalAmount: true,
+          currency: true,
+          stripeCustomerId: true,
+          guests: {
+            where: { isPrimary: true },
+            take: 1,
+            select: {
+              guest: { select: { firstName: true, lastName: true, email: true, phone: true } },
+            },
+          },
+        },
+      }),
+    );
+    if (!reservation) throw new NotFoundException(`Reservation ${reservationId} not found`);
+
+    const amount = Number(reservation.totalAmount);
+    if (!(amount > 0)) {
+      throw new BadRequestException('Reserva sin importe a cobrar');
+    }
+    const amountCents = Math.round(amount * 100);
+    const currency = reservation.currency.toLowerCase();
+    const primary = reservation.guests[0]?.guest;
+
+    let customerId = reservation.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        name: primary ? `${primary.firstName} ${primary.lastName}`.trim() : reservation.code,
+        email: primary?.email ?? undefined,
+        phone: primary?.phone ?? undefined,
+        metadata: {
+          reservationId: reservation.id,
+          reservationCode: reservation.code,
+          tenantId: user.tenantId,
+        },
+      });
+      customerId = customer.id;
+      await this.prisma.withTenant(ctx, (tx) =>
+        tx.reservation.update({
+          where: { id: reservation.id },
+          data: { stripeCustomerId: customerId },
+        }),
+      );
+    }
+
+    const pi = await stripe.paymentIntents.create(
+      {
+        amount: amountCents,
+        currency,
+        customer: customerId,
+        payment_method_types: ['card'],
+        capture_method: 'automatic',
+        setup_future_usage: 'off_session',
+        description: `Reserva ${reservation.code}`,
+        metadata: {
+          reservationId: reservation.id,
+          reservationCode: reservation.code,
+          tenantId: user.tenantId,
+          kind: 'reservation_charge',
+        },
+      },
+      { idempotencyKey: `pi-charge-${reservation.id}` },
+    );
+    if (!pi.client_secret) {
+      throw new BadRequestException('Stripe no devolvió client_secret');
+    }
+    return { clientSecret: pi.client_secret, publishableKey: pk, paymentIntentId: pi.id };
+  }
+
+  /**
+   * Confirmación lado cliente del PaymentIntent — espejo de
+   * `confirmSetupIntent`. Tras `stripe.confirmPayment()` en el browser,
+   * el frontend llama aquí para que el server lea el PI desde Stripe y
+   * marque la reserva SECURED + postee el cobro en el folio
+   * idempotentemente. El webhook sigue siendo el path autoritativo.
+   */
+  async confirmPaymentIntent(
+    user: AuthUser,
+    correlationId: string,
+    reservationId: string,
+    paymentIntentId: string,
+  ): Promise<{ status: GuaranteeStatus; brand: string | null; last4: string | null }> {
+    const stripe = this.requireStripe();
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId };
+    const reservation = await this.prisma.withTenant(ctx, (tx) =>
+      tx.reservation.findFirst({
+        where: { id: reservationId, deletedAt: null },
+        select: { id: true, guaranteeStatus: true, tenantId: true },
+      }),
+    );
+    if (!reservation) throw new NotFoundException(`Reservation ${reservationId} not found`);
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+    if (pi.metadata?.reservationId !== reservation.id) {
+      throw new BadRequestException('paymentIntent no pertenece a esta reserva');
+    }
+    if (pi.status !== 'succeeded') {
+      return { status: reservation.guaranteeStatus, brand: null, last4: null };
+    }
+    await this.applyPaymentIntentSucceeded(pi, stripe);
+    const last4 = (pi as { charges?: { data?: Array<{ payment_method_details?: { card?: { last4?: string; brand?: string } } }> } })
+      .charges?.data?.[0]?.payment_method_details?.card;
+    return {
+      status: GuaranteeStatus.SECURED,
+      brand: last4?.brand ?? null,
+      last4: last4?.last4 ?? null,
+    };
+  }
+
+  /**
+   * Webhook handler. Procesa setup_intent.succeeded (Fase 1 garantía) y
+   * payment_intent.succeeded (Fase 2 + Sprint 12 W3 pre-pago).
    */
   async handleWebhook(rawBody: Buffer, signature: string | undefined): Promise<{ ok: true; type: string; outcome: string }> {
     const stripe = this.requireStripe();
@@ -276,6 +417,9 @@ export class StripeService {
     try {
       if (event.type === 'setup_intent.succeeded') {
         await this.handleSetupIntentSucceeded(event, stripe);
+        outcome = 'handled';
+      } else if (event.type === 'payment_intent.succeeded') {
+        await this.handlePaymentIntentSucceededEvent(event, stripe);
         outcome = 'handled';
       } else {
         // Log estructurado para descubrir tipos nuevos sin perder visibilidad.
@@ -327,6 +471,131 @@ export class StripeService {
       },
     });
     this.log.log(`SetupIntent ${si.id} succeeded → reservation ${reservationId} SECURED`);
+  }
+
+  /**
+   * Sprint 12 W3 — payment_intent.succeeded webhook. El PI fue creado por
+   * `createPaymentIntent` (pre-pago on-session) con metadata.kind =
+   * `reservation_charge`. Marca SECURED + postea cobro al folio
+   * idempotentemente.
+   */
+  private async handlePaymentIntentSucceededEvent(
+    event: Stripe.Event,
+    stripe: Stripe,
+  ): Promise<void> {
+    const pi = event.data.object as Stripe.PaymentIntent;
+    if (pi.metadata?.kind !== 'reservation_charge') {
+      // Fase 2 no-show genera PaymentIntents con kind=no_show_charge:
+      // esos ya se procesan inline en `chargeNoShow`, ignorar aquí.
+      this.log.log(`PaymentIntent ${pi.id} ignored (kind=${pi.metadata?.kind ?? 'none'})`);
+      return;
+    }
+    await this.applyPaymentIntentSucceeded(pi, stripe);
+  }
+
+  /**
+   * Idempotente: marca la reserva SECURED, postea el folio entry de pago.
+   * Reusa el mismo path tanto desde el webhook como desde el fallback
+   * `confirmPaymentIntent`.
+   */
+  private async applyPaymentIntentSucceeded(
+    pi: Stripe.PaymentIntent,
+    stripe: Stripe,
+  ): Promise<void> {
+    const reservationId = pi.metadata?.reservationId;
+    const tenantId = pi.metadata?.tenantId;
+    if (!reservationId || !tenantId) {
+      this.log.warn(`PaymentIntent ${pi.id} sin metadata.reservationId/tenantId`);
+      return;
+    }
+    const paymentMethodId =
+      typeof pi.payment_method === 'string' ? pi.payment_method : pi.payment_method?.id;
+    let card: Stripe.PaymentMethod.Card | null = null;
+    if (paymentMethodId) {
+      try {
+        const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+        card = pm.card ?? null;
+      } catch (err) {
+        this.log.warn(`paymentMethods.retrieve ${paymentMethodId} failed: ${(err as Error).message}`);
+      }
+    }
+
+    // 1) Reserva → SECURED + datos de tarjeta. El `updateMany` con tenant
+    //    embebido es el patrón que ya usa setup_intent.succeeded.
+    await this.prisma.reservation.updateMany({
+      where: { id: reservationId, tenantId },
+      data: {
+        stripePaymentMethodId: paymentMethodId ?? null,
+        stripeCardBrand: card?.brand ?? null,
+        stripeCardLast4: card?.last4 ?? null,
+        stripeCardExpMonth: card?.exp_month ?? null,
+        stripeCardExpYear: card?.exp_year ?? null,
+        guaranteeType: GuaranteeType.CARD_ON_FILE,
+        guaranteeStatus: GuaranteeStatus.SECURED,
+        guaranteeSecuredAt: new Date(),
+        guaranteeReference: card?.last4 ? `**** ${card.last4} (${card.brand})` : 'stripe',
+        guaranteeDeadline: null,
+      },
+    });
+
+    // 2) Folio entry PAYMENT idempotente por idempotencyKey = pi-charge-<reservationId>.
+    const folio = await this.prisma.folio.findFirst({
+      where: { reservation: { id: reservationId, tenantId } },
+      select: { id: true, balance: true, currency: true, status: true },
+    });
+    if (!folio) {
+      this.log.warn(`Reservation ${reservationId} sin folio asociado — no se postea pago.`);
+      return;
+    }
+    const idempotencyKey = `pi-charge-${reservationId}`;
+    const existing = await this.prisma.folioEntry.findFirst({
+      where: { folioId: folio.id, idempotencyKey },
+      select: { id: true },
+    });
+    if (existing) {
+      this.log.log(`PaymentIntent ${pi.id} dedup folio entry ${existing.id}`);
+      return;
+    }
+    if (folio.status !== FolioStatus.OPEN) {
+      this.log.warn(`Folio ${folio.id} cerrado — no se postea pago Stripe ${pi.id}.`);
+      return;
+    }
+    const amount = new Prisma.Decimal(pi.amount).div(100);
+    const signedAmount = amount.neg();
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const entry = await tx.folioEntry.create({
+          data: {
+            tenantId,
+            folioId: folio.id,
+            type: 'PAYMENT',
+            description: `Pre-pago Stripe ${card?.last4 ? `**** ${card.last4}` : ''}`.trim(),
+            amount: signedAmount,
+            currency: folio.currency,
+            postedBy: this.publicActorUuid,
+            idempotencyKey,
+            attributes: {
+              stripePaymentIntentId: pi.id,
+              stripeChargeId: pi.latest_charge as string | null,
+              kind: 'reservation_charge',
+            } as Prisma.InputJsonValue,
+          },
+          select: { id: true },
+        });
+        await tx.folio.update({
+          where: { id: folio.id },
+          data: { balance: new Prisma.Decimal(folio.balance).plus(signedAmount) },
+        });
+        this.log.log(`PaymentIntent ${pi.id} succeeded → folio entry ${entry.id} ${pi.amount}`);
+      });
+    } catch (err) {
+      // Si choca con uniq (folioId, idempotencyKey), otro path ya lo posteó.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        this.log.log(`PaymentIntent ${pi.id} carrera con webhook — dedup ok`);
+        return;
+      }
+      throw err;
+    }
   }
 
   /**

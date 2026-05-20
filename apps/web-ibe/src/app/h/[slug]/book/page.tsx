@@ -17,6 +17,7 @@ interface Props {
     roomTypeId?: string;
     lang?: string;
     error?: string;
+    paymentMode?: string;
   }>;
 }
 
@@ -30,6 +31,7 @@ export default async function BookPage({ params, searchParams }: Props) {
   const adults = Number(sp.adults ?? 2);
   const children = Number(sp.children ?? 0);
   const roomTypeId = sp.roomTypeId ?? '';
+  const paymentMode: 'setup' | 'charge' = sp.paymentMode === 'charge' ? 'charge' : 'setup';
 
   if (!arrival || !departure || !roomTypeId) {
     redirect(`/h/${encodeURIComponent(slug)}?lang=${lang}`);
@@ -49,17 +51,17 @@ export default async function BookPage({ params, searchParams }: Props) {
 
     if (!firstName || !lastName || !email) {
       redirect(
-        `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&error=fields`,
+        `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&paymentMode=${paymentMode}&error=fields`,
       );
     }
     if (!gdpr) {
       redirect(
-        `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&error=gdpr`,
+        `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&paymentMode=${paymentMode}&error=gdpr`,
       );
     }
     if (TURNSTILE_SITE_KEY && !turnstileToken) {
       redirect(
-        `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&error=captcha`,
+        `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&paymentMode=${paymentMode}&error=captcha`,
       );
     }
 
@@ -80,13 +82,16 @@ export default async function BookPage({ params, searchParams }: Props) {
         },
         specialRequests,
         turnstileToken,
+        paymentMode,
       });
-      redirect(`/h/${slug}/book/${out.code}?lang=${lang}&lastName=${encodeURIComponent(lastName)}`);
+      redirect(
+        `/h/${slug}/book/${out.code}?lang=${lang}&lastName=${encodeURIComponent(lastName)}&paymentMode=${out.paymentMode}`,
+      );
     } catch (err) {
       if (err instanceof IbeApiError) {
         const reason = err.status === 403 ? 'captcha' : err.status === 429 ? 'rate' : 'api';
         redirect(
-          `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&error=${reason}`,
+          `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}&paymentMode=${paymentMode}&error=${reason}`,
         );
       }
       throw err;

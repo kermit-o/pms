@@ -32,6 +32,11 @@ export const CreatePublicReservationDto = z.object({
   }),
   specialRequests: z.string().max(2000).optional(),
   turnstileToken: z.string().max(2048).optional(),
+  // Sprint 12 W3 — Pre-pago on-session.
+  // - 'setup': tarjeta como garantía (flow S8). Cobro al check-in / extras.
+  // - 'charge': pre-pago full upfront. La reserva queda NO reembolsable
+  //   y `cancel` devuelve 409 si se invoca con penalty < 100%.
+  paymentMode: z.enum(['setup', 'charge']).default('setup'),
 });
 export type CreatePublicReservationDto = z.infer<typeof CreatePublicReservationDto>;
 
@@ -51,6 +56,17 @@ export const PublicSetupIntentDto = z.object({
   lastName: z.string().min(1).max(80),
 });
 export type PublicSetupIntentDto = z.infer<typeof PublicSetupIntentDto>;
+
+export const PublicPaymentIntentDto = z.object({
+  lastName: z.string().min(1).max(80),
+});
+export type PublicPaymentIntentDto = z.infer<typeof PublicPaymentIntentDto>;
+
+export const PublicConfirmPaymentIntentDto = z.object({
+  lastName: z.string().min(1).max(80),
+  paymentIntentId: z.string().min(3).max(120),
+});
+export type PublicConfirmPaymentIntentDto = z.infer<typeof PublicConfirmPaymentIntentDto>;
 
 export const ResendConfirmationDto = z.object({
   lastName: z.string().min(1).max(80),

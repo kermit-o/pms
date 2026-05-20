@@ -13,6 +13,8 @@ import {
   CancelPublicReservationDto,
   CreatePublicReservationDto,
   LookupReservationQuery,
+  PublicConfirmPaymentIntentDto,
+  PublicPaymentIntentDto,
   PublicSetupIntentDto,
   ResendConfirmationDto,
 } from './public-ibe.dto';
@@ -99,6 +101,28 @@ export class PublicIbeController {
   ) {
     const input = PublicSetupIntentDto.parse(body);
     return this.service.confirmSetupIntent(slug, code, input.lastName);
+  }
+
+  @Post('properties/:slug/reservations/:code/payment-intent')
+  @RateLimit({ max: 10, windowMs: 60_000 })
+  async paymentIntent(
+    @Param('slug') slug: string,
+    @Param('code') code: string,
+    @Body() body: unknown,
+  ) {
+    const input = PublicPaymentIntentDto.parse(body);
+    return this.service.createPaymentIntent(slug, code, input.lastName);
+  }
+
+  @Post('properties/:slug/reservations/:code/confirm-payment-intent')
+  @RateLimit({ max: 10, windowMs: 60_000 })
+  async confirmPaymentIntent(
+    @Param('slug') slug: string,
+    @Param('code') code: string,
+    @Body() body: unknown,
+  ) {
+    const input = PublicConfirmPaymentIntentDto.parse(body);
+    return this.service.confirmPaymentIntent(slug, code, input.lastName, input.paymentIntentId);
   }
 
   @Post('properties/:slug/reservations/:code/resend-confirmation')

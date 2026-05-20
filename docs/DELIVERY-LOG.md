@@ -80,6 +80,90 @@ Una o dos frases.
 
 ---
 
+## 2026-05-20 · [INTEGRATION] · Sprint 12 W3 — Pre-pago full PaymentIntent on-session
+
+**Scope:** `apps/api/payments`, `apps/api/public-ibe`, `apps/web-ibe`
+**Branch:** `claude/s12-w3-prepago-paymentintent`
+**Refs:** `docs/SPRINT-12-PLAN.md §4` · Sprint 11 W3 (webhook hardening) extiende
+
+**Qué cambió.**
+
+- `StripeService.createPaymentIntent(user, correlationId, reservationId)` —
+  crea un PI con `payment_method_types=['card']`, `setup_future_usage=
+  off_session`, idempotencyKey `pi-charge-<reservationId>` (Stripe-native).
+  Reusa o crea `Customer` con datos del primary guest, igual que el flow
+  SetupIntent. Devuelve `{ clientSecret, publishableKey, paymentIntentId }`.
+- `StripeService.confirmPaymentIntent(user, correlationId, reservationId,
+  paymentIntentId)` — fallback al webhook: tras `stripe.confirmPayment()`
+  en el browser, el server lee el PI desde Stripe y marca SECURED +
+  postea el cobro idempotentemente.
+- Webhook `payment_intent.succeeded`: nuevo handler `handlePaymentIntent
+  SucceededEvent`. Sólo procesa PIs con `metadata.kind=reservation_charge`
+  (los de Fase 2 `no_show_charge` ya se procesan inline en `chargeNoShow`).
+  Idempotente vía `(folioId, idempotencyKey=pi-charge-<reservationId>)` —
+  carrera webhook ↔ confirm fallback se dedup en P2002.
+- `CreatePublicReservationDto.paymentMode: 'setup' | 'charge'` (default
+  `setup`). El service propaga al `PublicReservationCreateResult`.
+- Public IBE endpoints: `POST /public/ibe/properties/:slug/reservations/
+  :code/payment-intent` y `…/confirm-payment-intent`. Rate limit 10/min,
+  identidad por `code+lastName` igual que SetupIntent.
+- Cancelación non-refundable: `cancelReservation` lanza 409 si existe un
+  folio entry con `idempotencyKey` que empieza por `pi-charge-`. La vista
+  `getReservation` muestra `cancellable=false` + mensaje "Tarifa no
+  reembolsable" cuando hay pago efectivo.
+- IBE UI:
+  - `/h/<slug>/availability` ahora muestra dos tarifas por roomType:
+    "Flexible" (setup) y "No reembolsable −10%" (charge, badge ámbar).
+  - `/h/<slug>/book` propaga `paymentMode` por query string al server
+    action y al endpoint de creación.
+  - `/h/<slug>/book/<code>` con `paymentMode=charge` renderiza
+    `<StripeChargePayment>` en lugar de `<StripeCardCapture>` — Elements
+    con `confirmPayment()` + POST a `/api/confirm-payment-intent`.
+- Cero migraciones (la asociación reserva ↔ pre-pago vive en el folio
+  entry `attributes`, ya existente).
+- Cherry-pick del catálogo W1 (`onboarding_verify` en
+  `emailSendRequestedV1.template`) para desbloquear el typecheck del
+  consumer NATS — necesario porque W3 partió de main antes de mergear W1.
+
+**Por qué.**
+
+Las OTAs y los propios hoteles necesitan una tarifa "pago ahora, sin
+devolución" para incentivar reservas directas y eliminar no-shows.
+SetupIntent (Fase 1) sólo tokeniza la tarjeta — no garantiza ingreso.
+PaymentIntent on-session cierra el ciclo: cobro upfront + entrada en
+folio + bloqueo de cancelación, todo idempotente y con webhook
+autoritativo.
+
+**Archivos clave.**
+
+- `apps/api/src/payments/stripe.service.ts` (+~130 LoC)
+- `apps/api/src/payments/stripe.controller.ts` (2 endpoints nuevos)
+- `apps/api/src/payments/stripe.service.spec.ts` (+~140 LoC)
+- `apps/api/src/public-ibe/public-ibe.dto.ts`
+- `apps/api/src/public-ibe/public-ibe.controller.ts`
+- `apps/api/src/public-ibe/public-ibe.service.ts`
+- `apps/api/src/public-ibe/public-ibe.types.ts`
+- `apps/web-ibe/src/lib/api.ts`
+- `apps/web-ibe/src/app/api/{payment-intent,confirm-payment-intent}/route.ts`
+- `apps/web-ibe/src/app/h/[slug]/availability/page.tsx`
+- `apps/web-ibe/src/app/h/[slug]/book/page.tsx`
+- `apps/web-ibe/src/app/h/[slug]/book/[code]/page.tsx`
+- `apps/web-ibe/src/app/h/[slug]/book/[code]/stripe-charge-payment.tsx`
+
+**Sigue pendiente.**
+
+- Wiring del descuento −10% en backend: actualmente la UI lo muestra,
+  pero `createReservation` cobra el `roomType.defaultRate × nights`
+  completo. El descuento se aplicará en S12 W4 o cuando el revenue
+  manager defina rate plans no reembolsables formales (`RatePlan` ya
+  existe en schema; falta un `RatePlan.nonRefundable` flag + reuso en
+  `searchAvailability`).
+- Postmark/webhook ya recibe `payment_intent.succeeded` desde S11 W3
+  (whitelist) — verificar en Stripe Dashboard que el destination
+  incluye el event type tras este deploy.
+
+---
+
 ## 2026-05-18 · [SECURITY] · Sprint 9 W4 — Anti-abuso IBE (Turnstile + blocklist + rate-limit slug+ip)
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,
