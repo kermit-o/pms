@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { ApiError, getRoomAvailability, type AvailabilityMatrix } from '@/lib/api';
 import { getActivePropertyId } from '@/lib/active-property';
+import { CalendarGrid } from './calendar-grid';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +79,7 @@ export default async function CalendarPage({ searchParams }: PageProps) {
         </div>
       )}
 
-      {matrix && <Grid matrix={matrix} />}
+      {matrix && <CalendarGrid matrix={matrix} today={toIsoDate(new Date())} />}
     </main>
   );
 }
@@ -143,120 +144,6 @@ function NavButton({
   );
 }
 
-function Grid({ matrix }: { matrix: AvailabilityMatrix }) {
-  const dayMeta = matrix.days.map((iso) => {
-    const d = new Date(iso);
-    return {
-      iso,
-      label: `${d.getDate()}/${d.getMonth() + 1}`,
-      isWeekend: d.getDay() === 0 || d.getDay() === 6,
-    };
-  });
-
-  return (
-    <section className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-aubergine-100">
-      <table className="min-w-full border-separate border-spacing-0 text-xs">
-        <thead>
-          <tr>
-            <th className="sticky left-0 z-10 w-32 bg-aubergine-50 px-3 py-2 text-left text-aubergine-500">
-              Habitación
-            </th>
-            {dayMeta.map((d) => (
-              <th
-                key={d.iso}
-                className={`w-14 px-1 py-2 font-normal ${
-                  d.isWeekend
-                    ? 'bg-aubergine-100/50 text-aubergine-700'
-                    : 'bg-aubergine-50 text-aubergine-500'
-                }`}
-              >
-                {d.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {matrix.rooms.length === 0 && (
-            <tr>
-              <td
-                colSpan={dayMeta.length + 1}
-                className="px-3 py-12 text-center text-aubergine-700/60"
-              >
-                Sin habitaciones para este property.
-              </td>
-            </tr>
-          )}
-          {matrix.rooms.map((room) => (
-            <tr key={room.id}>
-              <td className="sticky left-0 z-10 w-32 border-t border-aubergine-100 bg-white px-3 py-2 font-mono text-xs text-aubergine-700">
-                {room.number}
-                {room.floor && <span className="ml-2 text-aubergine-700/50">P{room.floor}</span>}
-              </td>
-              {dayMeta.map((d) => {
-                const cell = matrix.cells[room.id]?.[d.iso];
-                const nextDay = addDaysIso(d.iso, 1);
-                if (!cell) {
-                  return <td key={d.iso} className="h-10 border-t border-aubergine-100 px-0.5" />;
-                }
-                const cls = cellStyle(cell.state, d.isWeekend);
-                const startsHere = cell.reservation && cell.reservation.arrivalDate === d.iso;
-                const isFree = !cell.reservation && cell.state !== 'OOO';
-                return (
-                  <td
-                    key={d.iso}
-                    className={`h-10 border-t border-aubergine-100 px-0.5 align-middle ${cls}`}
-                    title={
-                      cell.reservation
-                        ? `${cell.reservation.code} · ${cell.reservation.arrivalDate} → ${cell.reservation.departureDate}`
-                        : cell.state
-                    }
-                  >
-                    {startsHere && cell.reservation && (
-                      <Link
-                        href={`/reservations/${cell.reservation.id}`}
-                        className="block truncate px-1 text-[10px] font-mono text-white"
-                      >
-                        {cell.reservation.code.split('-').slice(1).join('-')}
-                      </Link>
-                    )}
-                    {isFree && (
-                      <Link
-                        href={`/reservations/new?step=3&arrival=${d.iso}&departure=${nextDay}&adults=2&children=0&roomTypeId=${room.roomTypeId}`}
-                        className="block h-full w-full text-transparent hover:text-aubergine-700"
-                        title={`Crear reserva: ${room.number} · ${d.iso}`}
-                      >
-                        +
-                      </Link>
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function cellStyle(state: string, isWeekend: boolean): string {
-  switch (state) {
-    case 'OCC':
-      return 'bg-emerald-500';
-    case 'OOO':
-      return 'bg-rose-400';
-    case 'OUT_OF_SERVICE':
-      return 'bg-slate-300';
-    case 'DIRTY':
-      return 'bg-amber-100';
-    case 'INSPECTED':
-      return 'bg-blue-100';
-    case 'CLEAN':
-    default:
-      return isWeekend ? 'bg-aubergine-50/60' : '';
-  }
-}
-
 function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -265,10 +152,6 @@ function addDays(d: Date, n: number): Date {
   const out = new Date(d);
   out.setDate(out.getDate() + n);
   return out;
-}
-
-function addDaysIso(iso: string, n: number): string {
-  return toIsoDate(addDays(new Date(iso), n));
 }
 
 function clamp(n: number, min: number, max: number): number {

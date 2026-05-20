@@ -80,6 +80,77 @@ Una o dos frases.
 
 ---
 
+## 2026-05-20 · [FEAT] · Sprint 12 W4 — Calendar drag & drop (check-in / check-out / cambio de habitación)
+
+**Scope:** `apps/web-fo/src/app/calendar`, `apps/web-fo/src/app/api/reservations`
+**Branch:** `claude/s12-w4-calendar-dnd`
+**Refs:** `docs/SPRINT-12-PLAN.md §5`
+
+**Qué cambió.**
+
+- `apps/web-fo/src/app/calendar/dnd-rules.ts` — motor puro de reglas:
+  `resolveAction({reservation, source, target, today}) -> DragAction`.
+  Cubre las tres transiciones soportadas V1:
+  - PENDING/CONFIRMED + drop on today → check-in (con roomId destino).
+  - CHECKED_IN + drop en habitación distinta → assign-room.
+  - CHECKED_IN + drop on today o pasado en misma habitación → check-out.
+  Cualquier otra combinación → `unsupported` con mensaje accionable.
+  Incluye `detectRoomConflicts()` para listar códigos de reservas que
+  bloquean la habitación destino.
+- `apps/web-fo/src/app/calendar/calendar-grid.tsx` — nuevo client
+  component que reemplaza el `Grid` server-rendered de S2. Usa HTML5
+  Drag & Drop nativo (sin libs). Cada barra de reserva en la celda de
+  arrival es `draggable`. Drop targets son todas las celdas. Muestra:
+  - Outline aubergine en la celda destino bajo el cursor.
+  - Modal de confirmación con resumen + lista de conflictos.
+  - Botón "Confirmar" deshabilitado si hay conflictos.
+  Tras éxito hace `router.refresh()` para repintar con datos frescos.
+- `apps/web-fo/src/app/calendar/page.tsx` — se reduce a server-fetch +
+  marco, delegando todo el grid al cliente. La columna de hoy se
+  marca en `aubergine-600` (highlight visual del drop target válido).
+- Tres rutas proxy nuevas que inyectan el token de NextAuth:
+  - `POST /api/reservations/[id]/check-in`
+  - `POST /api/reservations/[id]/check-out`
+  - `POST /api/reservations/[id]/assign-room`
+  Reusan los helpers `checkInReservation/checkOutReservation/assignRoom`
+  del `lib/api.ts` (el primero es nuevo, los otros ya existían).
+- Cherry-pick del catálogo W1 (`onboarding_verify` en el enum de
+  `emailSendRequestedV1.template`) para desbloquear el typecheck del
+  `NotificationsConsumer` — necesario porque W4 partió de main antes
+  de mergear W1.
+
+**Por qué.**
+
+El operador trabajaba en dos pantallas: el calendario y la ficha de la
+reserva. Las tres operaciones (check-in, check-out anticipado, cambio
+de habitación) son las más frecuentes y todas se pueden expresar como
+"arrastra esta barra a esta celda". DnD nativo HTML5 → sin nuevas
+deps; lógica pura testeable → robustez sin browser; modal con
+conflictos detectados antes del POST → cero corruptions accidentales.
+
+**Archivos clave.**
+
+- `apps/web-fo/src/app/calendar/page.tsx`
+- `apps/web-fo/src/app/calendar/calendar-grid.tsx`
+- `apps/web-fo/src/app/calendar/dnd-rules.ts`
+- `apps/web-fo/src/app/api/reservations/[id]/check-in/route.ts`
+- `apps/web-fo/src/app/api/reservations/[id]/check-out/route.ts`
+- `apps/web-fo/src/app/api/reservations/[id]/assign-room/route.ts`
+- `apps/web-fo/src/lib/api.ts` (+ `checkInReservation` helper)
+
+**Sigue pendiente.**
+
+- Tests unitarios del rule engine: requeriría añadir vitest a web-fo
+  (no configurado; web-fo sólo tiene Playwright e2e). Cuando se monte
+  vitest a nivel monorepo o se mueva el motor de reglas a un paquete
+  shared, se reactiva la cobertura. La lógica es ≤ 50 LoC pura.
+- Resize horizontal (cambio de fechas vía drag de bordes) — V2
+  (requiere `PATCH /reservations/:id/dates`).
+- Soporte de group reservations en el DnD — V2 (necesita decidir si
+  arrastrar el master folio o cada habitación por separado).
+
+---
+
 ## 2026-05-18 · [SECURITY] · Sprint 9 W4 — Anti-abuso IBE (Turnstile + blocklist + rate-limit slug+ip)
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,

@@ -427,6 +427,18 @@ export async function checkOutReservation(
   });
 }
 
+export async function checkInReservation(
+  accessToken: string | undefined,
+  reservationId: string,
+  roomId?: string,
+): Promise<{ id: string; roomId: string; status: string }> {
+  return apiFetch(`/reservations/${reservationId}/check-in`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(roomId ? { roomId } : {}),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Folio
 // ---------------------------------------------------------------------------

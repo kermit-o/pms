@@ -139,7 +139,7 @@ export class NotificationsService {
           correlationId: input.correlationId ?? null,
         },
         {
-          template: input.template as 'reservation_confirmation' | 'reservation_cancelled' | 'front_desk_new_reservation',
+          template: input.template,
           to: input.to,
           cc: input.cc,
           bcc: input.bcc,
