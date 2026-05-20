@@ -1,5 +1,7 @@
 export { AuthModule } from './auth.module';
 export { JwtValidatorService } from './jwt-validator.service';
+export { KeycloakAdminService } from './keycloak-admin.service';
+export type { ProvisionResult } from './keycloak-admin.service';
 export { JwtAuthGuard } from './guards/jwt.guard';
 export { RolesGuard } from './guards/roles.guard';
 export { Public } from './decorators/public.decorator';

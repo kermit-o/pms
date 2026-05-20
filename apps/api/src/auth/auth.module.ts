@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtValidatorService } from './jwt-validator.service';
+import { KeycloakAdminService } from './keycloak-admin.service';
 import { JwtAuthGuard } from './guards/jwt.guard';
 import { RolesGuard } from './guards/roles.guard';
 
@@ -16,9 +17,10 @@ import { RolesGuard } from './guards/roles.guard';
 @Module({
   providers: [
     JwtValidatorService,
+    KeycloakAdminService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
-  exports: [JwtValidatorService],
+  exports: [JwtValidatorService, KeycloakAdminService],
 })
 export class AuthModule {}

@@ -9,6 +9,10 @@ interface Props {
     propertySlug?: string;
     ibeUrl?: string;
     backofficeUrl?: string;
+    /** Sprint 10 W1: si el wizard provisionó Keycloak, viene la password
+     *  temporal aquí. Si no, el mensaje "manual fallback" se muestra. */
+    kcRealm?: string;
+    kcTempPassword?: string;
   }>;
 }
 
@@ -30,18 +34,36 @@ export default async function OnboardingDonePage({ searchParams }: Props) {
           <Row label="Slug público" value={sp.propertySlug ?? '—'} mono />
         </section>
 
-        <section className="space-y-2 rounded-xl bg-amber-50 p-4 text-xs text-amber-900 ring-1 ring-amber-200">
-          <p className="font-semibold uppercase tracking-wide">Próximo paso</p>
-          <p>
-            Nuestro equipo finalizará el alta de tu usuario admin en el sistema de identidad
-            (Keycloak) y te enviará las credenciales de acceso al back-office dentro de las
-            próximas horas. Si llevas más de 24h sin recibirlas, escribe a{' '}
-            <a href="mailto:soporte@aubergine.me" className="underline">
-              soporte@aubergine.me
-            </a>
-            .
-          </p>
-        </section>
+        {sp.kcTempPassword ? (
+          <section className="space-y-2 rounded-xl bg-emerald-50 p-4 text-xs text-emerald-900 ring-1 ring-emerald-200">
+            <p className="font-semibold uppercase tracking-wide">Credenciales temporales</p>
+            <p>
+              Tu cuenta admin ya está creada. Copia esta contraseña — la pediremos al primer
+              login y tendrás que cambiarla.
+            </p>
+            <div className="rounded-lg bg-white p-3 font-mono text-sm tracking-wider text-aubergine-900 ring-1 ring-emerald-200">
+              {sp.kcTempPassword}
+            </div>
+            {sp.kcRealm && (
+              <p className="text-[11px] opacity-80">
+                Realm: <span className="font-mono">{sp.kcRealm}</span>
+              </p>
+            )}
+          </section>
+        ) : (
+          <section className="space-y-2 rounded-xl bg-amber-50 p-4 text-xs text-amber-900 ring-1 ring-amber-200">
+            <p className="font-semibold uppercase tracking-wide">Próximo paso</p>
+            <p>
+              Nuestro equipo finalizará el alta de tu usuario admin en el sistema de identidad
+              (Keycloak) y te enviará las credenciales de acceso al back-office dentro de las
+              próximas horas. Si llevas más de 24h sin recibirlas, escribe a{' '}
+              <a href="mailto:soporte@aubergine.me" className="underline">
+                soporte@aubergine.me
+              </a>
+              .
+            </p>
+          </section>
+        )}
 
         <div className="flex flex-col gap-2 sm:flex-row">
           {sp.ibeUrl && (
