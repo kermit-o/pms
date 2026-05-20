@@ -40,14 +40,26 @@ function buildService(opts: {
       create: vi.fn().mockResolvedValue({ id: 'u-1' }),
     },
   };
+  // Sprint 12 W1: start() ahora usa enqueueEmail (publica a NATS o
+  // hace fallback inline a sendEmail). Mockeamos las dos: por defecto
+  // enqueue ok (enqueued: true). Si opts.notifyOk === false, simulamos
+  // que NATS no estaba sano y el fallback inline también falló.
   const notifications = {
-    sendEmail: vi
-      .fn()
-      .mockResolvedValue(
-        opts.notifyOk === false
-          ? { ok: false, error: 'postmark_down' }
-          : { ok: true, messageId: 'm-1' },
-      ),
+    sendEmail: vi.fn().mockResolvedValue(
+      opts.notifyOk === false
+        ? { ok: false, error: 'postmark_down' }
+        : { ok: true, messageId: 'm-1' },
+    ),
+    enqueueEmail: vi.fn().mockImplementation(async (input: { dedupKey?: string }) =>
+      opts.notifyOk === false
+        ? {
+            enqueued: false,
+            dedupKey: input.dedupKey ?? 'auto',
+            inlineFallback: true,
+            result: { ok: false, error: 'postmark_down' },
+          }
+        : { enqueued: true, dedupKey: input.dedupKey ?? 'auto' },
+    ),
   };
   const config = {
     get: vi.fn((key: string) => {
@@ -82,10 +94,12 @@ describe('PublicOnboardingService.start', () => {
     const { service, notifications } = buildService();
     const out = await service.start({ email: 'GuEst@Test.com', locale: 'es' });
     expect(out).toEqual({ queued: true, email: 'guest@test.com' });
-    expect(notifications.sendEmail).toHaveBeenCalledOnce();
-    const args = notifications.sendEmail.mock.calls[0]![0]!;
+    expect(notifications.enqueueEmail).toHaveBeenCalledOnce();
+    const args = notifications.enqueueEmail.mock.calls[0]![0]!;
     expect(args.template).toBe('onboarding_verify');
     expect(args.to).toBe('guest@test.com');
+    expect(args.tenantId).toBe('00000000-0000-0000-0000-000000000000');
+    expect(args.dedupKey).toMatch(/^onboarding-verify-[a-f0-9]{12}-\d+$/);
     expect(args.params.verifyUrl).toMatch(/^https:\/\/fo\.test\/onboarding\/verify\?token=/);
   });
 
@@ -238,9 +252,11 @@ async function captureToken(
   service: PublicOnboardingService,
   email: string,
 ): Promise<{ token: string }> {
-  const svc = service as unknown as { notifications: { sendEmail: ReturnType<typeof vi.fn> } };
+  const svc = service as unknown as {
+    notifications: { enqueueEmail: ReturnType<typeof vi.fn> };
+  };
   await service.start({ email, locale: 'es' });
-  const call = svc.notifications.sendEmail.mock.calls.at(-1)!;
+  const call = svc.notifications.enqueueEmail.mock.calls.at(-1)!;
   const url: string = call[0]!.params.verifyUrl;
   const token = decodeURIComponent(url.split('token=')[1]!);
   return { token };
