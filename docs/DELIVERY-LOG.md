@@ -80,6 +80,68 @@ Una o dos frases.
 
 ---
 
+## 2026-05-21 · [FEAT] · Sprint 13 W2 — Admin UI de rate plans en web-fo
+
+**Scope:** `apps/web-fo/src/app/properties/[id]/rate-plans`,
+`apps/web-fo/src/lib/api.ts`, `apps/web-fo/src/app/properties/[id]/settings`
+**Branch:** `claude/s13-w2-rate-plans-admin-ui-from-w1` (parte de S13 W1)
+**Refs:** completa lo pendiente de S13 W1 — el CRUD existía pero sólo
+era operable vía API directa.
+
+**Qué cambió.**
+
+- **Helpers `lib/api.ts`** nuevos: `listRatePlans`, `createRatePlan`,
+  `updateRatePlan`, tipos `RatePlanListItem`, `CreateRatePlanInput`,
+  `UpdateRatePlanInput`. Forwardean al token de NextAuth como el resto.
+- **Página `/properties/[id]/rate-plans`** (server component + 2
+  server actions):
+  - Lista todos los rate plans de la propiedad con tabla compacta:
+    código, nombre, tarifa fija, descuento, badge "no reembolsable"
+    (ámbar), visibilidad pública, botón Editar.
+  - Modo edición inline (`?editing=<id>`): la fila se expande a un
+    form que permite cambiar nombre, descripción, tarifa fija,
+    descuento %, flags `nonRefundable` y `isPublic`. Guardar/Cancelar.
+  - Formulario de creación abajo de la tabla: code (regex
+    `[A-Z][A-Z0-9_-]{0,15}` enforced por `pattern`), nombre,
+    descuento opcional, tarifa fija opcional, flags. POST devuelve
+    409 si el code colisiona; el banner lo refleja.
+  - Banners de estado (`?status=created|updated|collision|fail`)
+    siempre visibles tras un POST/PATCH.
+- **Link desde `/properties/[id]/settings`** ("Rate plans →") en el
+  header para descubrir la página desde el admin existente.
+- Sin nuevos endpoints API ni cambios al backend — todo consume la
+  superficie creada en S13 W1.
+
+**Por qué.**
+
+S13 W1 dejó el CRUD funcional pero requería `curl` o un cliente API
+para crear un rate plan. El operador del hotel no maneja `curl`. Esta
+UI es la mínima que cierra el loop: un `tenant_admin` puede crear,
+publicar/ocultar y editar tarifas desde el back-office sin asistencia
+técnica.
+
+**Archivos clave.**
+
+- `apps/web-fo/src/app/properties/[id]/rate-plans/page.tsx` (nuevo)
+- `apps/web-fo/src/app/properties/[id]/settings/page.tsx` (link nav)
+- `apps/web-fo/src/lib/api.ts` (helpers + tipos)
+
+**Tests.**
+
+- Typecheck + lint verdes (web-fo no tiene vitest; los server actions
+  son thin wrappers de `apiFetch`).
+
+**Sigue pendiente (para sprints futuros).**
+
+- Borrado lógico desde la UI (DELETE soft-delete) — el backend lo
+  permite pero la página de admin aún no lo expone.
+- Vista del precio resultante en tiempo real al editar descuento
+  (preview "100€ × 0.9 = 90€/noche").
+- `RatePlan.cancellationPolicyId` override (todavía no en schema).
+- Restricciones temporales (`bookableFrom`/`bookableTo`, `minLOS`).
+
+---
+
 ## 2026-05-21 · [FEAT] · Sprint 13 W1 — Rate plans formales + nonRefundable real
 
 **Scope:** `packages/db`, `apps/api/rate-plans` (nuevo), `apps/api/public-ibe`,
