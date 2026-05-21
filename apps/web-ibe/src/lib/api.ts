@@ -23,6 +23,19 @@ export interface IbeProperty {
   locale: string;
 }
 
+export interface IbeRateOption {
+  ratePlanId: string | null;
+  code: string;
+  name: string;
+  description: string | null;
+  nonRefundable: boolean;
+  discountPct: number | null;
+  pricePerNight: string;
+  totalForStay: string;
+  currency: string;
+  requiresPrepayment: boolean;
+}
+
 export interface IbeRoomTypeAvailability {
   roomTypeId: string;
   code: string;
@@ -34,6 +47,8 @@ export interface IbeRoomTypeAvailability {
   totalForStay: string;
   currency: string;
   nights: number;
+  /** Sprint 13 W1 — múltiples tarifas (flexible + no-refundable etc.). */
+  rates: IbeRateOption[];
 }
 
 export interface IbeAvailabilityResponse {
@@ -101,6 +116,8 @@ export interface CreateReservationInput {
   arrival: string;
   departure: string;
   roomTypeId: string;
+  /** Sprint 13 W1 — opcional; si presente fija el precio según RatePlan. */
+  ratePlanId?: string;
   occupancy: { adults: number; children: number };
   guest: {
     firstName: string;
@@ -113,6 +130,8 @@ export interface CreateReservationInput {
   };
   specialRequests?: string;
   turnstileToken?: string;
+  /** Sprint 12 W3 — 'setup' (default) o 'charge' (pre-pago). */
+  paymentMode?: 'setup' | 'charge';
 }
 
 export interface CreateReservationResult {
@@ -122,6 +141,7 @@ export interface CreateReservationResult {
   departure: string;
   totalAmount: string;
   currency: string;
+  paymentMode: 'setup' | 'charge';
 }
 
 export async function createReservation(

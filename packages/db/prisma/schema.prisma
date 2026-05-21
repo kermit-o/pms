@@ -376,18 +376,24 @@ enum DocumentType {
 // ----------------------------------------------------------------------------
 
 model RatePlan {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String    @map("tenant_id") @db.Uuid
-  propertyId  String    @map("property_id") @db.Uuid
-  code        String // "BAR", "NRF", "ADV"
-  name        String
-  description String?
-  isPublic    Boolean   @default(true) @map("is_public")
-  currency    String    @default("EUR") @db.Char(3)
-  attributes  Json?
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  propertyId     String    @map("property_id") @db.Uuid
+  code           String // "BAR", "NRF", "ADV"
+  name           String
+  description    String?
+  isPublic       Boolean   @default(true) @map("is_public")
+  currency       String    @default("EUR") @db.Char(3)
+  // Sprint 13 W1 — tarifa "no reembolsable" con descuento sobre el rate
+  // base del RoomType. nonRefundable obliga paymentMode=charge en el IBE
+  // y bloquea la cancelación gratuita. discountPct (0-100) se aplica
+  // sobre RoomType.defaultRate; null = usar el rate base sin modificar.
+  nonRefundable  Boolean   @default(false) @map("non_refundable")
+  discountPct    Decimal?  @map("discount_pct") @db.Decimal(5, 2)
+  attributes     Json?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)

@@ -49,6 +49,12 @@ function buildService(opts: {
       update: vi.fn().mockResolvedValue({}),
     },
     guest: { create: vi.fn().mockResolvedValue({ id: 'g-1' }) },
+    // Sprint 13 W1 — searchAvailability lee rate plans públicos. Si la
+    // lista está vacía, el servicio sintetiza una opción "flexible".
+    ratePlan: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
   };
   const prisma = {
     property: { findFirst: vi.fn().mockResolvedValue(opts.property === null ? null : (opts.property ?? PROP)) },
@@ -144,6 +150,7 @@ describe('PublicIbeService', () => {
           gdprConsent: false as never,
           marketingConsent: false,
         },
+        paymentMode: 'setup',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -162,6 +169,7 @@ describe('PublicIbeService', () => {
         gdprConsent: true,
         marketingConsent: true,
       },
+      paymentMode: 'setup',
     });
     expect(out.code).toMatch(/HTL-/);
     expect(tx.guest.create).toHaveBeenCalledOnce();

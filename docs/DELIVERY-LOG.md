@@ -80,6 +80,113 @@ Una o dos frases.
 
 ---
 
+## 2026-05-21 · [FEAT] · Sprint 13 W1 — Rate plans formales + nonRefundable real
+
+**Scope:** `packages/db`, `apps/api/rate-plans` (nuevo), `apps/api/public-ibe`,
+`apps/web-ibe`
+**Branch:** `claude/s13-w1-rate-plans-nonrefundable`
+**Refs:** cierra deuda de Sprint 12 W3 (descuento −10% que la UI mostraba pero
+el backend cobraba al precio base)
+
+**Qué cambió.**
+
+- **DB**: migración `20260620000000_rate_plan_non_refundable` añade 2
+  columnas a `rate_plans`:
+  - `non_refundable boolean NOT NULL DEFAULT false`
+  - `discount_pct numeric(5,2)` (null = sin descuento)
+  Forward-only, default false/NULL → no afecta planes existentes.
+- **Helper pricing puro** (`apps/api/rate-plans/pricing.ts`):
+  `resolveDailyRate(defaultRate, ratePlan)` aplica en orden:
+  1. `attributes.dailyRate` (override fijo, compat con código viejo).
+  2. `discountPct` (porcentaje 0-100 sobre el rate resultante).
+  Tests unitarios cubren null, override, descuento, combinación
+  override+descuento, valores fuera de rango y JSON malformado.
+- **Módulo nuevo `rate-plans`** con CRUD admin:
+  - `GET /properties/:id/rate-plans` (cualquier rol con acceso)
+  - `POST /properties/:id/rate-plans` (`tenant_admin`)
+  - `PATCH /rate-plans/:id` (`tenant_admin`)
+  DTO acepta `code` (regex A-Z/0-9/_-, max 16), `name`, `description`,
+  `isPublic`, `nonRefundable`, `discountPct`, `dailyRate` opcional.
+- **PublicIbeService.searchAvailability** ahora devuelve, por cada
+  roomType, una lista `rates: PublicRateOption[]`. Si la propiedad no
+  tiene rate plans configurados, sintetiza una opción virtual
+  "flexible" para mantener retro-compat. Cada opción reporta
+  `pricePerNight`, `totalForStay`, `nonRefundable`, `discountPct`,
+  `requiresPrepayment`.
+- **PublicIbeService.createReservation**:
+  - Si `ratePlanId` se pasa, lo valida (mismo property, isPublic, no
+    deleted).
+  - Si `ratePlan.nonRefundable === true` y `paymentMode !== 'charge'`,
+    rechaza con 400 "Tarifa no reembolsable requiere paymentMode=charge".
+  - Usa `resolveDailyRate(roomType.defaultRate, ratePlan)` para el
+    total (antes era el rate base × nights sin descuento real).
+- **PublicIbeService.cancelReservation**: añade un segundo safety net
+  además del de S12 W3 — si `reservation.ratePlan.nonRefundable === true`
+  rechaza con 409 incluso si el folio entry de pre-pago aún no se ha
+  posteado (cubre la ventana entre crear y confirmar el PaymentIntent).
+- **PublicIbeService.getReservation**: `cancellable` ahora considera
+  `ratePlan.nonRefundable` y el mensaje de política refleja la tarifa.
+- **IBE UI** (`apps/web-ibe`):
+  - `/h/<slug>/availability` ahora renderiza una opción por cada
+    `IbeRateOption` que devuelve el API (no hardcoded en frontend).
+    Badge ámbar para no-refundable con `−X%` si aplica.
+  - `/h/<slug>/book` propaga `ratePlanId` + `paymentMode` a
+    `createReservation()` y al redirect post-éxito.
+- Cherry-pick de catálogo W1 (`onboarding_verify`) + DTO W3
+  (`paymentMode`) — la rama partió de main sin ellos; quedarán
+  duplicados sin efecto cuando se rebase tras los merges de S12.
+
+**Por qué.**
+
+S12 W3 dejó el flow de pre-pago funcionando pero el descuento `−10%`
+en la UI era cosmético: el backend cobraba la tarifa base. Tampoco había
+forma de configurar tarifas no reembolsables sin tocar SQL a mano. Este
+workstream:
+
+1. Modela el descuento como dato (columna typed, no JSON ambiguo).
+2. Expone CRUD admin para que un `tenant_admin` defina tarifas desde
+   un cliente API o futura UI de admin (sin tocar DB).
+3. Centraliza el pricing en un solo helper testeable.
+4. Refuerza el contrato non-refundable con dos safety nets
+   (S12 W3 vía folio entry + S13 vía ratePlan flag).
+5. La UI del IBE deja de generar tarifas virtuales y consume el
+   contrato del backend — ahora la tarifa "no reembolsable −10%"
+   cobra realmente €90 cuando el base es €100.
+
+**Archivos clave.**
+
+- `packages/db/prisma/schema.prisma` (`RatePlan.nonRefundable/discountPct`)
+- `packages/db/prisma/migrations/20260620000000_rate_plan_non_refundable/migration.sql`
+- `apps/api/src/rate-plans/pricing.ts` (+ `pricing.spec.ts`)
+- `apps/api/src/rate-plans/dto.ts`
+- `apps/api/src/rate-plans/rate-plans.service.ts`
+- `apps/api/src/rate-plans/rate-plans.controller.ts`
+- `apps/api/src/rate-plans/rate-plans.module.ts`
+- `apps/api/src/app.module.ts` (+ `RatePlansModule`)
+- `apps/api/src/public-ibe/public-ibe.service.ts` (searchAvailability +
+  createReservation + getReservation + cancelReservation)
+- `apps/api/src/public-ibe/public-ibe.types.ts` (`PublicRateOption`)
+- `apps/web-ibe/src/lib/api.ts` (`IbeRateOption` + propagación)
+- `apps/web-ibe/src/app/h/[slug]/availability/page.tsx`
+- `apps/web-ibe/src/app/h/[slug]/book/page.tsx`
+
+**Tests.**
+
+- 326/326 tests verdes (6 nuevos en `pricing.spec.ts`).
+- Typecheck + lint verdes: api, web-ibe, db, eventbus.
+
+**Sigue pendiente.**
+
+- UI de admin para rate plans en `web-fo` (`/admin/rate-plans`) — el
+  CRUD existe pero hoy se opera vía API directa.
+- `RatePlan.cancellationPolicyId` override (cada rate plan puede tener
+  su propia política de cancelación, distinta a la de la propiedad).
+- Restricciones temporales (`bookableFrom`/`bookableTo`, `minLOS`,
+  `maxLOS`, `daysOfWeek`).
+- Reverse-discount (markup +X%) para tarifas premium.
+
+---
+
 ## 2026-05-18 · [SECURITY] · Sprint 9 W4 — Anti-abuso IBE (Turnstile + blocklist + rate-limit slug+ip)
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,
