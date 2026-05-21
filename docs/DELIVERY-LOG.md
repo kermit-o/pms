@@ -80,6 +80,115 @@ Una o dos frases.
 
 ---
 
+## 2026-05-21 · [SPRINT] · Sprint 12 cerrado — Operador productivity + cierre loose ends
+
+**Scope:** `apps/api`, `apps/web-fo`, `apps/web-ibe`, `packages/eventbus`
+**Branches:**
+- `claude/s12-plan` — plan (`726f1c7`)
+- `claude/s12-w1-onboarding-enqueueemail` — W1 (`1cb1a17`)
+- `claude/s12-w2-reports-csv` — W2 (`532e3c1`)
+- `claude/s12-w3-prepago-paymentintent` — W3 (`fda9c67`)
+- `claude/s12-w4-calendar-dnd` — W4 (`3c7b00a`)
+- `claude/s12-close` — este resumen
+
+**Qué se entregó.**
+
+- **W1 Onboarding enqueueEmail** (`[REFACTOR]`). `PublicOnboardingService
+  .start` ya no llama a `sendEmail` inline: publica en el catálogo NATS
+  `email.send_requested` con `template=onboarding_verify`. Si NATS no está
+  sano hace fallback inline (mantiene el contrato V1 del wizard). Catálogo
+  ampliado en `packages/eventbus`, consumer + service ampliados, cast narrow
+  eliminado. Cierra el pendiente que dejó S11 W2 (la rama partió antes de
+  S9 W3).
+- **W2 Reports occupancy CSV** (`[FEAT]`). Nuevo generador
+  `occupancy-report.ts` que enumera business dates en [from, to] y para
+  cada uno calcula `(total_rooms, occupied, occupancyPct)`. Endpoint
+  `GET /reports/occupancy?propertyId=&from=&to=&format=csv|json` con
+  validación de rango ≤ 366 días. UI en `/reports/occupancy` con filtros
+  + tabla + footer "Promedio" + botón "Descargar CSV". 5 CSV anteriores
+  (manager/revenue/tax/in-house/arrivals-departures) ya existían — se
+  añadió `'occupancy'` al whitelist del proxy.
+- **W3 Pre-pago full PaymentIntent on-session** (`[INTEGRATION]`).
+  `StripeService.createPaymentIntent` con setup_future_usage off_session
+  e idempotencyKey `pi-charge-<reservationId>`. Webhook
+  `payment_intent.succeeded` filtra por `metadata.kind=reservation_charge`
+  y postea entry PAYMENT idempotente al folio. `confirmPaymentIntent`
+  como fallback al webhook. IBE: DTO con `paymentMode: 'setup'|'charge'`,
+  endpoints públicos `/payment-intent` + `/confirm-payment-intent`, dos
+  tarifas en `/availability` (flexible / no reembolsable −10%),
+  componente `<StripeChargePayment>`. Cancelación bloqueada con 409 si
+  hay folio entry `pi-charge-*`. Cero migraciones.
+- **W4 Calendar drag & drop** (`[FEAT]`). Rule engine puro en
+  `dnd-rules.ts` (PENDING/CONFIRMED→check-in, CHECKED_IN→assign-room o
+  check-out según destino). `calendar-grid.tsx` client component con
+  HTML5 DnD nativo, highlight aubergine, modal de confirmación con
+  conflictos detectados, `router.refresh()` tras éxito. 3 proxies
+  web-fo nuevos (`check-in`, `check-out`, `assign-room`). Sin libs
+  externas, sin migraciones.
+
+**Resultados acumulados de sprint.**
+
+- API: typecheck + lint + 325 tests (W3 añadió 5 nuevos; W4 no añadió
+  porque web-fo no tiene vitest).
+- web-fo: typecheck + lint verdes (W2 + W4).
+- web-ibe: typecheck + lint verdes (W3).
+- Cero migraciones nuevas en todo el sprint.
+- Cero deps npm nuevas.
+
+**Decisiones de diseño relevantes.**
+
+- W1/W3/W4 hicieron cherry-pick del catálogo W1 (`onboarding_verify`)
+  para desbloquear typecheck — necesario porque W1 cierra un pendiente
+  de S11 W2 y los demás workstreams partieron de main antes de tener
+  W1 mergeado. Tras merge a main esto deja de ser necesario.
+- W3 evitó añadir `Reservation.stripePaymentIntentId` reusando
+  `FolioEntry.attributes` para mantenerse 0-migración. Side effect:
+  la cancelación non-refundable se detecta vía existencia de folio
+  entry con `idempotencyKey LIKE 'pi-charge-%'`, no por una marca en
+  la propia reserva.
+- W4 mantuvo el rule engine como módulo puro `dnd-rules.ts` apto para
+  unit tests; la cobertura queda diferida hasta que web-fo monte
+  vitest o se mueva a `packages/shared`.
+
+**Pendiente para el PO (no bloqueante para cierre de sprint).**
+
+1. **Merge a main** de las cuatro ramas W1–W4 (en orden W1, W2, W3, W4).
+   Los cherry-picks duplicados (catálogo notifications) deberían
+   auto-resolverse via `merge=union` o aceptando el contenido idéntico.
+2. **Deploy a Fly** tras merge: `pms-api`, `pms-web-fo`, `pms-web-ibe`.
+3. **Stripe Dashboard**: verificar que el destination del webhook
+   incluye `payment_intent.succeeded` (W3). Si no, añadirlo.
+4. **QA manual** del DnD del calendario en navegador (W4) — la lógica
+   tiene cobertura mental pero no automatizada.
+5. **Smoke piloto**: crear una reserva IBE en modo `charge`, completar
+   pago con tarjeta de test Stripe, verificar webhook + folio entry +
+   bloqueo de cancelación.
+
+**Lo que NO se entrega en S12 (queda para sprints siguientes).**
+
+- Descuento −10% real en la tarifa "no reembolsable": UI lo muestra,
+  backend cobra el rate completo. Necesita `RatePlan.nonRefundable`
+  flag o ADR de rate plans formales (S13).
+- Memoria semántica V1.1 (sigue bloqueada por dep `openai`).
+- Reports PDF (necesita `puppeteer` con ADR).
+- Resize horizontal del calendario (cambio de fechas vía drag de
+  bordes) — V2, requiere endpoint nuevo `PATCH /reservations/:id/dates`.
+- Soporte de group reservations en el DnD del calendario.
+- 2º channel manager (Cloudbeds/RoomCloud) — esperando feedback de
+  primer piloto.
+
+**Norte de cara a Sprint 13.**
+
+Tres bloques candidatos (orden por valor para piloto):
+
+1. **Rate plans formales + nonRefundable real**: cerrar el descuento
+   −10% de W3 y exponer múltiples tarifas configurables.
+2. **Onboarding UX polish**: indicadores de progreso, recuperación de
+   wizard tras 24h, email "tu hotel está listo" con SLA.
+3. **Reports PDF + scheduling** (ADR `puppeteer` requerido).
+
+---
+
 ## 2026-05-18 · [SECURITY] · Sprint 9 W4 — Anti-abuso IBE (Turnstile + blocklist + rate-limit slug+ip)
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,
