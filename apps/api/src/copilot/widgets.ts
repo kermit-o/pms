@@ -13,7 +13,8 @@
  */
 
 export type CopilotWidget =
-  | { kind: 'availability'; data: AvailabilityWidgetData };
+  | { kind: 'availability'; data: AvailabilityWidgetData }
+  | { kind: 'folio'; data: FolioWidgetData };
 
 export interface AvailabilityWidgetData {
   arrival: string;
@@ -35,6 +36,25 @@ export interface AvailabilityRow {
   currency: string;
 }
 
+export interface FolioEntry {
+  id: string;
+  type: string;
+  description: string;
+  amount: string;
+  currency: string;
+  postedAt: string;
+}
+
+export interface FolioWidgetData {
+  folioId: string;
+  reservationCode: string;
+  reservationId: string;
+  status: string;
+  balance: string;
+  currency: string;
+  entries: FolioEntry[];
+}
+
 /**
  * Convierte el resultado de un tool read-only en un widget, si el tool
  * y la forma del resultado coinciden con un widget conocido. Devuelve
@@ -54,6 +74,8 @@ export function extractWidgetFromTool(
   switch (toolName) {
     case 'search_availability_by_type':
       return buildAvailabilityWidget(toolInput, toolResult);
+    case 'get_folio':
+      return buildFolioWidget(toolResult);
     default:
       return null;
   }
@@ -110,6 +132,56 @@ function buildAvailabilityWidget(
       departure,
       nights: firstRaw.nights,
       rows,
+    },
+  };
+}
+
+function buildFolioWidget(toolResult: unknown): CopilotWidget | null {
+  if (!toolResult || typeof toolResult !== 'object') return null;
+  const r = toolResult as Record<string, unknown>;
+  if (
+    typeof r.id !== 'string' ||
+    typeof r.reservationId !== 'string' ||
+    typeof r.reservationCode !== 'string' ||
+    typeof r.status !== 'string' ||
+    typeof r.balance !== 'string' ||
+    typeof r.currency !== 'string' ||
+    !Array.isArray(r.entries)
+  ) {
+    return null;
+  }
+  const entries: FolioEntry[] = [];
+  for (const raw of r.entries) {
+    const e = raw as Record<string, unknown>;
+    if (
+      typeof e.id !== 'string' ||
+      typeof e.type !== 'string' ||
+      typeof e.description !== 'string' ||
+      typeof e.amount !== 'string' ||
+      typeof e.currency !== 'string' ||
+      typeof e.postedAt !== 'string'
+    ) {
+      return null;
+    }
+    entries.push({
+      id: e.id,
+      type: e.type,
+      description: e.description,
+      amount: e.amount,
+      currency: e.currency,
+      postedAt: e.postedAt,
+    });
+  }
+  return {
+    kind: 'folio',
+    data: {
+      folioId: r.id,
+      reservationId: r.reservationId,
+      reservationCode: r.reservationCode,
+      status: r.status,
+      balance: r.balance,
+      currency: r.currency,
+      entries,
     },
   };
 }
