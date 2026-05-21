@@ -75,7 +75,13 @@ export class NotificationsConsumer implements OnModuleInit {
    */
   async handle(
     payload: {
-      template: 'reservation_confirmation' | 'reservation_cancelled' | 'front_desk_new_reservation';
+      // Sprint 12 W1: `onboarding_verify`. Sprint 13 W3: `onboarding_welcome`.
+      template:
+        | 'reservation_confirmation'
+        | 'reservation_cancelled'
+        | 'front_desk_new_reservation'
+        | 'onboarding_verify'
+        | 'onboarding_welcome';
       to: string;
       cc?: string[];
       bcc?: string[];

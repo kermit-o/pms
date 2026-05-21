@@ -15,6 +15,13 @@ export const emailSendRequestedV1 = z.object({
     'reservation_confirmation',
     'reservation_cancelled',
     'front_desk_new_reservation',
+    // Sprint 12 W1 — onboarding wizard self-service (S9 W3) ahora
+    // también va por el consumer NATS (S11 W2). Cuando se añadan más
+    // templates, extender este enum y añadir al catálogo de
+    // `apps/api/notifications/templates`.
+    'onboarding_verify',
+    // Sprint 13 W3 — email "tu hotel está listo" al cerrar el wizard.
+    'onboarding_welcome',
   ]),
   to: z.string().email(),
   cc: z.array(z.string().email()).optional(),

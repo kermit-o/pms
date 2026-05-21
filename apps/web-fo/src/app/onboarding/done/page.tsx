@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { OnboardingStepper } from '../stepper';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,16 +23,29 @@ export default async function OnboardingDonePage({ searchParams }: Props) {
     <main className="flex min-h-screen items-center justify-center bg-aubergine-50 px-6 py-12">
       <div className="w-full max-w-xl space-y-5 rounded-2xl bg-white p-8 shadow-sm ring-1 ring-aubergine-100">
         <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">Aubergine</p>
+        <OnboardingStepper current="done" />
         <h1 className="text-2xl font-semibold text-aubergine-700">¡Hotel creado!</h1>
         <p className="text-sm text-aubergine-700/70">
-          Hemos provisionado tu instalación. Ya puedes empezar a configurar tarifas, importar
-          reservas y conectar Stripe.
+          Tu instalación está lista. Acabamos de enviarte un email con estos datos
+          y los próximos pasos. Si no llega en 5 minutos, revisa spam.
         </p>
 
         <section className="space-y-2 rounded-xl bg-aubergine-50/60 p-4 text-sm text-aubergine-700">
           <Row label="Admin" value={sp.adminEmail ?? '—'} />
           <Row label="Tenant ID" value={sp.tenantId ?? '—'} mono />
           <Row label="Slug público" value={sp.propertySlug ?? '—'} mono />
+        </section>
+
+        <section className="space-y-2 rounded-xl bg-aubergine-50/40 p-4 text-xs text-aubergine-700/90">
+          <p className="font-semibold uppercase tracking-wide text-aubergine-700">
+            Próximos pasos (primeros 7 días)
+          </p>
+          <ol className="list-decimal space-y-1 pl-5">
+            <li>Configura tipos de habitación, habitaciones y tarifas.</li>
+            <li>Conecta Stripe para garantías de tarjeta (Ajustes → Pagos).</li>
+            <li>Publica tu IBE público desde Ajustes de la propiedad.</li>
+            <li>Conecta tu channel manager si trabajas con OTAs.</li>
+          </ol>
         </section>
 
         {sp.kcTempPassword ? (
@@ -52,15 +66,15 @@ export default async function OnboardingDonePage({ searchParams }: Props) {
           </section>
         ) : (
           <section className="space-y-2 rounded-xl bg-amber-50 p-4 text-xs text-amber-900 ring-1 ring-amber-200">
-            <p className="font-semibold uppercase tracking-wide">Próximo paso</p>
+            <p className="font-semibold uppercase tracking-wide">Credenciales pendientes</p>
             <p>
-              Nuestro equipo finalizará el alta de tu usuario admin en el sistema de identidad
-              (Keycloak) y te enviará las credenciales de acceso al back-office dentro de las
-              próximas horas. Si llevas más de 24h sin recibirlas, escribe a{' '}
+              No pudimos provisionar tu usuario admin automáticamente. Lo hace
+              nuestro equipo manualmente y te enviamos las credenciales en menos
+              de 4 horas laborables (CET). Si pasa más tiempo, escríbenos a{' '}
               <a href="mailto:soporte@aubergine.me" className="underline">
                 soporte@aubergine.me
-              </a>
-              .
+              </a>{' '}
+              indicando tu tenant ID.
             </p>
           </section>
         )}

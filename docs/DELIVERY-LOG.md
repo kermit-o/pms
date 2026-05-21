@@ -80,6 +80,91 @@ Una o dos frases.
 
 ---
 
+## 2026-05-21 · [FEAT] · Sprint 13 W3 — Onboarding UX polish
+
+**Scope:** `apps/web-fo/src/app/onboarding`,
+`apps/api/src/notifications/templates`,
+`apps/api/src/public-onboarding`,
+`packages/eventbus/src/catalog/notifications.ts`
+**Branch:** `claude/s13-w3-onboarding-polish`
+**Refs:** norte tentativo del cierre de S12 (§4.2 del summary)
+
+**Qué cambió.**
+
+- **Stepper visual compartido** (`apps/web-fo/src/app/onboarding/stepper.tsx`):
+  Server component puro con tres pasos (Email → Hotel → Listo). Cada paso
+  muestra check ✓ si está completo, número activo si está en curso, gris
+  si pendiente. Pintado en las cuatro pantallas del wizard (landing,
+  verify, setup, done) para dar contexto en cualquier punto del flujo.
+- **Recuperación tras link caducado** (`/onboarding/verify`):
+  - Cuando el verify falla por `expired`/`invalid`, en lugar de obligar
+    al usuario a navegar de vuelta a `/onboarding` y reescribir el email,
+    se muestra un form inline con el email pre-rellenado (parsed del JWT
+    caducado de forma segura: leemos el payload sin validar firma — la
+    firma ya falló, sólo extraemos `email` para UX).
+  - Botón "Reenviar enlace" hace POST a `publicOnboardingStart` y
+    redirige a `/onboarding?status=sent`.
+- **Welcome email "tu hotel está listo"** (`onboarding_welcome` template
+  nuevo):
+  - Catálogo NATS `email.send_requested` amplía enum con
+    `onboarding_welcome`.
+  - Template `onboarding_welcome` (ES + EN) en
+    `apps/api/notifications/templates/index.ts`. Incluye accesos
+    (back-office URL, IBE URL, email admin) + lista numerada de
+    próximos pasos (room types, Stripe, IBE público, channel manager)
+    + SLA de soporte (< 4h laborables CET).
+  - `PublicOnboardingService.setup()` dispara `sendEmail` con plantilla
+    `onboarding_welcome` al finalizar la transacción de creación
+    (best-effort: si Postmark/NATS fallan, log warn y sigue — el wizard
+    ya completó la operación).
+- **Copy SLA más explícito en `/onboarding/done`**:
+  - "Acabamos de enviarte un email con estos datos y los próximos pasos.
+    Si no llega en 5 minutos, revisa spam."
+  - Sección "Próximos pasos (primeros 7 días)" con lista numerada.
+  - Cuando Keycloak provisioning falla, el mensaje aclara SLA explícito:
+    "menos de 4 horas laborables (CET)" + pide al usuario que indique
+    su tenant ID al escribir a soporte.
+
+**Por qué.**
+
+El wizard de onboarding (S9 W3) funcionaba pero la UX dejaba al hotelero
+adivinando: no veía dónde estaba dentro del flujo, no podía recuperarse
+si el link caducaba sin reescribir su email, y al cerrar no recibía
+ningún email de confirmación con instrucciones para los primeros días.
+Esos tres bloqueos eran los que más fricción producían en demos. Esta
+iteración cierra el loop sin tocar modelo de datos.
+
+**Archivos clave.**
+
+- `apps/web-fo/src/app/onboarding/stepper.tsx` (nuevo)
+- `apps/web-fo/src/app/onboarding/page.tsx` (stepper + copy)
+- `apps/web-fo/src/app/onboarding/verify/page.tsx` (stepper + recovery)
+- `apps/web-fo/src/app/onboarding/setup/page.tsx` (stepper)
+- `apps/web-fo/src/app/onboarding/done/page.tsx` (stepper + SLA copy)
+- `apps/api/src/notifications/templates/index.ts` (template welcome ES/EN)
+- `apps/api/src/public-onboarding/public-onboarding.service.ts` (dispatch)
+- `packages/eventbus/src/catalog/notifications.ts` (enum onboarding_welcome)
+- `apps/api/src/notifications/notifications.consumer.ts` (widening enum)
+
+**Tests.**
+
+- 320/320 tests verdes (sin nuevos — el welcome es best-effort y el
+  stepper no tiene lógica). Typecheck + lint verdes para api y web-fo.
+
+**Sigue pendiente (para sprints futuros).**
+
+- Wizard "guardado parcial": si el usuario cierra a mitad del setup,
+  reanudar exactamente donde estaba (requiere persistir el form en
+  draft, ahora se pierde si cierra pestaña).
+- Vista previa del IBE durante setup (preview con datos por defecto).
+- Tour guiado in-app tras done (overlay paso a paso de los próximos
+  4 pasos sugeridos).
+- Reenvío del welcome desde back-office si el hotel no lo recibió.
+- A11y audit del stepper (aria-current ya está, falta keyboard nav
+  si el componente se vuelve interactivo).
+
+---
+
 ## 2026-05-18 · [SECURITY] · Sprint 9 W4 — Anti-abuso IBE (Turnstile + blocklist + rate-limit slug+ip)
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,

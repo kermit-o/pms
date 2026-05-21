@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ApiError, publicOnboardingStart } from '@/lib/api';
+import { OnboardingStepper } from './stepper';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,12 +33,14 @@ export default async function OnboardingLanding({ searchParams }: Props) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-aubergine-50 px-6 py-12">
       <div className="w-full max-w-lg space-y-6 rounded-2xl bg-white p-8 shadow-sm ring-1 ring-aubergine-100">
-        <header className="space-y-1">
+        <header className="space-y-3">
           <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">Aubergine</p>
+          <OnboardingStepper current="email" />
           <h1 className="text-2xl font-semibold text-aubergine-700">Crea tu hotel</h1>
           <p className="text-sm text-aubergine-700/70">
-            Te enviamos un email con un enlace para confirmar tu correo. Después
-            configurarás los datos básicos del hotel.
+            Te enviamos un email con un enlace para confirmar tu correo (caduca
+            en 24 horas). Después configurarás los datos básicos del hotel en
+            menos de 3 minutos.
           </p>
         </header>
 

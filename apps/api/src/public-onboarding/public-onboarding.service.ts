@@ -250,6 +250,29 @@ export class PublicOnboardingService implements OnModuleInit {
       });
     }
 
+    // Sprint 13 W3 — welcome email "tu hotel está listo". Best-effort:
+    // si Postmark/NATS fallan, el wizard ya completó la operación; el
+    // hotel ve el resumen en /onboarding/done con todos los datos.
+    const ibeUrl = this.ibeUrl ? `${this.ibeUrl}/h/${propertySlug}` : '';
+    try {
+      await this.notifications.sendEmail({
+        template: 'onboarding_welcome',
+        to: email,
+        locale: input.hotel.locale === 'en-US' ? 'en' : 'es',
+        params: {
+          hotelName: input.hotel.name,
+          adminFullName: input.admin.fullName,
+          adminEmail: email,
+          backofficeUrl: this.backofficeUrl,
+          ibeUrl,
+        },
+      });
+    } catch (err) {
+      this.log.warn(
+        `onboarding welcome email failed (non-fatal) tenant=${created.tenant.id}: ${(err as Error).message}`,
+      );
+    }
+
     return {
       tenantId: created.tenant.id,
       propertyId: created.property.id,
@@ -257,7 +280,7 @@ export class PublicOnboardingService implements OnModuleInit {
       adminUserId: created.admin.id,
       adminEmail: email,
       backofficeUrl: this.backofficeUrl,
-      ibeUrl: this.ibeUrl ? `${this.ibeUrl}/h/${propertySlug}` : '',
+      ibeUrl,
       keycloak: {
         provisioned: kcResult.ok,
         realm: kcResult.realm ?? null,
