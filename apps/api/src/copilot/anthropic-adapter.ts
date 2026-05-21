@@ -6,6 +6,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { AuthUser } from '../auth';
 import type { Env } from '../config/env.schema';
 import { type AnyToolName, ToolResolver } from './tool-resolver';
+import { extractWidgetFromTool, type CopilotWidget } from './widgets';
 import type {
   AdapterCallbacks,
   AdapterResult,
@@ -78,6 +79,10 @@ export class AnthropicAdapter implements CopilotAdapter {
     let totalOutput = 0;
     let totalCacheRead = 0;
     let totalCacheWrite = 0;
+    // Sprint 13 W4 — acumulamos widgets emitidos por los tools read-only
+    // ejecutados durante el loop. La UI los pinta como tarjetas junto
+    // al texto del LLM. Garantiza precios reales del tool, no del LLM.
+    const widgets: CopilotWidget[] = [];
 
     for (let iter = 0; iter < this.maxIter; iter += 1) {
       const resp = await client.beta.messages.create({
@@ -104,7 +109,11 @@ export class AnthropicAdapter implements CopilotAdapter {
           .join('\n')
           .trim();
         return {
-          proposal: { kind: 'text', text: text || '…' },
+          proposal: {
+            kind: 'text',
+            text: text || '…',
+            ...(widgets.length > 0 ? { widgets } : {}),
+          },
           telemetry: this.telemetry(start, totalInput, totalOutput, totalCacheRead, totalCacheWrite),
         };
       }
@@ -154,6 +163,12 @@ export class AnthropicAdapter implements CopilotAdapter {
       try {
         const result = await this.resolver.execute(toolName, toolUse.input, user, correlationId);
         toolResultText = truncateJson(result);
+        // Sprint 13 W4 — si el tool tiene widget asociado, lo emitimos
+        // a la UI con los datos exactos del tool. El LLM aún recibirá
+        // el JSON crudo para razonar, pero su texto deja de ser la
+        // fuente autoritativa que ve el recepcionista.
+        const widget = extractWidgetFromTool(toolName, toolUse.input, result);
+        if (widget) widgets.push(widget);
       } catch (err) {
         toolResultText = `ERROR: ${(err as Error).message}`;
         toolOk = false;

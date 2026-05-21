@@ -1,4 +1,5 @@
 import type { AnyToolName } from './tool-resolver';
+import type { CopilotWidget } from './widgets';
 
 /**
  * Shared types entre adapter y service. Vive aparte para que adapters
@@ -16,8 +17,15 @@ export interface CopilotSessionState {
   }>;
 }
 
+/**
+ * Una propuesta del adapter al service. Las variantes `text` y `tool`
+ * existen desde S6. Sprint 13 W4 añade `widgets` opcional a `text` para
+ * que el adapter pueda devolver datos estructurados (precios reales del
+ * tool) junto con el texto del LLM. La UI pinta el texto + cada widget
+ * como una tarjeta dedicada.
+ */
 export type ToolProposal =
-  | { kind: 'text'; text: string }
+  | { kind: 'text'; text: string; widgets?: CopilotWidget[] }
   | { kind: 'tool'; tool: AnyToolName; input: unknown };
 
 /**

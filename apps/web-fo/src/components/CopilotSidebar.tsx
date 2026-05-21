@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CopilotSession } from '@/lib/api';
 import { streamCopilotMessage } from '@/lib/copilot-stream';
+import { CopilotAvailabilityWidget } from './CopilotAvailabilityWidget';
 
 /**
  * Aubergine FO copilot. The component owns its own session lifecycle:
@@ -183,6 +184,11 @@ export default function CopilotSidebar() {
                 <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">
                   {m.content}
                 </pre>
+                {m.widgets?.map((w, idx) =>
+                  w.kind === 'availability' ? (
+                    <CopilotAvailabilityWidget key={idx} widget={w} />
+                  ) : null,
+                )}
                 {m.pendingToolId && (
                   <PendingToolCard
                     pending={session.pendingTools.find((p) => p.id === m.pendingToolId)}

@@ -20,6 +20,7 @@ import {
 } from './copilot.types';
 import { CopilotMetrics } from './metrics';
 import type { AnyToolName } from './tool-resolver';
+import type { CopilotWidget } from './widgets';
 import { ToolResolver } from './tool-resolver';
 
 /**
@@ -145,6 +146,10 @@ export class CopilotService {
         id: randomUUID(),
         role: 'assistant',
         content: proposal.text,
+        // Sprint 13 W4 — widgets emitidos por el adapter (datos
+        // estructurados de tools read-only) viajan adjuntos al mensaje
+        // sólo en memoria. Persistencia llega con el siguiente slice.
+        widgets: proposal.widgets,
         createdAt: new Date(),
       });
       await this.persistMessage(user, session.id, {
@@ -427,6 +432,11 @@ interface SessionMessage {
     input: unknown;
     financial: boolean;
   };
+  /** Sprint 13 W4 — widgets estructurados emitidos por tools read-only.
+   *  Sólo en memoria por ahora; al recargar la sesión los mensajes
+   *  vuelven sin widgets (la tarjeta desaparece pero el texto se
+   *  conserva en DB). Persistencia llega con el siguiente slice. */
+  widgets?: CopilotWidget[];
   createdAt: Date;
 }
 
@@ -461,6 +471,7 @@ export interface SessionView {
       input: unknown;
       financial: boolean;
     };
+    widgets?: CopilotWidget[];
     createdAt: string;
   }>;
   pendingTools: Array<{
@@ -484,6 +495,7 @@ function toView(session: Session): SessionView {
       content: m.content,
       pendingToolId: m.pendingToolId,
       pendingTool: m.pendingTool,
+      widgets: m.widgets,
       createdAt: m.createdAt.toISOString(),
     })),
     pendingTools: [...session.pendingTools.values()].map((p) => ({

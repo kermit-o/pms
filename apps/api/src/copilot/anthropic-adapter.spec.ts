@@ -138,4 +138,70 @@ describe('AnthropicAdapter', () => {
       /ANTHROPIC_API_KEY/,
     );
   });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 13 W4 — widgets estructurados (Mockup B, first slice).
+  // ---------------------------------------------------------------------------
+
+  it('emite un widget de disponibilidad cuando el LLM ejecuta search_availability_by_type', async () => {
+    const availabilityResult = [
+      {
+        roomTypeId: 'rt-dbl',
+        code: 'DBL',
+        name: 'Doble Estándar',
+        description: null,
+        baseOccupancy: 2,
+        maxOccupancy: 2,
+        totalRooms: 12,
+        availableRooms: 8,
+        pricePerNight: '95',
+        totalForStay: '95',
+        nights: 1,
+        defaultCurrency: 'EUR',
+      },
+    ];
+    createMock
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: 'tool_use',
+            id: 't1',
+            name: 'search_availability_by_type',
+            input: { propertyId: 'p', arrival: '2026-05-26', departure: '2026-05-27', adults: 2 },
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 5 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Hay 1 tipo disponible.' }],
+        usage: { input_tokens: 5, output_tokens: 5 },
+      });
+    const { adapter, resolver } = buildAdapter();
+    resolver.execute.mockResolvedValueOnce(availabilityResult);
+    const out = await adapter.propose(session, user, 'cid', 'precios');
+    expect(out.proposal.kind).toBe('text');
+    if (out.proposal.kind === 'text') {
+      expect(out.proposal.widgets).toBeDefined();
+      expect(out.proposal.widgets).toHaveLength(1);
+      expect(out.proposal.widgets![0]!.kind).toBe('availability');
+      // El widget contiene el precio EXACTO del tool, no del LLM.
+      const widget = out.proposal.widgets![0]!;
+      if (widget.kind === 'availability') {
+        expect(widget.data.rows[0]!.pricePerNight).toBe('95');
+        expect(widget.data.rows[0]!.available).toBe(8);
+      }
+    }
+  });
+
+  it('no añade widgets cuando no se ejecutó ningún tool con widget asociado', async () => {
+    createMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'Sin tool calls.' }],
+      usage: { input_tokens: 5, output_tokens: 5 },
+    });
+    const { adapter } = buildAdapter();
+    const out = await adapter.propose(session, user, 'cid', 'hola');
+    if (out.proposal.kind === 'text') {
+      expect(out.proposal.widgets).toBeUndefined();
+    }
+  });
 });
