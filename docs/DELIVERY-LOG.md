@@ -80,6 +80,76 @@ Una o dos frases.
 
 ---
 
+## 2026-05-21 · [FIX] · Hotfix — Copilot expone 401 JSON crudo de Anthropic
+
+**Scope:** `apps/api/src/copilot/anthropic-adapter.ts`
+**Branch:** `claude/hotfix-copilot-error-handling`
+**Refs:** incidente reportado por el PO con captura del piloto BBM01.
+La barra lateral del Copilot mostraba literalmente
+`401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_..."}`.
+
+**Qué cambió.**
+
+- `AnthropicAdapter.propose` ahora envuelve la llamada a
+  `client.beta.messages.create` en try/catch. Si Anthropic devuelve
+  cualquier `APIError` (401, 403, 429, 5xx) o un timeout de red, el
+  adapter retorna un `{ kind: 'text', text: '...' }` amistoso en lugar
+  de propagar el error al controller y de ahí a la UI.
+- Mensajes según status:
+  - 401/403 → "El asistente está temporalmente fuera de servicio
+    (credencial de IA inválida). El equipo de Aubergine ya está al
+    tanto. Prueba en unos minutos."
+  - 429 → "El asistente está saturado en este momento. Espera unos
+    segundos y vuelve a intentarlo."
+  - 5xx / 529 → "El asistente no responde ahora mismo. Reintenta en
+    un par de minutos."
+  - timeout / sin status → "No pude conectar con el asistente.
+    Comprueba tu conexión y reintenta."
+  - 4xx genérico → "El asistente falló (XXX). <message slice 200>" —
+    sin filtrar JSON crudo ni `request_id`.
+- `extractStatus()` duck-types el error (lee `.status` si existe).
+  Cubre tanto `Anthropic.APIError` real como mocks de test.
+- Log server-side completo (`status + model + message`) para que el
+  operador pueda diagnosticar sin exponer al hotel.
+- Tests nuevos (7): 5 unitarios de `friendlyAnthropicError` + 2 e2e
+  en el adapter (401 y 429 producen texto amistoso, no leak JSON).
+
+**Por qué.**
+
+El piloto BBM01 mostró el JSON crudo de Anthropic al recepcionista,
+que vio "invalid x-api-key" y un `request_id` interno. Eso es:
+1. Operacionalmente embarazoso (revela que la integración rota es
+   con Anthropic, expone el header name `x-api-key`).
+2. Inútil para el usuario final (no puede hacer nada con esa info).
+3. Filtra detalles de diagnóstico interno (request_id) que no
+   deberían salir al hotel.
+
+El error real (credencial expirada) requiere acción del PO (rotar
+key + actualizar Fly secret). Este hotfix asegura que mientras tanto
+y en futuras incidencias similares la UX sea presentable.
+
+**Archivos clave.**
+
+- `apps/api/src/copilot/anthropic-adapter.ts`
+- `apps/api/src/copilot/anthropic-adapter.spec.ts`
+
+**Tests.**
+
+- 327/327 verdes (7 nuevos). Typecheck + lint verdes.
+
+**Sigue pendiente (acción del PO, NO mío).**
+
+1. Rotar `ANTHROPIC_API_KEY` en https://console.anthropic.com/.
+2. Actualizar el secret en Fly:
+   `flyctl secrets set -a pms-api ANTHROPIC_API_KEY=sk-ant-...`
+3. Redeploy: `flyctl deploy -c apps/api/fly.toml -a pms-api`.
+4. Verificar en el Copilot que vuelve a responder sin el banner.
+
+Sin esos pasos el Copilot seguirá fallando — el hotfix sólo mejora
+cómo se presenta el fallo al usuario.
+
+---
+
 ## 2026-05-18 · [SECURITY] · Sprint 9 W4 — Anti-abuso IBE (Turnstile + blocklist + rate-limit slug+ip)
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { AnthropicAdapter } from './anthropic-adapter';
+import { AnthropicAdapter, friendlyAnthropicError } from './anthropic-adapter';
 import type { CopilotSessionState } from './copilot.types';
 import type { AuthUser } from '../auth';
 
@@ -137,5 +137,52 @@ describe('AnthropicAdapter', () => {
     await expect(adapter.propose(session, user, 'cid', 'm')).rejects.toThrow(
       /ANTHROPIC_API_KEY/,
     );
+  });
+
+  it('returns friendly text when Anthropic responds 401 invalid key', async () => {
+    const err = Object.assign(new Error('invalid x-api-key'), { status: 401 });
+    createMock.mockRejectedValueOnce(err);
+    const { adapter } = buildAdapter();
+    const out = await adapter.propose(session, user, 'cid', 'm');
+    expect(out.proposal.kind).toBe('text');
+    if (out.proposal.kind === 'text') {
+      expect(out.proposal.text).toMatch(/temporalmente fuera de servicio/);
+      expect(out.proposal.text).not.toMatch(/x-api-key/);
+      expect(out.proposal.text).not.toMatch(/request_id/);
+    }
+  });
+
+  it('returns friendly text when Anthropic returns 429 rate limited', async () => {
+    const err = Object.assign(new Error('rate limit'), { status: 429 });
+    createMock.mockRejectedValueOnce(err);
+    const { adapter } = buildAdapter();
+    const out = await adapter.propose(session, user, 'cid', 'm');
+    expect(out.proposal.kind).toBe('text');
+    if (out.proposal.kind === 'text') {
+      expect(out.proposal.text).toMatch(/saturado/);
+    }
+  });
+});
+
+describe('friendlyAnthropicError', () => {
+  it('401 / 403 → credencial inválida', () => {
+    expect(friendlyAnthropicError(401, 'x')).toMatch(/credencial de IA/);
+    expect(friendlyAnthropicError(403, 'x')).toMatch(/credencial de IA/);
+  });
+  it('429 → saturado', () => {
+    expect(friendlyAnthropicError(429, 'x')).toMatch(/saturado/);
+  });
+  it('5xx → no responde', () => {
+    expect(friendlyAnthropicError(500, 'x')).toMatch(/no responde/);
+    expect(friendlyAnthropicError(503, 'x')).toMatch(/no responde/);
+    expect(friendlyAnthropicError(529, 'x')).toMatch(/no responde/);
+  });
+  it('undefined status (red/timeout) → conexión', () => {
+    expect(friendlyAnthropicError(undefined, 'x')).toMatch(/conectar con el asistente/);
+  });
+  it('4xx genérico no filtra JSON crudo', () => {
+    const out = friendlyAnthropicError(422, '{"error":"raw json"}');
+    expect(out).not.toMatch(/x-api-key/);
+    expect(out).toContain('422');
   });
 });

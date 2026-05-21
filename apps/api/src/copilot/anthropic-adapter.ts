@@ -80,13 +80,30 @@ export class AnthropicAdapter implements CopilotAdapter {
     let totalCacheWrite = 0;
 
     for (let iter = 0; iter < this.maxIter; iter += 1) {
-      const resp = await client.beta.messages.create({
-        model: this.model,
-        max_tokens: this.maxTokens,
-        system,
-        tools,
-        messages: conv,
-      });
+      let resp: Anthropic.Beta.Messages.BetaMessage;
+      try {
+        resp = await client.beta.messages.create({
+          model: this.model,
+          max_tokens: this.maxTokens,
+          system,
+          tools,
+          messages: conv,
+        });
+      } catch (err) {
+        // Anthropic devuelve APIError con .status. Duck-typed para que
+        // funcione tanto con la clase real como con mocks que sólo
+        // pegan la propiedad `status`. Mapeamos a un texto amistoso
+        // para no exponer JSON crudo en la UI del Copilot.
+        const status = extractStatus(err);
+        const friendly = friendlyAnthropicError(status, (err as Error).message);
+        this.log.error(
+          `Anthropic API error status=${status ?? 'n/a'} model=${this.model}: ${(err as Error).message}`,
+        );
+        return {
+          proposal: { kind: 'text', text: friendly },
+          telemetry: this.telemetry(start, totalInput, totalOutput, totalCacheRead, totalCacheWrite),
+        };
+      }
 
       totalInput += resp.usage?.input_tokens ?? 0;
       totalOutput += resp.usage?.output_tokens ?? 0;
@@ -292,4 +309,40 @@ function buildAnthropicTools(): Anthropic.Beta.Messages.BetaToolUnion[] {
 function truncateJson(value: unknown, max = 1500): string {
   const json = JSON.stringify(value, null, 2);
   return json.length > max ? `${json.slice(0, max)}\n…(truncated)` : json;
+}
+
+function extractStatus(err: unknown): number | undefined {
+  // Duck-type primero: cubre Anthropic.APIError real y mocks de tests.
+  // (No usamos instanceof porque Anthropic.APIError no siempre está
+  // disponible bajo mocks de vi.mock).
+  if (err && typeof err === 'object' && 'status' in err) {
+    const s = (err as { status: unknown }).status;
+    if (typeof s === 'number') return s;
+  }
+  return undefined;
+}
+
+/**
+ * Mapea errores upstream de Anthropic a mensajes accionables para el
+ * operador. Nunca devolvemos JSON crudo (request_id, x-api-key…) a la
+ * UI — eso es operacionalmente embarazoso y filtra detalles internos.
+ */
+export function friendlyAnthropicError(
+  status: number | undefined,
+  rawMessage: string,
+): string {
+  if (status === 401 || status === 403) {
+    return 'El asistente está temporalmente fuera de servicio (credencial de IA inválida). El equipo de Aubergine ya está al tanto. Prueba en unos minutos.';
+  }
+  if (status === 429) {
+    return 'El asistente está saturado en este momento. Espera unos segundos y vuelve a intentarlo.';
+  }
+  if (status === 529 || (status !== undefined && status >= 500)) {
+    return 'El asistente no responde ahora mismo. Reintenta en un par de minutos.';
+  }
+  if (status === undefined) {
+    return 'No pude conectar con el asistente. Comprueba tu conexión y reintenta.';
+  }
+  // 4xx no cubierto arriba: deja el texto del error pero sin JSON.
+  return `El asistente falló (${status}). ${rawMessage.slice(0, 200)}`;
 }
