@@ -80,6 +80,90 @@ Una o dos frases.
 
 ---
 
+## 2026-05-21 · [FIX] · Copilot — Bloquear placeholders monetarios alucinados
+
+**Scope:** `apps/api/src/copilot/`
+**Branch:** `claude/copilot-block-hallucinations`
+**Refs:** incidente BBM01 (captura del PO) — el Copilot devolvió una tabla
+con cinco filas pero sólo tres precios reales; las otras dos decían
+"**desde más €**" y se mostraron como si fueran cifras.
+
+**Qué cambió.**
+
+- Nuevo módulo puro `response-validator.ts` con
+  `validateAssistantText(text): ValidationResult`:
+  - Detecta y reemplaza frases vagas conocidas: "desde más €",
+    "a partir de € [sin número]", "precio a consultar", "consultar
+    precio", "varía según temporada/fecha/ocupación", "precio
+    orientativo".
+  - Detecta `€`/`$`/`£` huérfanos (sin cifra inmediatamente antes,
+    típico de tablas markdown con celdas vacías o `**€**` placeholder).
+  - Sustituye cada violación por `[precio no consultado]`.
+  - Devuelve `{ ok, violations[], sanitized }` para que el caller
+    decida si reintentar al LLM o saneárselo al usuario.
+- `AnthropicAdapter.propose()` integra el validador en el path de
+  retorno de texto:
+  - Si `ok === false`, log warn con la lista de violaciones (visible
+    para diagnóstico de prompt drift en Grafana).
+  - Antepone aviso meta `⚠ Hay datos no verificados en mi respuesta…`
+    para que el recepcionista sepa que algo se ocultó.
+  - Reemplaza el texto crudo por la versión saneada.
+- System prompt nuevo bloque "REGLA CRÍTICA — PRECIOS Y CIFRAS":
+  - "NUNCA inventes ni aproximes precios, tarifas, disponibilidad o
+    cualquier cifra numérica."
+  - Prohibición explícita de las frases que el validador detecta
+    (defensa en profundidad: prompt + post-validation).
+  - "Si en una tabla no tienes el precio de una fila, OMITE LA FILA
+    — no la rellenes con un placeholder."
+  - "Lista SÓLO los tipos que consultaste; los demás 'pídemelo si
+    los necesitas'."
+
+**Por qué.**
+
+El LLM, bajo presión por completar una tabla, rellenó dos filas con
+"desde más €" en lugar de omitirlas o pedirme el dato. Eso es:
+1. Información falsa al recepcionista (cobra eso a un huésped y has
+   roto el negocio del hotel).
+2. Imposible de auditar después (no queda registro de que esos
+   precios no estaban consultados).
+3. Más probable bajo modelos pequeños o cuando se cachea mucho el
+   prompt.
+
+La defensa en una sola capa (sólo prompt) es frágil — los modelos
+ignoran reglas bajo ciertos patrones de prompt. La defensa post-LLM
+(validador regex) es determinista y barata; aunque el LLM se salte
+la regla, el placeholder no llega al recepcionista.
+
+**Archivos clave.**
+
+- `apps/api/src/copilot/response-validator.ts` (nuevo, ~80 LoC puras)
+- `apps/api/src/copilot/response-validator.spec.ts` (12 tests)
+- `apps/api/src/copilot/anthropic-adapter.ts` (sanitize() + prompt)
+- `apps/api/src/copilot/anthropic-adapter.spec.ts` (+2 tests adapter-level)
+
+**Tests.**
+
+- 334/334 verdes (14 nuevos). Typecheck + lint verdes.
+
+**Sigue pendiente (otras direcciones de Copilot UX).**
+
+Este commit cubre la prioridad #1 (bloqueo de alucinaciones). Las
+direcciones restantes del análisis de UX (mockups A/B/D) quedan
+abiertas:
+- **Mockup A — Render markdown** (~1 día, 2 deps `react-markdown` +
+  `remark-gfm`): pinta la tabla bonita.
+- **Mockup B — Widgets estructurados** (~3 días): el adapter emite
+  `kind: 'widget'` para queries de disponibilidad/folio/reserva; UI
+  pinta tarjetas con CTAs tipados. Garantiza por diseño que precios
+  vienen del tool, no del LLM.
+- **Mockup D — Spotlight modal** (~5-7 días): rediseño UX profundo.
+
+Recomendación: cuando se aborde Mockup B, el validador de este commit
+se convierte en safety net redundante para texto libre (cinturón +
+tirantes); puede atenuarse a sólo log sin sanear.
+
+---
+
 ## 2026-05-18 · [SECURITY] · Sprint 9 W4 — Anti-abuso IBE (Turnstile + blocklist + rate-limit slug+ip)
 
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,
