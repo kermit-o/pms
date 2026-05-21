@@ -1060,6 +1060,10 @@ model CopilotMessage {
   cacheReadTokens  Int?               @map("cache_read_tokens")
   cacheWriteTokens Int?               @map("cache_write_tokens")
   latencyMs        Int?               @map("latency_ms")
+  // Sprint 13 — widgets estructurados que el adapter emitió junto al
+  // texto (disponibilidad, folio, etc.). JSON tal cual; el cliente sabe
+  // pintarlos. Persistir habilita audit + futuro reload-from-DB.
+  widgets          Json?
   createdAt        DateTime           @default(now()) @map("created_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)

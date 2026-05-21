@@ -146,9 +146,6 @@ export class CopilotService {
         id: randomUUID(),
         role: 'assistant',
         content: proposal.text,
-        // Sprint 13 W4 — widgets emitidos por el adapter (datos
-        // estructurados de tools read-only) viajan adjuntos al mensaje
-        // sólo en memoria. Persistencia llega con el siguiente slice.
         widgets: proposal.widgets,
         createdAt: new Date(),
       });
@@ -156,6 +153,7 @@ export class CopilotService {
         role: CopilotMessageRole.ASSISTANT,
         contentText: proposal.text,
         telemetry,
+        widgets: proposal.widgets,
       });
       return toView(session);
     }
@@ -337,6 +335,9 @@ export class CopilotService {
       toolInput?: Prisma.InputJsonValue | null;
       toolResult?: Prisma.InputJsonValue | null;
       telemetry?: AdapterTelemetry;
+      /** Sprint 13 — widgets emitidos por el adapter; se serializan JSON
+       *  tal cual para audit + futuro reload-from-DB. */
+      widgets?: CopilotWidget[];
     },
   ): Promise<void> {
     // Metricas: incrementar siempre, persistir DB best-effort.
@@ -384,6 +385,10 @@ export class CopilotService {
             cacheReadTokens: fields.telemetry?.cacheReadTokens ?? null,
             cacheWriteTokens: fields.telemetry?.cacheWriteTokens ?? null,
             latencyMs: fields.telemetry?.latencyMs ?? null,
+            widgets:
+              fields.widgets && fields.widgets.length > 0
+                ? (fields.widgets as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
           },
         });
       });
