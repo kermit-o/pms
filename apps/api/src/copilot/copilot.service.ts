@@ -72,6 +72,43 @@ export class CopilotService {
   }
 
   /**
+   * Sprint 13 — Lista de usuarios distintos que han tenido al menos una
+   * sesión de Copilot en este tenant. Alimenta el `<select>` del filtro
+   * en la vista admin para que el operador no tenga que pegar UUIDs.
+   *
+   * No optimizamos: usamos `groupBy({ by: userId })` sobre
+   * `copilot_messages` + join con `users` para resolver `fullName`.
+   * Cubre el caso piloto (decenas de operadores por hotel).
+   */
+  async listSessionUsers(user: AuthUser): Promise<AdminSessionUser[]> {
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: 'admin-users' };
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const distinct = await tx.copilotMessage.groupBy({
+        by: ['userId'],
+        _count: { sessionId: true },
+        _max: { createdAt: true },
+        orderBy: { _max: { createdAt: 'desc' } },
+      });
+      if (distinct.length === 0) return [];
+      const users = await tx.user.findMany({
+        where: { id: { in: distinct.map((d) => d.userId) } },
+        select: { id: true, fullName: true, email: true },
+      });
+      const userById = new Map(users.map((u) => [u.id, u]));
+      return distinct.map((d) => {
+        const u = userById.get(d.userId);
+        return {
+          userId: d.userId,
+          fullName: u?.fullName ?? null,
+          email: u?.email ?? null,
+          messageCount: d._count.sessionId,
+          lastActivityAt: d._max.createdAt?.toISOString() ?? null,
+        };
+      });
+    });
+  }
+
+  /**
    * Sprint 13 — Listado de sesiones para la vista admin
    * `/admin/copilot/sessions`. Devuelve un resumen por sesión (id, autor,
    * primer mensaje, contadores, última actividad) ordenado por última
@@ -629,6 +666,15 @@ interface PendingTool {
 }
 
 export type { ToolProposal };
+
+/** Sprint 13 — Item del selector de usuario en la vista admin. */
+export interface AdminSessionUser {
+  userId: string;
+  fullName: string | null;
+  email: string | null;
+  messageCount: number;
+  lastActivityAt: string | null;
+}
 
 /** Sprint 13 — Sumario que muestra la vista admin de sesiones. */
 export interface AdminSessionSummary {

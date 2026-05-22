@@ -49,6 +49,17 @@ export class CopilotController {
     });
   }
 
+  /**
+   * Sprint 13 — Alimenta el `<select>` del filtro admin. Devuelve los
+   * usuarios distintos que han tenido al menos un mensaje de Copilot
+   * en este tenant, con `fullName` resuelto. `tenant_admin` only.
+   */
+  @Get('admin/users')
+  @Roles('tenant_admin')
+  async listSessionUsers(@CurrentUser() user: AuthUser) {
+    return this.copilot.listSessionUsers(user);
+  }
+
   @Get(':id')
   @Roles(...ROLES)
   async getSession(@CurrentUser() user: AuthUser, @Param('id', new ParseUUIDPipe()) id: string) {
