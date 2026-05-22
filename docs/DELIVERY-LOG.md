@@ -80,6 +80,95 @@ Una o dos frases.
 
 ---
 
+## 2026-05-22 · [REFACTOR] · Copilot — tipos de widgets compartidos en `packages/copilot-widget-types`
+
+**Scope:** `packages/copilot-widget-types` (nuevo), `apps/api/src/copilot`,
+`apps/web-fo/src/lib`
+**Branch:** `claude/copilot-widgets-shared-types` (sobre hsk-tasks)
+**Refs:** deuda técnica acumulada al cerrar la trilogía + 1 (regla
+de 3 cumplida tras availability/folio/reservation/hsk_tasks).
+
+**Qué cambió.**
+
+- **Nuevo paquete `@pms/copilot-widget-types`**:
+  - `packages/copilot-widget-types/package.json`: zero deps, sólo
+    TypeScript devdep. `main`/`types` apuntan a `./dist/`.
+  - `tsconfig.json` y `tsconfig.build.json` (clones del patrón de
+    `eventbus`).
+  - `src/index.ts` con la fuente única de verdad:
+    `CopilotWidget` discriminated union (4 variantes) +
+    `AvailabilityWidgetData`, `FolioWidgetData`,
+    `ReservationWidgetData`, `HskTasksWidgetData` + las filas
+    individuales (`AvailabilityRow`, `FolioEntry`, `HskTaskRow`).
+- **`apps/api`**:
+  - `package.json` dep `@pms/copilot-widget-types: workspace:*`.
+  - `predev` script prebuildea el paquete nuevo (sigue patrón de
+    db/eventbus/mcp-tools).
+  - `apps/api/src/copilot/widgets.ts` ya no define los tipos:
+    `import type` desde `@pms/copilot-widget-types` + `export type`
+    para mantener compatibilidad con call sites internos. La lógica
+    de los extractores (`buildAvailabilityWidget`, etc.) queda
+    intacta.
+- **`apps/web-fo`**:
+  - `package.json` dep `@pms/copilot-widget-types: workspace:*`.
+  - `lib/api.ts` importa `CopilotWidget` y deriva los alias
+    `CopilotAvailabilityWidget`, `CopilotFolioWidget`,
+    `CopilotReservationWidget`, `CopilotHskTasksWidget` con
+    `Extract<CopilotWidget, { kind: 'X' }>` — los componentes
+    siguen importando los nombres prefijados sin tocar una línea.
+    Los row aliases (`CopilotAvailabilityRow`, etc.) se derivan
+    indexando el union (`['data']['rows'][number]`).
+
+**Por qué.**
+
+Tras 4 widgets, los tipos vivían triplicados:
+1. Definición en `apps/api/src/copilot/widgets.ts`.
+2. Definición casi idéntica en `apps/web-fo/src/lib/api.ts`.
+3. Forma implícita en cada componente React que indexaba.
+
+Cada nuevo widget pedía actualizar dos sitios sincronizados a mano;
+si divergían, el typecheck pasaba pero la deserialización fallaba en
+runtime (web-fo esperaría un campo que api dejó de emitir, o vice
+versa). Centralizar elimina este riesgo y baja el coste de añadir
+widgets nuevos a un único archivo.
+
+El paquete es deliberadamente mínimo (zero deps, sólo tipos) para
+no contaminar el bundle del frontend con dependencias del servidor
+— mcp-tools no servía porque arrastra `@modelcontextprotocol/sdk`
++ `@pms/db` (server-only).
+
+**Archivos clave.**
+
+- `packages/copilot-widget-types/package.json`
+- `packages/copilot-widget-types/tsconfig.{json,build.json}`
+- `packages/copilot-widget-types/src/index.ts`
+- `apps/api/package.json` (+dep + predev)
+- `apps/api/src/copilot/widgets.ts` (import + re-export)
+- `apps/web-fo/package.json` (+dep)
+- `apps/web-fo/src/lib/api.ts` (import + Extract aliases)
+
+**Tests.**
+
+- 341/341 verdes (sin nuevos — refactor puro, los tests existentes
+  cubren tanto el extractor del api como las firmas del frontend).
+- Typecheck verde en api, web-fo, copilot-widget-types.
+- Lint verde en api + web-fo. Sin deps npm nuevas (sólo workspace
+  links). Sin migraciones.
+
+**Sigue pendiente.**
+
+- **Vista admin** `/admin/copilot/sessions` — depurar prompt drift
+  desde web (próximo del plan, ahora desbloqueado por la base ya en
+  sitio: persistencia + reload + 4 widgets + tipos compartidos).
+- **Persistencia opt-in de `pendingTools`** — sólo si el negocio lo
+  pide.
+- **Más widgets** (`arrivals_today`, `departures_today`,
+  `suggest_assignments`) — sumarlos ya sólo toca un archivo:
+  `packages/copilot-widget-types/src/index.ts` para el tipo, y el
+  extractor + componente como hasta ahora.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot widget — hsk_tasks (cierra vertical housekeeping)
 
 **Scope:** `apps/api/src/housekeeping`, `apps/api/src/copilot/`,
