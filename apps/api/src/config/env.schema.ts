@@ -67,6 +67,16 @@ export const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
 
+  // Sprint 14 W1 — Stripe Billing al tenant (SaaS, NO huésped).
+  // - SAAS_STRIPE_PRICE_ID: Price ID de Stripe del plan SaaS (un solo
+  //   plan en V1; multi-plan en V2). Configurado en Dashboard.
+  // - SAAS_STRIPE_WEBHOOK_SECRET: webhook signing secret del endpoint
+  //   /billing/stripe/webhook (separado del webhook de huésped).
+  // - SAAS_TRIAL_DAYS: días de trial al crear suscripción. Default 14.
+  SAAS_STRIPE_PRICE_ID: z.string().optional(),
+  SAAS_STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  SAAS_TRIAL_DAYS: z.coerce.number().int().min(0).max(90).default(14),
+
   // SES.HOSPEDAJES (Guardia Civil). En staging apunta a sandbox; en prod
   // al endpoint real. Si no se configura, los envios se quedan en QUEUED
   // y el envio real es no-op (util en tests/dev).

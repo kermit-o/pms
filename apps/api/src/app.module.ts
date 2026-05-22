@@ -19,6 +19,7 @@ import { CopilotModule } from './copilot';
 import { HousekeepingModule } from './housekeeping';
 import { NightAuditModule } from './night-audit';
 import { NotificationsModule } from './notifications';
+import { BillingModule } from './billing';
 import { PaymentsModule } from './payments';
 import { PublicIbeModule } from './public-ibe';
 import { PublicOnboardingModule } from './public-onboarding';
@@ -44,6 +45,7 @@ import { ReportsModule } from './reports';
     CopilotModule,
     NightAuditModule,
     NotificationsModule,
+    BillingModule,
     PaymentsModule,
     PublicIbeModule,
     PublicOnboardingModule,

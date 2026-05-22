@@ -941,6 +941,46 @@ export async function listCopilotSessionUsers(
   return apiFetch('/copilot/sessions/admin/users', { accessToken });
 }
 
+// ---------------------------------------------------------------------------
+// Sprint 14 W1 — Stripe Billing al tenant.
+// ---------------------------------------------------------------------------
+
+export interface TenantSubscription {
+  tenantId: string;
+  tenantName: string;
+  hasSubscription: boolean;
+  status: string | null;
+  currentPeriodEnd: string | null;
+  trialEndsAt: string | null;
+}
+
+export async function getMySubscription(
+  accessToken: string | undefined,
+): Promise<TenantSubscription> {
+  return apiFetch('/me/subscription', { accessToken });
+}
+
+export async function startMySubscription(
+  accessToken: string | undefined,
+): Promise<TenantSubscription> {
+  return apiFetch('/me/subscription/start', {
+    method: 'POST',
+    accessToken,
+    body: '{}',
+  });
+}
+
+export async function openBillingPortal(
+  accessToken: string | undefined,
+  returnUrl: string,
+): Promise<{ url: string }> {
+  return apiFetch('/me/subscription/portal', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({ returnUrl }),
+  });
+}
+
 export async function sendCopilotMessage(
   accessToken: string | undefined,
   sessionId: string,

@@ -80,6 +80,99 @@ Una o dos frases.
 
 ---
 
+## 2026-05-22 · [FEAT] · Sprint 14 W1 — Stripe Billing al tenant (SaaS)
+
+**Scope:** `apps/api/src/billing`, `apps/web-fo/src/app/admin/billing`,
+`packages/db/prisma/schema.prisma`, migración nueva
+**Branch:** `claude/s14-w1-stripe-billing`
+**Refs:** SPRINT-14-PLAN.md §2
+
+**Qué cambió.**
+
+- **Modelo `Tenant`** ampliado con 5 columnas opcionales:
+  `stripeCustomerId`, `stripeSubscriptionId`, `subscriptionStatus`,
+  `currentPeriodEnd`, `trialEndsAt`. Forward-only, todas nullable, con
+  índices únicos parciales en los dos `stripe*Id` y un `CHECK` para
+  acotar el status a los valores de Stripe.
+- **`BillingModule`** nuevo en API con tres endpoints:
+  - `GET /me/subscription` — devuelve `{ tenantId, tenantName,
+    hasSubscription, status, currentPeriodEnd, trialEndsAt }` para que
+    el front muestre estado.
+  - `POST /me/subscription/start` — `tenant_admin` only. Crea Stripe
+    Customer + Subscription con trial de `SAAS_TRIAL_DAYS` (14 por
+    defecto) sobre `SAAS_STRIPE_PRICE_ID`. Idempotente: si el tenant
+    ya tiene `stripeSubscriptionId`, devuelve la sub actual sin tocar
+    Stripe. `idempotencyKey: tenant-sub-<tenantId>`.
+  - `POST /me/subscription/portal` — `tenant_admin` only. Devuelve URL
+    del Stripe Customer Portal con `return_url` validada (Zod).
+- **Webhook** `POST /billing/stripe/webhook` (`@Public()`, raw body) que
+  procesa `customer.subscription.created/updated/deleted` e
+  `invoice.payment_failed`, sincronizando `subscriptionStatus`,
+  `currentPeriodEnd` y `trialEndsAt` por `metadata.tenantId`. Verifica
+  firma con `SAAS_STRIPE_WEBHOOK_SECRET`.
+- **`trial_settings.end_behavior.missing_payment_method: 'pause'`** —
+  si acaba el trial sin tarjeta, la sub pasa a `paused` (no se
+  factura, no caos para el hotel).
+- **Página `/admin/billing`** (server component + dos server actions)
+  que sólo ve `tenant_admin`. CTA "Empezar trial" si no hay sub, o
+  "Gestionar suscripción (Stripe Portal) →" si ya hay. Muestra
+  estado, fin del trial, próxima renovación. Banners accionables
+  cuando el status es `past_due` / `paused` / `canceled` / `unpaid`.
+- **Link "Facturación"** en el nav del layout, al lado de "Admin ·
+  Copilot", también condicional a `tenant_admin`.
+- **Helpers `lib/api.ts`**: `getMySubscription`, `startMySubscription`,
+  `openBillingPortal` + tipo `TenantSubscription`.
+- **3 env vars** nuevas en `env.schema.ts`: `SAAS_STRIPE_PRICE_ID`,
+  `SAAS_STRIPE_WEBHOOK_SECRET`, `SAAS_TRIAL_DAYS` (todas opcionales;
+  si faltan, los endpoints contestan 503).
+
+**Por qué.**
+
+Aubergine necesita facturar a los hoteles por usar la plataforma.
+Hasta ahora la app sólo sabía cobrar al huésped (Stripe del lado del
+hotel); el cobro a nuestro tenant es un flujo distinto, con otro
+Customer, otro webhook y otra cuenta Stripe. La pieza es trial-first
+para que el piloto pueda empezar sin tarjeta y self-service vía
+Customer Portal para no construir UI de billing nosotros.
+
+**Archivos clave.**
+
+- `apps/api/src/billing/billing.service.ts` (nuevo)
+- `apps/api/src/billing/billing.controller.ts` (nuevo)
+- `apps/api/src/billing/billing.module.ts` (nuevo)
+- `apps/api/src/billing/billing.service.spec.ts` (10 tests)
+- `apps/api/src/app.module.ts` (registra BillingModule)
+- `apps/api/src/config/env.schema.ts` (3 vars)
+- `apps/web-fo/src/app/admin/billing/page.tsx` (nuevo)
+- `apps/web-fo/src/app/layout.tsx` (link nav)
+- `apps/web-fo/src/lib/api.ts` (helpers)
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260710000000_tenant_billing/migration.sql`
+
+**Tests.**
+
+- 10 tests nuevos en `billing.service.spec.ts` cubren: getSubscription
+  con/sin sub, startSubscription happy + idempotencia + 503 si
+  faltan envs, portal 400 sin customer, webhook sync correcto +
+  noop sin `metadata.tenantId`.
+- `pnpm --filter @pms/api test`: 401/401 verdes.
+- Typecheck + lint en api y web-fo verdes.
+
+**Sigue pendiente (para que el PO ejecute fuera del repo).**
+
+- Stripe Dashboard: crear Product + Price (€/mes), apuntar Price ID.
+- Stripe Dashboard: configurar Customer Portal (productos, billing
+  history, payment methods, cancelación).
+- Stripe Dashboard: crear webhook destination →
+  `https://pms-api.fly.dev/billing/stripe/webhook` suscrita a
+  `customer.subscription.*` + `invoice.payment_failed`.
+- Fly secrets: `flyctl secrets set SAAS_STRIPE_PRICE_ID=price_...
+  SAAS_STRIPE_WEBHOOK_SECRET=whsec_... -a pms-api`.
+- Aplicar la migración en prod: `pnpm --filter @pms/db prisma migrate
+  deploy` (vía CI o el script de release).
+
+---
+
 ## 2026-05-21 · [FEAT] · Sprint 13 W2 — Admin UI de rate plans en web-fo
 
 **Scope:** `apps/web-fo/src/app/properties/[id]/rate-plans`,

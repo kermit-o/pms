@@ -29,6 +29,15 @@ model Tenant {
   // NULL en tenants creados manualmente / seeded. Para hoteles activos en
   // producción, esto se ignora — solo describe el origen.
   onboardingStatus String?      @map("onboarding_status")
+  // Sprint 14 W1 — Stripe Billing al tenant (suscripción SaaS).
+  // Status mapea 1:1 a Stripe (trialing/active/past_due/...). Customer
+  // y subscription IDs son del Stripe del SaaS, separados de los del
+  // huésped que viven en Reservation.
+  stripeCustomerId     String?   @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
+  subscriptionStatus   String?   @map("subscription_status")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  trialEndsAt          DateTime? @map("trial_ends_at")
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
   deletedAt        DateTime?    @map("deleted_at")
