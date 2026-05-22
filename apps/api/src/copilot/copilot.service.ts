@@ -78,6 +78,11 @@ export class CopilotService {
    * actividad desc. Sólo `tenant_admin` lo consume (el controller lo
    * restringe).
    *
+   * Filtros V1: `userId`, ventana `from`/`to` (sobre createdAt de cada
+   * mensaje), cursor `before` (paginación por última actividad: el cliente
+   * pasa el `lastActivityAt` del último row para pedir la página
+   * siguiente, los más antiguos).
+   *
    * Group-by se hace en aplicación tras leer las últimas N filas de
    * `copilot_messages`. Para volumetría de piloto (decenas de sesiones
    * por hotel/día) es suficiente; si crece se mete una vista
@@ -85,18 +90,39 @@ export class CopilotService {
    */
   async listSessions(
     user: AuthUser,
-    opts: { limit?: number } = {},
+    opts: {
+      limit?: number;
+      userId?: string;
+      from?: string;
+      to?: string;
+      /** Cursor ISO: devuelve sólo sesiones cuya última actividad sea < before. */
+      before?: string;
+    } = {},
   ): Promise<AdminSessionSummary[]> {
     const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
-    // Cap: leemos hasta 10× el limit en mensajes para tener buena
-    // probabilidad de cubrir las N sesiones más recientes incluso si
-    // alguna tiene muchas líneas. Si una sesión queda fuera por el cap,
-    // aparece en la siguiente página (no implementada V1; ordenar es
-    // suficiente para piloto).
     const messageCap = limit * 10;
     const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: 'admin-list' };
+
+    const where: Prisma.CopilotMessageWhereInput = {};
+    if (opts.userId) where.userId = opts.userId;
+    if (opts.from || opts.to) {
+      where.createdAt = {};
+      if (opts.from) (where.createdAt as Prisma.DateTimeFilter).gte = new Date(opts.from);
+      if (opts.to) (where.createdAt as Prisma.DateTimeFilter).lt = new Date(opts.to);
+    }
+    if (opts.before) {
+      // Para que cursor funcione con el group-by post, leemos sólo mensajes
+      // de antes del cursor. Cubre la mayoría de casos prácticos sin
+      // necesitar window functions.
+      const beforeDate = new Date(opts.before);
+      where.createdAt = where.createdAt
+        ? { ...(where.createdAt as Prisma.DateTimeFilter), lt: beforeDate }
+        : { lt: beforeDate };
+    }
+
     const rows = await this.prisma.withTenant(ctx, (tx) =>
       tx.copilotMessage.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
         take: messageCap,
         select: {

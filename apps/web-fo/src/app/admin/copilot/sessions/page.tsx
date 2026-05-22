@@ -9,27 +9,55 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+interface PageProps {
+  searchParams: Promise<{
+    userId?: string;
+    from?: string;
+    to?: string;
+    before?: string;
+  }>;
+}
+
 /**
  * Sprint 13 — Vista admin del Copilot: lista de sesiones recientes
  * del tenant para depurar prompt drift y revisar qué consulta el
  * operador con más frecuencia. Sólo `tenant_admin`.
+ *
+ * Filtros V1: userId, ventana from/to, cursor `before` (paginación
+ * hacia atrás).
  */
-export default async function CopilotSessionsAdminPage() {
+export default async function CopilotSessionsAdminPage({ searchParams }: PageProps) {
+  const sp = await searchParams;
   const session = await auth();
-  if (!session?.accessToken) redirect('/login?callbackUrl=/admin/copilot/sessions');
+  if (!session?.accessToken) redirect('/admin/copilot/sessions');
   if (!session.roles?.includes('tenant_admin')) {
     return notFound();
   }
 
+  const filters = {
+    limit: 50,
+    userId: sp.userId || undefined,
+    from: sp.from ? `${sp.from}T00:00:00Z` : undefined,
+    to: sp.to ? `${sp.to}T23:59:59Z` : undefined,
+    before: sp.before || undefined,
+  };
+
   let sessions: CopilotSessionSummary[];
   try {
-    sessions = await listCopilotSessions(session.accessToken, 100);
+    sessions = await listCopilotSessions(session.accessToken, filters);
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
       return notFound();
     }
     throw err;
   }
+
+  // Cursor para "older →": último timestamp de la página actual.
+  const olderCursor =
+    sessions.length === filters.limit
+      ? sessions[sessions.length - 1]!.lastActivityAt
+      : null;
+  const hasActiveFilter = Boolean(sp.userId || sp.from || sp.to || sp.before);
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-6 py-10">
@@ -44,6 +72,55 @@ export default async function CopilotSessionsAdminPage() {
           del modelo.
         </p>
       </header>
+
+      <form
+        action="/admin/copilot/sessions"
+        method="get"
+        className="flex flex-wrap items-end gap-2 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-aubergine-100"
+      >
+        <label className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
+          Desde
+          <input
+            name="from"
+            type="date"
+            defaultValue={sp.from ?? ''}
+            className="mt-1 block rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
+          />
+        </label>
+        <label className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
+          Hasta
+          <input
+            name="to"
+            type="date"
+            defaultValue={sp.to ?? ''}
+            className="mt-1 block rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
+          />
+        </label>
+        <label className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
+          User ID (UUID)
+          <input
+            name="userId"
+            type="text"
+            defaultValue={sp.userId ?? ''}
+            placeholder="opcional"
+            className="mt-1 block w-72 rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-xs font-mono focus:border-aubergine-500 focus:outline-none"
+          />
+        </label>
+        <button
+          type="submit"
+          className="rounded-lg bg-aubergine-700 px-3 py-2 text-sm font-semibold text-white hover:bg-aubergine-800"
+        >
+          Filtrar
+        </button>
+        {hasActiveFilter && (
+          <Link
+            href="/admin/copilot/sessions"
+            className="rounded-lg bg-white px-3 py-2 text-sm text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-50"
+          >
+            Limpiar
+          </Link>
+        )}
+      </form>
 
       {sessions.length === 0 ? (
         <p className="rounded-xl bg-aubergine-50 px-4 py-6 text-sm text-aubergine-700/70">
@@ -109,12 +186,34 @@ export default async function CopilotSessionsAdminPage() {
         </section>
       )}
 
-      <p className="text-[11px] text-aubergine-700/40">
-        Muestra hasta 100 sesiones más recientes. Las sesiones se persisten
-        completas (mensajes + widgets) en `copilot_messages`.
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] text-aubergine-700/40">
+          Página de 50 sesiones. Persistido en `copilot_messages` (mensajes +
+          widgets).
+        </p>
+        {olderCursor && (
+          <Link
+            href={buildOlderHref(sp, olderCursor)}
+            className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-50"
+          >
+            ← Más antiguas
+          </Link>
+        )}
+      </div>
     </main>
   );
+}
+
+function buildOlderHref(
+  sp: { userId?: string; from?: string; to?: string },
+  before: string,
+): string {
+  const params = new URLSearchParams();
+  if (sp.userId) params.set('userId', sp.userId);
+  if (sp.from) params.set('from', sp.from);
+  if (sp.to) params.set('to', sp.to);
+  params.set('before', before);
+  return `/admin/copilot/sessions?${params.toString()}`;
 }
 
 function formatDateTime(iso: string): string {

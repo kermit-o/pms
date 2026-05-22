@@ -900,11 +900,26 @@ export interface CopilotSessionSummary {
   widgetCount: number;
 }
 
+export interface ListCopilotSessionsFilters {
+  limit?: number;
+  userId?: string;
+  from?: string;
+  to?: string;
+  /** Cursor ISO para paginar (sesiones cuya última actividad sea < before). */
+  before?: string;
+}
+
 export async function listCopilotSessions(
   accessToken: string | undefined,
-  limit = 50,
+  filters: ListCopilotSessionsFilters = {},
 ): Promise<CopilotSessionSummary[]> {
-  return apiFetch(`/copilot/sessions?limit=${limit}`, { accessToken });
+  const params = new URLSearchParams();
+  params.set('limit', String(filters.limit ?? 50));
+  if (filters.userId) params.set('userId', filters.userId);
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  if (filters.before) params.set('before', filters.before);
+  return apiFetch(`/copilot/sessions?${params.toString()}`, { accessToken });
 }
 
 export async function sendCopilotMessage(
