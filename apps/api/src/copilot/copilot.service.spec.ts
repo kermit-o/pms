@@ -312,4 +312,90 @@ describe('CopilotService', () => {
     expect(view.propertyId).toBe(PROPERTY_ID);
     expect(findManyMock).not.toHaveBeenCalled();
   });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 13 — listSessions (vista admin).
+  // ---------------------------------------------------------------------------
+
+  it('listSessions agrupa por sessionId y ordena por última actividad desc', async () => {
+    const { service, findManyMock } = buildService();
+    // 2 sesiones: la "newer" tiene actividad más reciente que la "older".
+    findManyMock.mockResolvedValueOnce([
+      // Row 1 (más reciente): assistant en newer.
+      {
+        sessionId: 'newer',
+        userId: user.sub,
+        role: 'ASSISTANT',
+        contentText: 'OK',
+        createdAt: new Date('2026-05-22T11:00:00Z'),
+        widgets: [{ kind: 'availability' }],
+      },
+      // Row 2: user en newer.
+      {
+        sessionId: 'newer',
+        userId: user.sub,
+        role: 'USER',
+        contentText: '¿precios mañana?',
+        createdAt: new Date('2026-05-22T10:55:00Z'),
+        widgets: null,
+      },
+      // Row 3 (más antigua de las 3): user en older.
+      {
+        sessionId: 'older',
+        userId: user.sub,
+        role: 'USER',
+        contentText: '¿quién tiene la 305?',
+        createdAt: new Date('2026-05-22T09:00:00Z'),
+        widgets: null,
+      },
+    ]);
+    const out = await service.listSessions(user, { limit: 10 });
+    expect(out).toHaveLength(2);
+    expect(out[0]!.sessionId).toBe('newer');
+    expect(out[0]!.messageCount).toBe(2);
+    expect(out[0]!.firstMessage).toBe('¿precios mañana?');
+    expect(out[0]!.widgetCount).toBe(1);
+    expect(out[1]!.sessionId).toBe('older');
+    expect(out[1]!.messageCount).toBe(1);
+  });
+
+  it('listSessions respeta el limit y devuelve sólo las N más recientes', async () => {
+    const { service, findManyMock } = buildService();
+    findManyMock.mockResolvedValueOnce([
+      {
+        sessionId: 's-1',
+        userId: user.sub,
+        role: 'USER',
+        contentText: 'a',
+        createdAt: new Date('2026-05-22T11:00:00Z'),
+        widgets: null,
+      },
+      {
+        sessionId: 's-2',
+        userId: user.sub,
+        role: 'USER',
+        contentText: 'b',
+        createdAt: new Date('2026-05-22T10:00:00Z'),
+        widgets: null,
+      },
+      {
+        sessionId: 's-3',
+        userId: user.sub,
+        role: 'USER',
+        contentText: 'c',
+        createdAt: new Date('2026-05-22T09:00:00Z'),
+        widgets: null,
+      },
+    ]);
+    const out = await service.listSessions(user, { limit: 2 });
+    expect(out).toHaveLength(2);
+    expect(out.map((s) => s.sessionId)).toEqual(['s-1', 's-2']);
+  });
+
+  it('listSessions devuelve array vacío si no hay mensajes', async () => {
+    const { service, findManyMock } = buildService();
+    findManyMock.mockResolvedValueOnce([]);
+    const out = await service.listSessions(user, {});
+    expect(out).toEqual([]);
+  });
 });

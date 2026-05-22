@@ -476,6 +476,96 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+## 2026-05-22 · [FEAT] · Copilot — vista admin de sesiones para audit
+
+**Scope:** `apps/api/src/copilot`, `apps/web-fo/src/app/admin/copilot`,
+`apps/web-fo/src/lib/api.ts`
+**Branch:** `claude/copilot-admin-sessions` (sobre shared-types)
+**Refs:** cierra el bucle de observabilidad del Copilot apoyándose en
+toda la pila construida (persistencia DB + reload-from-DB + 4 widgets
++ tipos compartidos). El `tenant_admin` ya puede inspeccionar el
+historial de conversaciones del operador sin tocar SQL.
+
+**Qué cambió.**
+
+- **Backend**:
+  - `CopilotService.listSessions(user, { limit })`:
+    - Lee hasta `limit × 10` filas de `copilot_messages` desc por
+      `createdAt`, agrupa por `sessionId` en aplicación, devuelve
+      sumario `{ sessionId, userId, firstMessage, firstMessageAt,
+      lastActivityAt, messageCount, widgetCount }` ordenado por
+      última actividad desc.
+    - `widgetCount` suma `.length` de cada `widgets jsonb` (que ahora
+      es array en DB tras slice 2). Útil para detectar conversaciones
+      "ricas" (con tarjetas) vs charla suelta.
+    - Cap defensivo: `limit` ∈ [1, 200], default 50. `messageCap = limit×10`
+      para volumetría de piloto. Si crece, queda vía para vista
+      materializada — no optimizamos antes de tiempo.
+  - `AdminSessionSummary` exportado para tipar el endpoint.
+  - `CopilotController.listSessions` nuevo: `GET /copilot/sessions?limit`,
+    role-guard `tenant_admin` (más restrictivo que el resto del
+    controller, que admite front_desk / night_auditor).
+- **Helper `apps/web-fo/src/lib/api.ts`**: `listCopilotSessions(token,
+  limit)` + tipo `CopilotSessionSummary`.
+- **Web-fo páginas nuevas**:
+  - `/admin/copilot/sessions` (listado): server component con role-
+    check; muestra tabla con última actividad, primer mensaje del
+    operador (≤140 chars), contadores de mensajes/widgets, link al
+    detalle. 404 si el usuario no es `tenant_admin`.
+  - `/admin/copilot/sessions/[id]` (detalle): re-renderiza el
+    transcript completo. Cada mensaje muestra rol + timestamp; los
+    widgets se rehidratan usando los componentes compartidos
+    (`CopilotAvailabilityWidget`, `CopilotFolioWidget`,
+    `CopilotReservationWidget`, `CopilotHskTasksWidget`) — el
+    operador ve la misma vista que vió en su día, sin texto-JSON.
+  - Nota explícita al pie sobre la limitación de pendingTools tras
+    reload (mensaje sin botones de aprobar/rechazar — documentado
+    en el slice de reload).
+
+**Por qué.**
+
+Sin esta vista el `tenant_admin` no puede inspeccionar lo que el
+Copilot está respondiendo a su equipo. Tenía que conectarse a la DB
+y leer JSON crudo de `copilot_messages` — inviable en producción.
+Esta página es:
+- **Auditoría**: ¿qué pidió el equipo de recepción esta semana?
+- **Detección de drift**: ¿el LLM está alucinando precios o saliéndose
+  del prompt? (los widgets confirman la fuente real del dato).
+- **Onboarding del operador**: nuevos empleados pueden ver ejemplos
+  de qué preguntar al Copilot.
+- **Soporte**: el equipo de Aubergine, con permisos del tenant
+  apropiados, puede reproducir incidencias.
+
+**Archivos clave.**
+
+- `apps/api/src/copilot/copilot.service.ts` (+ `listSessions` +
+  `AdminSessionSummary`)
+- `apps/api/src/copilot/copilot.service.spec.ts` (+3 tests)
+- `apps/api/src/copilot/copilot.controller.ts` (+ `GET /` admin)
+- `apps/web-fo/src/lib/api.ts` (+ helper + tipo)
+- `apps/web-fo/src/app/admin/copilot/sessions/page.tsx` (nuevo)
+- `apps/web-fo/src/app/admin/copilot/sessions/[id]/page.tsx` (nuevo)
+
+**Tests.**
+
+- 344/344 verdes (+3: agrupación + ordenación, respeta limit, array
+  vacío). Typecheck + lint verdes api + web-fo. Sin deps ni
+  migraciones nuevas.
+
+**Sigue pendiente.**
+
+- **Filtros por fecha/usuario** en la vista admin (V1 muestra los
+  100 más recientes; añadir un form de búsqueda es ~half día).
+- **Export CSV** del listado para análisis offline.
+- **Persistencia opt-in de pendingTools** — si el negocio lo pide.
+- **Más widgets** (`arrivals_today`, `departures_today`,
+  `suggest_assignments`).
+- **Vista equivalente en web-hsk** si el supervisor de HSK también
+  quiere ver el historial de su equipo (mismo backend, página
+  paralela).
+
+---
+
 ## 2026-05-22 · [REFACTOR] · Copilot — tipos de widgets compartidos en `packages/copilot-widget-types`
 
 **Scope:** `packages/copilot-widget-types` (nuevo), `apps/api/src/copilot`,

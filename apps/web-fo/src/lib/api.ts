@@ -889,6 +889,24 @@ export async function getCopilotSession(
   return apiFetch(`/copilot/sessions/${sessionId}`, { accessToken });
 }
 
+// Sprint 13 — admin: lista de sesiones para /admin/copilot/sessions.
+export interface CopilotSessionSummary {
+  sessionId: string;
+  userId: string;
+  firstMessage: string | null;
+  firstMessageAt: string;
+  lastActivityAt: string;
+  messageCount: number;
+  widgetCount: number;
+}
+
+export async function listCopilotSessions(
+  accessToken: string | undefined,
+  limit = 50,
+): Promise<CopilotSessionSummary[]> {
+  return apiFetch(`/copilot/sessions?limit=${limit}`, { accessToken });
+}
+
 export async function sendCopilotMessage(
   accessToken: string | undefined,
   sessionId: string,
