@@ -476,6 +476,44 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+## 2026-05-22 · [FEAT] · Copilot — link "Admin · Copilot" en nav (discoverability)
+
+**Scope:** `apps/web-fo/src/app/layout.tsx`
+**Branch:** `claude/copilot-admin-nav-link` (sobre pending-tools)
+**Refs:** la vista admin existe desde varios commits atrás pero
+sólo era accesible escribiendo manualmente la URL. Link visible
+sólo para `tenant_admin`.
+
+**Qué cambió.**
+
+- En el `<nav>` del layout, entre la lista de items y el
+  `PropertyPicker`, se renderiza un Link "Admin · Copilot"
+  cuando `session.roles?.includes('tenant_admin')`.
+- Estilo discreto: chip pequeño aubergine-50 con tooltip
+  explicativo. No compite con la nav principal pero queda
+  visible para el admin que entra.
+
+**Por qué.**
+
+Una herramienta de audit que requiere conocer la URL no se usa.
+Esta es la última pieza para que la vista admin sea utilizable
+en producción sin tutorial.
+
+**Archivos clave.**
+
+- `apps/web-fo/src/app/layout.tsx`
+
+**Tests.**
+
+- Typecheck + lint verdes. Sin nuevos tests (link condicional
+  trivial sin lógica).
+
+**Sigue pendiente.**
+
+Sin items críticos en el plan del Copilot.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot — pending tools persistentes (cierra última limitación de reload)
 
 **Scope:** `packages/db`, `apps/api/src/copilot`
