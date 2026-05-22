@@ -441,4 +441,86 @@ describe('extractWidgetFromTool', () => {
     };
     expect(extractWidgetFromTool('list_movements', {}, broken)).toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // hsk_suggest_assignments widget.
+  // ---------------------------------------------------------------------------
+
+  const sampleSuggest = {
+    propertyId: 'p-1',
+    businessDate: '2026-05-22',
+    shiftCapacityMin: 420,
+    defaultDurationMin: 30,
+    candidates: [
+      {
+        userId: 'u-1',
+        userName: 'Camila R.',
+        totalAssignedMin: 180,
+        taskCount: 6,
+        remainingMin: 240,
+      },
+      {
+        userId: 'u-2',
+        userName: 'Lupita M.',
+        totalAssignedMin: 120,
+        taskCount: 4,
+        remainingMin: 300,
+      },
+    ],
+    suggestions: [
+      {
+        taskId: 't-1',
+        roomId: 'r-203',
+        roomNumber: '203',
+        floor: '2',
+        taskType: 'CHECKOUT_CLEAN',
+        currentlyAssignedToUserId: null,
+        suggestedUserId: 'u-1',
+        suggestedUserName: 'Camila R.',
+        predictedMin: 30,
+      },
+      {
+        taskId: 't-2',
+        roomId: 'r-205',
+        roomNumber: '205',
+        floor: '2',
+        taskType: 'STAYOVER_CLEAN',
+        currentlyAssignedToUserId: 'u-2',
+        suggestedUserId: 'u-2',
+        suggestedUserName: 'Lupita M.',
+        predictedMin: 15,
+      },
+    ],
+    unmatched: [
+      {
+        taskId: 't-3',
+        roomNumber: '101',
+        floor: '1',
+        taskType: 'MAINTENANCE',
+        predictedMin: 60,
+        reason: 'capacity_exhausted',
+      },
+    ],
+  };
+
+  it('builds hsk_suggest widget con candidates + suggestions + unmatched', () => {
+    const widget = extractWidgetFromTool('hsk_suggest_assignments', {}, sampleSuggest);
+    expect(widget).not.toBeNull();
+    if (widget?.kind === 'hsk_suggest') {
+      expect(widget.data.businessDate).toBe('2026-05-22');
+      expect(widget.data.candidates).toHaveLength(2);
+      expect(widget.data.candidates[0]!.userName).toBe('Camila R.');
+      expect(widget.data.suggestions).toHaveLength(2);
+      expect(widget.data.suggestions[0]!.suggestedUserName).toBe('Camila R.');
+      expect(widget.data.unmatched).toHaveLength(1);
+      expect(widget.data.unmatched[0]!.reason).toBe('capacity_exhausted');
+    }
+  });
+
+  it('hsk_suggest widget devuelve null si faltan campos clave', () => {
+    expect(extractWidgetFromTool('hsk_suggest_assignments', {}, null)).toBeNull();
+    expect(
+      extractWidgetFromTool('hsk_suggest_assignments', {}, { businessDate: '2026-05-22' }),
+    ).toBeNull();
+  });
 });

@@ -25,6 +25,13 @@ function makeTasksMock() {
     // Sprint 13 W— hsk_list_today usa la variante enriquecida.
     listEnriched: vi.fn().mockResolvedValue([]),
     suggestAssignments: vi.fn().mockResolvedValue({ suggestions: [], unmatched: [] }),
+    // Sprint 13 — el router usa la variante enriquecida (resuelve nombres
+    // para alimentar el widget del Copilot).
+    suggestAssignmentsEnriched: vi.fn().mockResolvedValue({
+      candidates: [],
+      suggestions: [],
+      unmatched: [],
+    }),
   };
 }
 
@@ -84,12 +91,14 @@ describe('HskToolRouter', () => {
     ).rejects.toThrow();
   });
 
-  it('hsk_suggest_assignments delegates to tasks.suggestAssignments con businessDate default a hoy', async () => {
+  it('hsk_suggest_assignments delegates to tasks.suggestAssignmentsEnriched con businessDate default a hoy', async () => {
     const tasks = makeTasksMock();
     const router = new HskToolRouter(tasks as never);
     await router.execute('hsk_suggest_assignments', { propertyId: PROPERTY_ID }, user, 'corr');
-    expect(tasks.suggestAssignments).toHaveBeenCalledOnce();
-    const call = tasks.suggestAssignments.mock.calls[0]![2];
+    // Sprint 13 — el router usa la variante enriquecida (con nombres
+    // de usuarios resueltos para alimentar el widget del Copilot).
+    expect(tasks.suggestAssignmentsEnriched).toHaveBeenCalledOnce();
+    const call = tasks.suggestAssignmentsEnriched.mock.calls[0]![2];
     const today = new Date().toISOString().slice(0, 10);
     expect(call.businessDate).toBe(today);
     expect(call.shiftCapacityMin).toBe(290); // default

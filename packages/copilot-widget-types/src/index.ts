@@ -149,6 +149,44 @@ export interface MovementsWidgetData {
 }
 
 // ---------------------------------------------------------------------------
+// hsk_suggest — hsk_suggest_assignments
+// ---------------------------------------------------------------------------
+
+export interface HskCandidateLoad {
+  userId: string;
+  userName: string | null;
+  totalAssignedMin: number;
+  taskCount: number;
+  remainingMin: number;
+}
+
+export interface HskSuggestionRow {
+  taskId: string;
+  roomNumber: string;
+  floor: string | null;
+  taskType: string;
+  suggestedUserId: string;
+  suggestedUserName: string | null;
+  predictedMin: number;
+}
+
+export interface HskUnmatchedRow {
+  taskId: string;
+  roomNumber: string;
+  taskType: string;
+  predictedMin: number;
+  reason: string;
+}
+
+export interface HskSuggestWidgetData {
+  businessDate: string;
+  shiftCapacityMin: number;
+  candidates: HskCandidateLoad[];
+  suggestions: HskSuggestionRow[];
+  unmatched: HskUnmatchedRow[];
+}
+
+// ---------------------------------------------------------------------------
 // Discriminated union — la lista crece añadiendo variantes nuevas.
 // ---------------------------------------------------------------------------
 
@@ -157,6 +195,7 @@ export type CopilotWidget =
   | { kind: 'folio'; data: FolioWidgetData }
   | { kind: 'reservation'; data: ReservationWidgetData }
   | { kind: 'hsk_tasks'; data: HskTasksWidgetData }
-  | { kind: 'movements'; data: MovementsWidgetData };
+  | { kind: 'movements'; data: MovementsWidgetData }
+  | { kind: 'hsk_suggest'; data: HskSuggestWidgetData };
 
 export type CopilotWidgetKind = CopilotWidget['kind'];

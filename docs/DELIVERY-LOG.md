@@ -476,6 +476,89 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+## 2026-05-22 · [FEAT] · Copilot widget — hsk_suggest (planificación HSK supervisor)
+
+**Scope:** `packages/copilot-widget-types`, `apps/api/src/housekeeping`,
+`apps/api/src/copilot`, `apps/web-fo/src/components`
+**Branch:** `claude/copilot-widget-suggest-assignments` (sobre arrivals)
+**Refs:** cierra los 6 widgets que cubren las consultas operacionales
+del MVP (availability, folio, reservation, hsk_tasks, movements,
+hsk_suggest). El supervisor HSK ve la sugerencia de plan diaria con
+nombres reales, carga por camarera y tareas sin asignar.
+
+**Qué cambió.**
+
+- **`HousekeepingTasksService.suggestAssignmentsEnriched`** (nuevo,
+  paralelo a `suggestAssignments`):
+  - Llama al método raw + segundo lookup para resolver
+    `User.fullName ?? email` para cada userId presente en
+    `candidates` y `suggestions`.
+  - Devuelve la misma forma pero con `userName` poblado en candidates
+    y `suggestedUserName` en suggestions.
+  - `suggestAssignments` queda intacto para no romper consumers
+    existentes; las interfaces se extienden con campos opcionales
+    (`?` en TS) para retrocompatibilidad.
+- **`HskToolRouter`**: `hsk_suggest_assignments` delega en
+  `suggestAssignmentsEnriched`.
+- **Tipos compartidos**: sexta variante `kind: 'hsk_suggest'` con
+  `HskCandidateLoad`, `HskSuggestionRow`, `HskUnmatchedRow` y
+  `HskSuggestWidgetData`.
+- **Widget extractor** `buildHskSuggestWidget`: valida defensivamente
+  los 3 arrays + `businessDate` + `shiftCapacityMin`. Mapea cada
+  candidate/suggestion/unmatched con valores por defecto seguros.
+- **Componente UI** `CopilotHskSuggestWidget` en tres secciones:
+  - **Carga por camarera**: lista de candidates con nombre + tareas
+    + minutos asignados + chip de % de capacidad coloreado
+    (verde < 75%, ámbar < 95%, rosa ≥ 95%).
+  - **Asignaciones (N)**: lista de hasta 10 suggestions, cada una
+    con chip de habitación, tipo legible ("Salida · limpieza", etc.),
+    minutos predichos y nombre del asignado destino.
+  - **Sin asignar (N)**: lista en rosa con razón legible
+    ("sin camareras" / "capacidad llena") + minutos del task.
+- **Wired** en `CopilotSidebar` + `/admin/copilot/sessions/[id]`.
+
+**Por qué.**
+
+`hsk_suggest_assignments` ya existía como tool (Sprint 4), pero su
+output JSON era ininterpretable para un humano sin abrir Postman.
+El supervisor preguntaba al Copilot "ayúdame a repartir la limpieza"
+y recibía un blob de texto. Con el widget ve la propuesta como un
+plan visual de turno: cuánto tiene cada camarera, qué se le sugiere,
+qué queda sin cubrir y por qué. Aplica las asignaciones en otra
+acción (`hsk_assign_task` por tarea, mutating, requiere
+confirmación — fuera de scope de este widget).
+
+Con este sexto widget el patrón Mockup B cubre **todas** las
+consultas operacionales del MVP. Los próximos widgets son
+estiramientos (no consultas frecuentes).
+
+**Archivos clave.**
+
+- `packages/copilot-widget-types/src/index.ts` (+ HskSuggest tipos)
+- `apps/api/src/housekeeping/tasks.service.ts`
+  (+ `suggestAssignmentsEnriched` + campos opcionales)
+- `apps/api/src/housekeeping/hsk-tool-router.ts` (usa enriched)
+- `apps/api/src/housekeeping/hsk-tool-router.spec.ts` (+ mock)
+- `apps/api/src/copilot/widgets.ts` (+ extractor + re-export)
+- `apps/api/src/copilot/widgets.spec.ts` (+2 tests)
+- `apps/web-fo/src/lib/api.ts` (alias + row types)
+- `apps/web-fo/src/components/CopilotHskSuggestWidget.tsx` (nuevo)
+- `apps/web-fo/src/components/CopilotSidebar.tsx` (wiring)
+- `apps/web-fo/src/app/admin/copilot/sessions/[id]/page.tsx` (wiring)
+
+**Tests.**
+
+- 359/359 verdes (+2 nuevos + 1 spec router actualizado).
+  Typecheck + lint verdes api + web-fo. Sin deps ni migraciones.
+
+**Sigue pendiente.**
+
+- **Persistencia opt-in pendingTools** — sólo si el negocio lo pide.
+- Widgets adicionales: `forecast_demand` (FO), `recall_guest_history`
+  (cardex), si llegasen a ser consultas frecuentes — patrón rodado.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot widget — movements (arrivals + departures)
 
 **Scope:** `packages/copilot-widget-types`, `packages/mcp-tools`,
