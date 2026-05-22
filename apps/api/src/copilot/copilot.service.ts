@@ -71,6 +71,78 @@ export class CopilotService {
     return toView(session);
   }
 
+  /**
+   * Sprint 13 — Listado de sesiones para la vista admin
+   * `/admin/copilot/sessions`. Devuelve un resumen por sesión (id, autor,
+   * primer mensaje, contadores, última actividad) ordenado por última
+   * actividad desc. Sólo `tenant_admin` lo consume (el controller lo
+   * restringe).
+   *
+   * Group-by se hace en aplicación tras leer las últimas N filas de
+   * `copilot_messages`. Para volumetría de piloto (decenas de sesiones
+   * por hotel/día) es suficiente; si crece se mete una vista
+   * materializada. No optimizamos antes de tiempo.
+   */
+  async listSessions(
+    user: AuthUser,
+    opts: { limit?: number } = {},
+  ): Promise<AdminSessionSummary[]> {
+    const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+    // Cap: leemos hasta 10× el limit en mensajes para tener buena
+    // probabilidad de cubrir las N sesiones más recientes incluso si
+    // alguna tiene muchas líneas. Si una sesión queda fuera por el cap,
+    // aparece en la siguiente página (no implementada V1; ordenar es
+    // suficiente para piloto).
+    const messageCap = limit * 10;
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: 'admin-list' };
+    const rows = await this.prisma.withTenant(ctx, (tx) =>
+      tx.copilotMessage.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: messageCap,
+        select: {
+          sessionId: true,
+          userId: true,
+          role: true,
+          contentText: true,
+          createdAt: true,
+          widgets: true,
+        },
+      }),
+    );
+
+    const bySession = new Map<string, AdminSessionSummary>();
+    // Orden inverso: como rows viene desc, iteramos asc para que el
+    // primer-mensaje quede como `firstMessage`. La última iteración
+    // sobreescribe lastActivity con el más reciente.
+    for (const r of [...rows].reverse()) {
+      const existing = bySession.get(r.sessionId);
+      if (!existing) {
+        bySession.set(r.sessionId, {
+          sessionId: r.sessionId,
+          userId: r.userId,
+          firstMessage:
+            r.role === 'USER' && r.contentText ? r.contentText.slice(0, 140) : null,
+          firstMessageAt: r.createdAt.toISOString(),
+          lastActivityAt: r.createdAt.toISOString(),
+          messageCount: 1,
+          widgetCount: Array.isArray(r.widgets) ? (r.widgets as unknown[]).length : 0,
+        });
+      } else {
+        existing.messageCount += 1;
+        existing.lastActivityAt = r.createdAt.toISOString();
+        if (Array.isArray(r.widgets)) {
+          existing.widgetCount += (r.widgets as unknown[]).length;
+        }
+        if (!existing.firstMessage && r.role === 'USER' && r.contentText) {
+          existing.firstMessage = r.contentText.slice(0, 140);
+        }
+      }
+    }
+    return [...bySession.values()]
+      .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))
+      .slice(0, limit);
+  }
+
   async sendMessage(
     user: AuthUser,
     correlationId: string,
@@ -531,6 +603,19 @@ interface PendingTool {
 }
 
 export type { ToolProposal };
+
+/** Sprint 13 — Sumario que muestra la vista admin de sesiones. */
+export interface AdminSessionSummary {
+  sessionId: string;
+  userId: string;
+  /** Texto del primer mensaje del operador (≤140 chars) o null si la
+   *  sesión sólo tenía mensajes del asistente. */
+  firstMessage: string | null;
+  firstMessageAt: string;
+  lastActivityAt: string;
+  messageCount: number;
+  widgetCount: number;
+}
 
 export type StreamEvent =
   | { type: 'status'; phase: 'thinking' }

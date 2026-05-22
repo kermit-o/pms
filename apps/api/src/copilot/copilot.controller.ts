@@ -18,6 +18,23 @@ export class CopilotController {
     return this.copilot.createSession(user, input.propertyId);
   }
 
+  /**
+   * Sprint 13 — vista admin: lista de sesiones recientes del tenant
+   * para depurar prompt drift y revisar conversaciones del operador.
+   * Sólo `tenant_admin`.
+   */
+  @Get()
+  @Roles('tenant_admin')
+  async listSessions(
+    @CurrentUser() user: AuthUser,
+    @Query('limit') limit: string | undefined,
+  ) {
+    const parsed = limit ? Number(limit) : undefined;
+    return this.copilot.listSessions(user, {
+      limit: Number.isFinite(parsed) ? parsed : undefined,
+    });
+  }
+
   @Get(':id')
   @Roles(...ROLES)
   async getSession(@CurrentUser() user: AuthUser, @Param('id', new ParseUUIDPipe()) id: string) {
