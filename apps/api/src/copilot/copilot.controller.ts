@@ -22,16 +22,30 @@ export class CopilotController {
    * Sprint 13 — vista admin: lista de sesiones recientes del tenant
    * para depurar prompt drift y revisar conversaciones del operador.
    * Sólo `tenant_admin`.
+   *
+   * Query params (todos opcionales):
+   *  - `limit`: 1..200 (default 50).
+   *  - `userId`: filtra por usuario del operador.
+   *  - `from`/`to`: ventana sobre createdAt de mensajes (ISO).
+   *  - `before`: cursor ISO para paginar hacia atrás (más antiguas).
    */
   @Get()
   @Roles('tenant_admin')
   async listSessions(
     @CurrentUser() user: AuthUser,
     @Query('limit') limit: string | undefined,
+    @Query('userId') userId: string | undefined,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @Query('before') before: string | undefined,
   ) {
     const parsed = limit ? Number(limit) : undefined;
     return this.copilot.listSessions(user, {
       limit: Number.isFinite(parsed) ? parsed : undefined,
+      userId: userId || undefined,
+      from: from || undefined,
+      to: to || undefined,
+      before: before || undefined,
     });
   }
 

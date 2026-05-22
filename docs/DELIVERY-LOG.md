@@ -80,6 +80,75 @@ Una o dos frases.
 
 ---
 
+## 2026-05-22 · [FEAT] · Copilot admin — filtros + paginación cursor
+
+**Scope:** `apps/api/src/copilot`, `apps/web-fo/src/app/admin/copilot`,
+`apps/web-fo/src/lib/api.ts`
+**Branch:** `claude/copilot-admin-sessions-filters` (sobre admin-sessions)
+**Refs:** completa la UX del admin. V1 sólo mostraba los 100 más
+recientes sin filtros — inviable para auditar un mes hacia atrás.
+
+**Qué cambió.**
+
+- **Backend `CopilotService.listSessions`**: nuevos params opcionales
+  `userId`, `from`, `to`, `before` (cursor ISO sobre createdAt). El
+  cursor `before` sobrescribe `to` si ambos vienen (semántica
+  "estricta": el cliente pidió ir más atrás del to original).
+- **`CopilotController.listSessions`**: forward los 4 params nuevos
+  como `@Query()`. Sigue siendo `tenant_admin` only.
+- **Helper `web-fo/lib/api.ts`**: `listCopilotSessions(token,
+  filters)` ahora acepta `ListCopilotSessionsFilters` (limit, userId,
+  from, to, before).
+- **Página `/admin/copilot/sessions`**:
+  - `searchParams` (`from`, `to`, `userId`, `before`) parseados y
+    propagados al fetch. `from`/`to` se normalizan a inicio/fin de
+    día (`00:00:00Z` / `23:59:59Z`).
+  - Form de filtros: 3 campos (Desde / Hasta / User ID) + botón
+    "Filtrar" + botón "Limpiar" (sólo visible si hay filtros activos).
+  - "Más antiguas →" al pie del listado: enlace al mismo URL con
+    `before=<lastActivityAt-de-la-última-fila>`. Sólo aparece si la
+    página viene llena (sospecha de más resultados).
+
+**Por qué.**
+
+V1 del admin permitía ver las 100 más recientes en una sola página,
+sin forma de:
+- Filtrar por un usuario concreto del equipo.
+- Acotar a un rango (auditoría "qué pasó la semana pasada").
+- Avanzar más allá de las 100 primeras.
+
+Para volúmenes piloto (decenas/día) podríamos llegar al límite en una
+semana ocupada. Los filtros + cursor lo resuelven sin meter offset
+pagination (cara con group-by en aplicación) ni vistas materializadas
+(prematuro). Cursor basado en `lastActivityAt` desc es estable y
+funciona con la query existente.
+
+**Archivos clave.**
+
+- `apps/api/src/copilot/copilot.service.ts` (filtros en `listSessions`)
+- `apps/api/src/copilot/copilot.service.spec.ts` (+4 tests)
+- `apps/api/src/copilot/copilot.controller.ts` (4 @Query nuevos)
+- `apps/web-fo/src/lib/api.ts` (`ListCopilotSessionsFilters`)
+- `apps/web-fo/src/app/admin/copilot/sessions/page.tsx` (form + cursor link)
+
+**Tests.**
+
+- 348/348 verdes (+4 nuevos: userId propaga al where, from/to combinan
+  en createdAt, cursor `before` se traduce a lt, before sobrescribe
+  to). Typecheck + lint verdes api + web-fo. Sin deps ni migraciones.
+
+**Sigue pendiente.**
+
+- **Selector de usuario por nombre** en lugar de pegar UUID — añadir
+  un sub-endpoint `/copilot/admin/users` que devuelva los user IDs
+  distintos con `fullName` para popular un `<select>`. ~half día.
+- **Export CSV** del listado filtrado. ~half día.
+- **Más widgets** (`arrivals_today`, `departures_today`,
+  `suggest_assignments`).
+- **Persistencia opt-in de pendingTools** — sólo si el negocio lo pide.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot — vista admin de sesiones para audit
 
 **Scope:** `apps/api/src/copilot`, `apps/web-fo/src/app/admin/copilot`,

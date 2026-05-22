@@ -398,4 +398,47 @@ describe('CopilotService', () => {
     const out = await service.listSessions(user, {});
     expect(out).toEqual([]);
   });
+
+  it('listSessions propaga filtro userId al where de findMany', async () => {
+    const { service, findManyMock } = buildService();
+    findManyMock.mockResolvedValueOnce([]);
+    await service.listSessions(user, { userId: 'op-1' });
+    expect(findManyMock).toHaveBeenCalledOnce();
+    expect(findManyMock.mock.calls[0]![0]!.where).toEqual({ userId: 'op-1' });
+  });
+
+  it('listSessions combina from/to en createdAt filter', async () => {
+    const { service, findManyMock } = buildService();
+    findManyMock.mockResolvedValueOnce([]);
+    await service.listSessions(user, {
+      from: '2026-05-20T00:00:00Z',
+      to: '2026-05-23T00:00:00Z',
+    });
+    const where = findManyMock.mock.calls[0]![0]!.where;
+    expect(where.createdAt.gte).toEqual(new Date('2026-05-20T00:00:00Z'));
+    expect(where.createdAt.lt).toEqual(new Date('2026-05-23T00:00:00Z'));
+  });
+
+  it('listSessions cursor `before` se traduce a createdAt.lt', async () => {
+    const { service, findManyMock } = buildService();
+    findManyMock.mockResolvedValueOnce([]);
+    await service.listSessions(user, { before: '2026-05-22T10:00:00Z' });
+    const where = findManyMock.mock.calls[0]![0]!.where;
+    expect(where.createdAt.lt).toEqual(new Date('2026-05-22T10:00:00Z'));
+  });
+
+  it('listSessions before + from/to combinan: lt gana frente a to', async () => {
+    // Si el cliente pasa to=domingo y before=sábado, el resultado son
+    // sólo sesiones de antes del sábado. (before sobrescribe lt).
+    const { service, findManyMock } = buildService();
+    findManyMock.mockResolvedValueOnce([]);
+    await service.listSessions(user, {
+      from: '2026-05-01T00:00:00Z',
+      to: '2026-05-25T00:00:00Z',
+      before: '2026-05-22T10:00:00Z',
+    });
+    const where = findManyMock.mock.calls[0]![0]!.where;
+    expect(where.createdAt.gte).toEqual(new Date('2026-05-01T00:00:00Z'));
+    expect(where.createdAt.lt).toEqual(new Date('2026-05-22T10:00:00Z'));
+  });
 });
