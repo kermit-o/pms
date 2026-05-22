@@ -29,6 +29,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.js
 COPY apps/api/package.json ./apps/api/
 COPY packages/db/package.json ./packages/db/
 COPY packages/eventbus/package.json ./packages/eventbus/
+COPY packages/copilot-widget-types/package.json ./packages/copilot-widget-types/
 COPY packages/mcp-tools/package.json ./packages/mcp-tools/
 
 RUN pnpm install --frozen-lockfile --prefer-offline
@@ -43,6 +44,7 @@ RUN pnpm --filter @pms/db generate
 # resolver `@pms/db` / `@pms/eventbus` / `@pms/mcp-tools` en runtime.
 RUN pnpm --filter @pms/db build
 RUN pnpm --filter @pms/eventbus build
+RUN pnpm --filter @pms/copilot-widget-types build
 RUN pnpm --filter @pms/mcp-tools build
 RUN pnpm --filter @pms/api build
 

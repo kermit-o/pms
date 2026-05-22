@@ -28,6 +28,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.js
 COPY apps/web-fo/package.json ./apps/web-fo/
 COPY packages/db/package.json ./packages/db/
 COPY packages/eventbus/package.json ./packages/eventbus/
+COPY packages/copilot-widget-types/package.json ./packages/copilot-widget-types/
 COPY packages/mcp-tools/package.json ./packages/mcp-tools/
 
 RUN pnpm install --frozen-lockfile --prefer-offline
@@ -40,6 +41,7 @@ COPY packages ./packages
 RUN pnpm --filter @pms/db generate
 RUN pnpm --filter @pms/db build
 RUN pnpm --filter @pms/eventbus build
+RUN pnpm --filter @pms/copilot-widget-types build
 RUN pnpm --filter @pms/mcp-tools build
 
 ENV NEXT_TELEMETRY_DISABLED=1
