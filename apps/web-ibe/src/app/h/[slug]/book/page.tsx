@@ -15,6 +15,8 @@ interface Props {
     adults?: string;
     children?: string;
     roomTypeId?: string;
+    ratePlanId?: string;
+    paymentMode?: string;
     lang?: string;
     error?: string;
   }>;
@@ -30,6 +32,8 @@ export default async function BookPage({ params, searchParams }: Props) {
   const adults = Number(sp.adults ?? 2);
   const children = Number(sp.children ?? 0);
   const roomTypeId = sp.roomTypeId ?? '';
+  const ratePlanId = sp.ratePlanId || undefined;
+  const paymentMode: 'setup' | 'charge' = sp.paymentMode === 'charge' ? 'charge' : 'setup';
 
   if (!arrival || !departure || !roomTypeId) {
     redirect(`/h/${encodeURIComponent(slug)}?lang=${lang}`);
@@ -68,6 +72,7 @@ export default async function BookPage({ params, searchParams }: Props) {
         arrival,
         departure,
         roomTypeId,
+        ratePlanId,
         occupancy: { adults, children },
         guest: {
           firstName,
@@ -80,8 +85,11 @@ export default async function BookPage({ params, searchParams }: Props) {
         },
         specialRequests,
         turnstileToken,
+        paymentMode,
       });
-      redirect(`/h/${slug}/book/${out.code}?lang=${lang}&lastName=${encodeURIComponent(lastName)}`);
+      redirect(
+        `/h/${slug}/book/${out.code}?lang=${lang}&lastName=${encodeURIComponent(lastName)}&paymentMode=${out.paymentMode}`,
+      );
     } catch (err) {
       if (err instanceof IbeApiError) {
         const reason = err.status === 403 ? 'captcha' : err.status === 429 ? 'rate' : 'api';

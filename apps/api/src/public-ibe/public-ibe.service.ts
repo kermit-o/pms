@@ -18,6 +18,7 @@ import { ChannelManagerService } from '../channel-manager';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import { NotificationsService } from '../notifications';
+import { resolveDailyRate } from '../rate-plans/pricing';
 import { StripeService } from '../payments/stripe.service';
 import type { AuthUser } from '../auth';
 import type { Env } from '../config/env.schema';
@@ -123,6 +124,22 @@ export class PublicIbeService {
         },
         select: { roomTypeId: true },
       });
+      // Sprint 13 W1 — rate plans públicos de la propiedad. Si no hay,
+      // sintetizamos uno "flexible" virtual a partir del rate base.
+      const ratePlans = await tx.ratePlan.findMany({
+        where: { propertyId: property.id, deletedAt: null, isPublic: true },
+        orderBy: [{ nonRefundable: 'asc' }, { discountPct: 'asc' }, { code: 'asc' }],
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          description: true,
+          currency: true,
+          nonRefundable: true,
+          discountPct: true,
+          attributes: true,
+        },
+      });
 
       const occupiedByType = overlapping.reduce<Record<string, number>>((acc, r) => {
         acc[r.roomTypeId] = (acc[r.roomTypeId] ?? 0) + 1;
@@ -136,7 +153,10 @@ export class PublicIbeService {
           const total = rooms.filter((r) => r.roomTypeId === t.id).length;
           const occupied = occupiedByType[t.id] ?? 0;
           const available = Math.max(0, total - occupied);
-          const pricePerNight = Number(t.defaultRate);
+          const currency = t.defaultCurrency ?? property.currency;
+          const rates = buildRateOptions(t.defaultRate, currency, nights, ratePlans);
+          // Tarifa más barata sube a la cabecera del card.
+          const cheapest = rates[0]!;
           return {
             roomTypeId: t.id,
             code: t.code,
@@ -144,10 +164,11 @@ export class PublicIbeService {
             available,
             totalRooms: total,
             maxOccupancy: t.maxOccupancy,
-            pricePerNight: pricePerNight.toFixed(2),
-            totalForStay: (pricePerNight * nights).toFixed(2),
-            currency: t.defaultCurrency ?? property.currency,
             nights,
+            pricePerNight: cheapest.pricePerNight,
+            totalForStay: cheapest.totalForStay,
+            currency,
+            rates,
           };
         })
         .filter((r) => r.totalRooms > 0);
@@ -199,13 +220,47 @@ export class PublicIbeService {
         throw new ConflictException('Occupancy exceeds room type capacity');
       }
 
+      // Sprint 13 W1 — Resolución de rate plan + pricing.
+      let ratePlan: {
+        id: string;
+        nonRefundable: boolean;
+        discountPct: Prisma.Decimal | null;
+        attributes: Prisma.JsonValue | null;
+        currency: string;
+      } | null = null;
+      if (input.ratePlanId) {
+        ratePlan = await tx.ratePlan.findFirst({
+          where: {
+            id: input.ratePlanId,
+            propertyId: property.id,
+            deletedAt: null,
+            isPublic: true,
+          },
+          select: {
+            id: true,
+            nonRefundable: true,
+            discountPct: true,
+            attributes: true,
+            currency: true,
+          },
+        });
+        if (!ratePlan) {
+          throw new BadRequestException('ratePlanId no encontrado o no público');
+        }
+        if (ratePlan.nonRefundable && input.paymentMode !== 'charge') {
+          throw new BadRequestException(
+            'Tarifa no reembolsable: requiere paymentMode=charge.',
+          );
+        }
+      }
+
       const nights = Math.max(
         1,
         Math.round((departure.getTime() - arrival.getTime()) / 86_400_000),
       );
-      const dailyRate = Number(roomType.defaultRate);
-      const totalAmount = new Prisma.Decimal((dailyRate * nights).toFixed(2));
-      const currency = roomType.defaultCurrency ?? property.currency;
+      const dailyRate = resolveDailyRate(roomType.defaultRate, ratePlan);
+      const totalAmount = new Prisma.Decimal(dailyRate.mul(nights).toFixed(2));
+      const currency = ratePlan?.currency ?? roomType.defaultCurrency ?? property.currency;
 
       const guest = await tx.guest.create({
         data: {
@@ -312,6 +367,7 @@ export class PublicIbeService {
       status: reservationOut.status,
       arrival: input.arrival,
       departure: input.departure,
+      paymentMode: input.paymentMode,
       totalAmount: reservationOut.totalAmount.toString(),
       currency: reservationOut.currency,
     };
@@ -341,6 +397,7 @@ export class PublicIbeService {
           cancellationPolicy: {
             select: { name: true, hoursBeforeArrival: true, penaltyPct: true },
           },
+          ratePlan: { select: { nonRefundable: true } },
           roomType: { select: { code: true, name: true } },
           guests: {
             where: { isPrimary: true },
@@ -351,7 +408,8 @@ export class PublicIbeService {
       }),
     );
     if (!row) throw new NotFoundException('Reservation not found');
-    const cancellable = canCancel(row);
+    const nonRefundable = row.ratePlan?.nonRefundable === true;
+    const cancellable = !nonRefundable && canCancel(row);
     return {
       code: row.code,
       status: row.status,
@@ -364,9 +422,11 @@ export class PublicIbeService {
         : { code: '?', name: '?' },
       guest: row.guests[0]!.guest,
       cancellable,
-      cancellationPolicy: row.cancellationPolicy
-        ? `${row.cancellationPolicy.name}: gratis ${row.cancellationPolicy.hoursBeforeArrival}h antes de llegada; tras ese plazo penalización ${row.cancellationPolicy.penaltyPct}%`
-        : null,
+      cancellationPolicy: nonRefundable
+        ? 'Tarifa no reembolsable — esta reserva no admite cancelación.'
+        : row.cancellationPolicy
+          ? `${row.cancellationPolicy.name}: gratis ${row.cancellationPolicy.hoursBeforeArrival}h antes de llegada; tras ese plazo penalización ${row.cancellationPolicy.penaltyPct}%`
+          : null,
     };
   }
 
@@ -394,6 +454,9 @@ export class PublicIbeService {
           cancellationPolicy: {
             select: { name: true, hoursBeforeArrival: true, penaltyPct: true },
           },
+          ratePlan: {
+            select: { nonRefundable: true },
+          },
           guests: {
             where: { isPrimary: true },
             take: 1,
@@ -408,6 +471,16 @@ export class PublicIbeService {
         existing.status === ReservationStatus.NO_SHOW
       ) {
         throw new ConflictException(`Reserva en estado ${existing.status} no cancelable`);
+      }
+      // Sprint 13 W1 — rate plan no reembolsable bloquea cancelación
+      // desde el IBE público. Esta es la regla "de contrato": el huésped
+      // contrató una tarifa no refundable. Es independiente de si el
+      // cobro upfront ya se ejecutó (eso se valida adicionalmente en
+      // S12 W3 vía folio entry `pi-charge-*`).
+      if (existing.ratePlan?.nonRefundable) {
+        throw new ConflictException(
+          'Tarifa no reembolsable — esta reserva no admite cancelación.',
+        );
       }
 
       const policy = existing.cancellationPolicy;
@@ -786,4 +859,65 @@ function computePenalty(
   if (new Date() < cutoff) return 0;
   const pct = Math.max(0, Math.min(100, Number(policy.penaltyPct))) / 100;
   return Math.max(0, totalAmount * pct);
+}
+
+interface RatePlanForBuild {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  currency: string;
+  nonRefundable: boolean;
+  discountPct: Prisma.Decimal | null;
+  attributes: Prisma.JsonValue | null;
+}
+
+/**
+ * Sprint 13 W1 — Construye la lista de tarifas para un roomType. Si no
+ * hay rate plans configurados, sintetiza una opción "flexible" virtual
+ * (compat con propiedades que aún no han configurado rate plans).
+ */
+function buildRateOptions(
+  defaultRate: Prisma.Decimal,
+  currency: string,
+  nights: number,
+  ratePlans: RatePlanForBuild[],
+): import('./public-ibe.types').PublicRateOption[] {
+  if (ratePlans.length === 0) {
+    const price = new Prisma.Decimal(defaultRate);
+    return [
+      {
+        ratePlanId: null,
+        code: 'BAR',
+        name: 'Tarifa flexible',
+        description: null,
+        nonRefundable: false,
+        discountPct: null,
+        pricePerNight: price.toFixed(2),
+        totalForStay: price.mul(nights).toFixed(2),
+        currency,
+        requiresPrepayment: false,
+      },
+    ];
+  }
+  return ratePlans
+    .map((rp) => {
+      const daily = resolveDailyRate(defaultRate, {
+        attributes: rp.attributes,
+        discountPct: rp.discountPct,
+      });
+      return {
+        ratePlanId: rp.id,
+        code: rp.code,
+        name: rp.name,
+        description: rp.description,
+        nonRefundable: rp.nonRefundable,
+        discountPct: rp.discountPct !== null ? Number(rp.discountPct) : null,
+        pricePerNight: daily.toFixed(2),
+        totalForStay: daily.mul(nights).toFixed(2),
+        currency: rp.currency,
+        requiresPrepayment: rp.nonRefundable,
+      };
+    })
+    .sort((a, b) => Number(a.pricePerNight) - Number(b.pricePerNight));
 }

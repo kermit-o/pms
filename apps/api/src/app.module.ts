@@ -22,6 +22,7 @@ import { NotificationsModule } from './notifications';
 import { PaymentsModule } from './payments';
 import { PublicIbeModule } from './public-ibe';
 import { PublicOnboardingModule } from './public-onboarding';
+import { RatePlansModule } from './rate-plans';
 import { ReportsModule } from './reports';
 
 @Module({
@@ -46,6 +47,7 @@ import { ReportsModule } from './reports';
     PaymentsModule,
     PublicIbeModule,
     PublicOnboardingModule,
+    RatePlansModule,
     ReportsModule,
     CashModule,
     ChannelManagerModule,

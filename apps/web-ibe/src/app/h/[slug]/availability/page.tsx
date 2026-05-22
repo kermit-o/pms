@@ -4,6 +4,7 @@ import {
   IbeApiError,
   searchAvailability,
   type IbeAvailabilityResponse,
+  type IbeRateOption,
 } from '@/lib/api';
 import { resolveLocale, t } from '@/lib/i18n';
 
@@ -100,11 +101,15 @@ export default async function AvailabilityPage({ params, searchParams }: Props) 
                 </div>
 
                 {r.available > 0 && (
-                  <BookButton
+                  <RateOptions
                     slug={slug}
                     lang={lang}
-                    label={t(lang, 'avail.book')}
-                    href={`/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${r.roomTypeId}&lang=${lang}`}
+                    arrival={arrival}
+                    departure={departure}
+                    adults={adults}
+                    children={children}
+                    roomTypeId={r.roomTypeId}
+                    rates={r.rates}
                   />
                 )}
               </li>
@@ -120,23 +125,63 @@ export default async function AvailabilityPage({ params, searchParams }: Props) 
   );
 }
 
-function BookButton({
-  href,
-  label,
+/**
+ * Sprint 13 W1 — Renderiza una opción de reserva por cada `IbeRateOption`
+ * que el API devolvió. Si sólo hay una (caso retro-compat: propiedad sin
+ * rate plans), se ve como antes. Si hay varias (flexible + no-refundable),
+ * cada una es un botón con su precio y badge.
+ */
+function RateOptions({
+  slug,
+  lang,
+  arrival,
+  departure,
+  adults,
+  children,
+  roomTypeId,
+  rates,
 }: {
   slug: string;
   lang: 'es' | 'en';
-  href: string;
-  label: string;
+  arrival: string;
+  departure: string;
+  adults: number;
+  children: number;
+  roomTypeId: string;
+  rates: IbeRateOption[];
 }) {
+  if (rates.length === 0) return null;
+  const baseHref = `/h/${slug}/book?arrival=${arrival}&departure=${departure}&adults=${adults}&children=${children}&roomTypeId=${roomTypeId}&lang=${lang}`;
   return (
-    <div className="mt-3">
-      <Link
-        href={href}
-        className="inline-block rounded-xl bg-aubergine-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-aubergine-800"
-      >
-        {label}
-      </Link>
+    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      {rates.map((rate) => {
+        const params = new URLSearchParams();
+        if (rate.ratePlanId) params.set('ratePlanId', rate.ratePlanId);
+        params.set('paymentMode', rate.requiresPrepayment ? 'charge' : 'setup');
+        const href = `${baseHref}&${params.toString()}`;
+        const bg = rate.nonRefundable
+          ? 'bg-amber-700 hover:bg-amber-800'
+          : 'bg-aubergine-700 hover:bg-aubergine-800';
+        const subtitle = rate.nonRefundable
+          ? lang === 'es'
+            ? `Pago inmediato · no reembolsable${rate.discountPct ? ` −${rate.discountPct}%` : ''}`
+            : `Pay now · non-refundable${rate.discountPct ? ` −${rate.discountPct}%` : ''}`
+          : lang === 'es'
+            ? 'Paga al llegar · tarjeta como garantía'
+            : 'Pay on arrival · card guarantee';
+        return (
+          <Link
+            key={rate.code + (rate.ratePlanId ?? '')}
+            href={href}
+            className={`block rounded-xl px-4 py-3 text-center text-sm font-semibold text-white transition ${bg}`}
+          >
+            <span className="block">
+              {rate.name} · {Number(rate.totalForStay).toFixed(0)} {rate.currency}
+            </span>
+            <span className="block text-[10px] font-normal opacity-90">{subtitle}</span>
+          </Link>
+        );
+      })}
     </div>
   );
 }
