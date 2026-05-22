@@ -820,6 +820,37 @@ export type FoToolName =
   | 'add_folio_charge'
   | 'assign_room';
 
+/**
+ * Sprint 13 W4 — Widgets estructurados que el Copilot emite junto al
+ * texto del LLM. Los datos vienen tal cual del tool que se ejecutó —
+ * NO los reformateamos a través del LLM, así garantizamos que el precio
+ * en pantalla es el real.
+ */
+export interface CopilotAvailabilityRow {
+  roomTypeId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  maxOccupancy: number;
+  available: number;
+  totalRooms: number;
+  pricePerNight: string;
+  totalForStay: string;
+  currency: string;
+}
+
+export interface CopilotAvailabilityWidget {
+  kind: 'availability';
+  data: {
+    arrival: string;
+    departure: string;
+    nights: number;
+    rows: CopilotAvailabilityRow[];
+  };
+}
+
+export type CopilotWidget = CopilotAvailabilityWidget;
+
 export interface CopilotMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -830,6 +861,7 @@ export interface CopilotMessage {
     input: unknown;
     financial: boolean;
   };
+  widgets?: CopilotWidget[];
   createdAt: string;
 }
 

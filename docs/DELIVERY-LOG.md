@@ -476,6 +476,100 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+## 2026-05-21 · [FEAT] · Copilot widgets estructurados — primer slice (disponibilidad)
+
+**Scope:** `apps/api/src/copilot/`, `apps/web-fo/src/components/`,
+`apps/web-fo/src/lib/api.ts`
+**Branch:** `claude/copilot-widgets-availability`
+**Refs:** Mockup B del análisis UX del Copilot. Bloquea por diseño la
+clase de alucinaciones que produjo el incidente BBM01 (placeholders
+"desde más €" en filas sin datos reales).
+
+**Qué cambió.**
+
+- Nuevo módulo puro `apps/api/src/copilot/widgets.ts`:
+  - Define `CopilotWidget` (discriminated union; primera variante:
+    `availability`).
+  - `AvailabilityWidgetData` con filas tipadas (roomTypeId, code,
+    name, description, capacity, available, totalRooms,
+    pricePerNight, totalForStay, currency).
+  - `extractWidgetFromTool(toolName, toolInput, toolResult)` —
+    función pura que convierte un resultado del tool a un widget si
+    el tool es conocido. Valida defensivamente la forma del result:
+    si falta un campo requerido, devuelve `null` y el adapter cae al
+    texto del LLM (mejor no enseñar widget que enseñar uno con
+    huecos).
+- `ToolProposal.text` ahora acepta `widgets?: CopilotWidget[]`
+  opcional. Compatible hacia atrás: si no hay widgets, el texto se
+  pinta como siempre.
+- `AnthropicAdapter.propose` acumula widgets durante el agentic
+  loop: tras cada `execute()` de tool read-only exitoso, llama a
+  `extractWidgetFromTool` y empuja el resultado si es un widget.
+  Los entrega adjuntos a la propuesta final de texto.
+- `CopilotService` propaga widgets del adapter al `SessionMessage`
+  in-memory y al `SessionView.messages[i]`. Persistencia: por ahora
+  ephemeral (al recargar la sesión los widgets desaparecen, el texto
+  se mantiene). Persistir requiere ampliar `copilot_messages` con
+  `widgets jsonb` — siguiente slice.
+- Frontend (`web-fo`):
+  - `CopilotMessage.widgets?: CopilotWidget[]` en `lib/api.ts`.
+  - Nuevo componente `CopilotAvailabilityWidget`: tarjeta con header
+    "Disponibilidad · datos en vivo" + lista de filas. Cada fila
+    muestra código (chip), nombre, descripción, badge
+    `available/totalRooms`, precio (total para la estancia +
+    "por noche" pequeño) y un botón "Reservar →" que abre
+    `/reservations/new` con fechas + roomTypeId prerrellenados.
+    Las filas con `available === 0` se atenúan y ocultan el CTA.
+  - `CopilotSidebar` renderiza `m.widgets?.map(...)` justo después
+    del `<pre>` con el texto.
+
+**Por qué.**
+
+El validador anti-alucinaciones (commit previo) es safety net: caza
+los placeholders después de que el LLM los escriba. Esta arquitectura
+es la solución estructural: para queries de disponibilidad, el texto
+del LLM deja de ser fuente autoritativa. La UI pinta los precios
+directamente del JSON del tool — no hay "espacio" para que el LLM
+invente un "desde más €" porque las filas se renderizan a partir de
+datos tipados Zod-validated.
+
+Beneficios secundarios:
+- CTAs tipados ("Reservar →") en lugar de pedirle al LLM que
+  ofrezca acciones en texto que la UI tendría que parsear.
+- Capacidad/disponibilidad real en pantalla, no oculta en el blob
+  JSON de tool_result.
+- Base para los siguientes widgets (folio, ficha de reserva,
+  tareas HSK) — el patrón ya está montado.
+
+**Archivos clave.**
+
+- `apps/api/src/copilot/widgets.ts` (nuevo, ~110 LoC)
+- `apps/api/src/copilot/widgets.spec.ts` (7 tests)
+- `apps/api/src/copilot/copilot.types.ts` (`widgets?` en text proposal)
+- `apps/api/src/copilot/anthropic-adapter.ts` (acumulación)
+- `apps/api/src/copilot/anthropic-adapter.spec.ts` (+2 tests e2e)
+- `apps/api/src/copilot/copilot.service.ts` (propagación al SessionView)
+- `apps/web-fo/src/lib/api.ts` (tipo `CopilotWidget`)
+- `apps/web-fo/src/components/CopilotAvailabilityWidget.tsx` (nuevo)
+- `apps/web-fo/src/components/CopilotSidebar.tsx` (wiring)
+
+**Tests.**
+
+- 329/329 verdes (9 nuevos: 7 del extractor + 2 e2e del adapter).
+- Typecheck + lint verdes en api y web-fo. Cero deps nuevas.
+
+**Sigue pendiente (próximos slices de Mockup B).**
+
+- **Persistencia**: ampliar `copilot_messages` con `widgets jsonb` para
+  sobrevivir al reload de sesión.
+- **Más widgets**: `folio` (líneas + balance), `reservation_summary`
+  (header de ficha), `hsk_tasks` (tareas pendientes con check rápido),
+  `confirmation_card` (mostrar antes/después de un mutating tool).
+- **System prompt**: instruir al LLM que cuando emita un widget puede
+  resumir en una línea ("Hay 3 tipos disponibles"), no replicar la
+  tabla en texto. Reduce tokens y elimina divergencia widget↔texto.
+- **Compartir tipos** entre api y web-fo en `packages/shared` cuando
+  haya ≥3 widgets distintos (regla de 3, no anticipar).
 
 ---
 
