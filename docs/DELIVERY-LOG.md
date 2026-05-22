@@ -476,6 +476,72 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+## 2026-05-22 · [FEAT] · Copilot admin — export CSV del listado filtrado
+
+**Scope:** `apps/api/src/copilot`, `apps/web-fo/src/app/admin/copilot`,
+`apps/web-fo/src/app/api/admin/copilot/sessions/export`
+**Branch:** `claude/copilot-admin-csv-export` (sobre user-selector)
+**Refs:** completa la suite de auditoría — `tenant_admin` puede ya
+filtrar + paginar + exportar a Excel para análisis offline.
+
+**Qué cambió.**
+
+- **Backend `apps/api/src/copilot/csv.ts`** (nuevo, local al módulo):
+  reusa el contrato RFC 4180 de `reports/csv.ts` (comillas siempre,
+  escape duplicando comillas internas, CRLF). `copilotSessionsToCsv
+  (sessions)` exporta header + 7 columnas (sessionId, userId,
+  firstMessage, firstMessageAt, lastActivityAt, messageCount,
+  widgetCount).
+- **`CopilotController.exportSessionsCsv`**: nuevo
+  `GET /copilot/sessions/admin/export.csv` con mismos query params
+  que el listado JSON (limit/userId/from/to/before). Default
+  `limit=200` (más alto que el viewer para exportar más). Streama
+  con `Content-Disposition: attachment; filename="copilot-sessions-
+  YYYY-MM-DD.csv"`. `tenant_admin` only.
+- **Proxy web-fo** `apps/web-fo/src/app/api/admin/copilot/sessions/
+  export/route.ts`: forward server-side del access token NextAuth
+  (browser nunca lo ve); valida `tenant_admin` localmente antes de
+  llegar al API; pasa los filtros tal cual; preserva el
+  `Content-Disposition` upstream para que el navegador descargue.
+- **Página `/admin/copilot/sessions`**: nuevo botón "Descargar CSV"
+  junto al botón "Más antiguas". `buildCsvHref` normaliza
+  `from`/`to` a ISO inicio/fin de día (mismo patrón que el listado)
+  y pone `limit=200`.
+
+**Por qué.**
+
+Auditoría real implica análisis offline: contar consultas por
+operador, identificar patrones de uso, compartir con management.
+Sin export el `tenant_admin` está atado al viewer web. El CSV
+estándar (RFC 4180) abre directo en Excel/Numbers/Google Sheets.
+
+El default `limit=200` en el export (vs 50 en el viewer) cubre 2-3
+semanas de actividad típica de un hotel piloto en un solo archivo.
+Para volúmenes mayores el admin acota con `from`/`to` antes de
+exportar.
+
+**Archivos clave.**
+
+- `apps/api/src/copilot/csv.ts` (nuevo, ~50 LoC puro)
+- `apps/api/src/copilot/csv.spec.ts` (+2 tests)
+- `apps/api/src/copilot/copilot.controller.ts` (+ endpoint)
+- `apps/web-fo/src/app/api/admin/copilot/sessions/export/route.ts`
+  (nuevo proxy)
+- `apps/web-fo/src/app/admin/copilot/sessions/page.tsx` (+ botón)
+
+**Tests.**
+
+- 352/352 verdes (+2: header/escape/CRLF, array vacío). Typecheck +
+  lint verdes api + web-fo. Sin deps ni migraciones.
+
+**Sigue pendiente.**
+
+- **Más widgets**: `arrivals_today`, `departures_today`,
+  `suggest_assignments` — patrón rodado, ~1 día c/u.
+- **Persistencia opt-in pendingTools** — sólo si el negocio lo pide.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot admin — selector de operador por nombre
 
 **Scope:** `apps/api/src/copilot`, `apps/web-fo/src/app/admin/copilot`,
