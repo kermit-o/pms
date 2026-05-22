@@ -4,6 +4,7 @@ import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
 import { ConfirmToolDto, CreateSessionDto, SendMessageDto } from './dto';
 import { CopilotService, type StreamEvent } from './copilot.service';
+import { copilotSessionsToCsv } from './csv';
 
 const ROLES = ['tenant_admin', 'front_desk', 'night_auditor'] as const;
 
@@ -58,6 +59,38 @@ export class CopilotController {
   @Roles('tenant_admin')
   async listSessionUsers(@CurrentUser() user: AuthUser) {
     return this.copilot.listSessionUsers(user);
+  }
+
+  /**
+   * Sprint 13 — Export CSV del listado filtrado para auditoría
+   * offline (Excel / análisis). Mismos filtros que `GET /`.
+   */
+  @Get('admin/export.csv')
+  @Roles('tenant_admin')
+  async exportSessionsCsv(
+    @CurrentUser() user: AuthUser,
+    @Res({ passthrough: false }) reply: FastifyReply,
+    @Query('limit') limit: string | undefined,
+    @Query('userId') userId: string | undefined,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @Query('before') before: string | undefined,
+  ) {
+    const parsed = limit ? Number(limit) : undefined;
+    const sessions = await this.copilot.listSessions(user, {
+      // Cap más alto para exportar (el viewer admin filtra antes).
+      limit: Number.isFinite(parsed) ? parsed : 200,
+      userId: userId || undefined,
+      from: from || undefined,
+      to: to || undefined,
+      before: before || undefined,
+    });
+    const csv = copilotSessionsToCsv(sessions);
+    const filename = `copilot-sessions-${new Date().toISOString().slice(0, 10)}.csv`;
+    reply.raw.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    reply.raw.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    reply.raw.end(csv);
+    return reply;
   }
 
   @Get(':id')

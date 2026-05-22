@@ -202,17 +202,34 @@ export default async function CopilotSessionsAdminPage({ searchParams }: PagePro
           Página de 50 sesiones. Persistido en `copilot_messages` (mensajes +
           widgets).
         </p>
-        {olderCursor && (
-          <Link
-            href={buildOlderHref(sp, olderCursor)}
+        <div className="flex items-center gap-2">
+          <a
+            href={buildCsvHref(sp)}
             className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-50"
           >
-            ← Más antiguas
-          </Link>
-        )}
+            Descargar CSV
+          </a>
+          {olderCursor && (
+            <Link
+              href={buildOlderHref(sp, olderCursor)}
+              className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-50"
+            >
+              ← Más antiguas
+            </Link>
+          )}
+        </div>
       </div>
     </main>
   );
+}
+
+function buildCsvHref(sp: { userId?: string; from?: string; to?: string }): string {
+  const params = new URLSearchParams();
+  if (sp.userId) params.set('userId', sp.userId);
+  if (sp.from) params.set('from', `${sp.from}T00:00:00Z`);
+  if (sp.to) params.set('to', `${sp.to}T23:59:59Z`);
+  params.set('limit', '200');
+  return `/api/admin/copilot/sessions/export?${params.toString()}`;
 }
 
 function buildOlderHref(
