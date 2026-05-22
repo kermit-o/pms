@@ -80,6 +80,68 @@ Una o dos frases.
 
 ---
 
+## 2026-05-22 · [FEAT] · Copilot admin — selector de operador por nombre
+
+**Scope:** `apps/api/src/copilot`, `apps/web-fo/src/app/admin/copilot`,
+`apps/web-fo/src/lib/api.ts`
+**Branch:** `claude/copilot-admin-user-selector` (sobre filtros)
+**Refs:** cierra la UX del filtro admin. V1 pedía pegar un UUID; un
+operador real no lo tiene a mano.
+
+**Qué cambió.**
+
+- **Backend** `CopilotService.listSessionUsers(user)`:
+  - `groupBy({ by: ['userId'], _count: { sessionId }, _max:
+    { createdAt } })` sobre `copilot_messages` filtrado por tenant
+    (RLS).
+  - Join con `user` para resolver `fullName + email`.
+  - Devuelve `AdminSessionUser[]` ordenado por última actividad desc.
+- **Controller**: `GET /copilot/sessions/admin/users` (tenant_admin
+  only). Declarada antes de `:id` para que `ParseUUIDPipe` no la
+  intercepte.
+- **`web-fo/lib/api.ts`**: helper `listCopilotSessionUsers(token)` +
+  tipo `CopilotSessionUser`.
+- **Página `/admin/copilot/sessions`**:
+  - Carga la lista de usuarios en paralelo con la lista de sesiones
+    (`Promise.all`).
+  - El campo "User ID (UUID)" se reemplaza por un `<select>` con
+    todos los operadores: `Nombre (N mensajes)` o, si no hay
+    fullName, `email (N)`, o `<8-char-id> (N)` como fallback.
+  - Primera opción `— todos —` (value vacío).
+
+**Por qué.**
+
+Sin esto el admin tenía que abrir la DB o el listado de usuarios
+para encontrar el UUID del operador. Con 5-15 personas por hotel,
+un dropdown poblado por tráfico real es lo correcto. El conteo
+entre paréntesis añade contexto (sabe rápido quién usa más el
+Copilot).
+
+**Archivos clave.**
+
+- `apps/api/src/copilot/copilot.service.ts` (+ `listSessionUsers` +
+  `AdminSessionUser`)
+- `apps/api/src/copilot/copilot.service.spec.ts` (+2 tests)
+- `apps/api/src/copilot/copilot.controller.ts` (+ endpoint)
+- `apps/web-fo/src/lib/api.ts` (+ helper + tipo)
+- `apps/web-fo/src/app/admin/copilot/sessions/page.tsx`
+  (Promise.all + `<select>`)
+
+**Tests.**
+
+- 350/350 verdes (+2: join distinct + fullName, array vacío).
+  Typecheck + lint verdes api + web-fo. Sin deps ni migraciones.
+
+**Sigue pendiente.**
+
+- **Export CSV** del listado filtrado — reutiliza el patrón de
+  reports.
+- **Más widgets**: `arrivals_today`, `departures_today`,
+  `suggest_assignments`.
+- **Persistencia opt-in pendingTools**.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot admin — filtros + paginación cursor
 
 **Scope:** `apps/api/src/copilot`, `apps/web-fo/src/app/admin/copilot`,

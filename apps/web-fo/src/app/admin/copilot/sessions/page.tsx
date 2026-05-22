@@ -3,8 +3,10 @@ import { notFound, redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import {
   ApiError,
+  listCopilotSessionUsers,
   listCopilotSessions,
   type CopilotSessionSummary,
+  type CopilotSessionUser,
 } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
@@ -43,8 +45,12 @@ export default async function CopilotSessionsAdminPage({ searchParams }: PagePro
   };
 
   let sessions: CopilotSessionSummary[];
+  let users: CopilotSessionUser[];
   try {
-    sessions = await listCopilotSessions(session.accessToken, filters);
+    [sessions, users] = await Promise.all([
+      listCopilotSessions(session.accessToken, filters),
+      listCopilotSessionUsers(session.accessToken),
+    ]);
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
       return notFound();
@@ -97,14 +103,19 @@ export default async function CopilotSessionsAdminPage({ searchParams }: PagePro
           />
         </label>
         <label className="text-xs font-medium uppercase tracking-wide text-aubergine-500">
-          User ID (UUID)
-          <input
+          Operador
+          <select
             name="userId"
-            type="text"
             defaultValue={sp.userId ?? ''}
-            placeholder="opcional"
-            className="mt-1 block w-72 rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-xs font-mono focus:border-aubergine-500 focus:outline-none"
-          />
+            className="mt-1 block w-64 rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
+          >
+            <option value="">— todos —</option>
+            {users.map((u) => (
+              <option key={u.userId} value={u.userId}>
+                {u.fullName ?? u.email ?? u.userId.slice(0, 8)} ({u.messageCount})
+              </option>
+            ))}
+          </select>
         </label>
         <button
           type="submit"

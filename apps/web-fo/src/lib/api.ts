@@ -922,6 +922,20 @@ export async function listCopilotSessions(
   return apiFetch(`/copilot/sessions?${params.toString()}`, { accessToken });
 }
 
+export interface CopilotSessionUser {
+  userId: string;
+  fullName: string | null;
+  email: string | null;
+  messageCount: number;
+  lastActivityAt: string | null;
+}
+
+export async function listCopilotSessionUsers(
+  accessToken: string | undefined,
+): Promise<CopilotSessionUser[]> {
+  return apiFetch('/copilot/sessions/admin/users', { accessToken });
+}
+
 export async function sendCopilotMessage(
   accessToken: string | undefined,
   sessionId: string,

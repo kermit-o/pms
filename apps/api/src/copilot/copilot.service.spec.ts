@@ -53,12 +53,18 @@ function buildService() {
     }),
   };
   const findManyMock = vi.fn().mockResolvedValue([] as unknown[]);
+  const groupByMock = vi.fn().mockResolvedValue([] as unknown[]);
+  const userFindManyMock = vi.fn().mockResolvedValue([] as unknown[]);
   const prisma = {
     withTenant: vi.fn(async (_ctx, fn: (tx: unknown) => Promise<unknown>) =>
       fn({
         copilotMessage: {
           create: vi.fn().mockResolvedValue({}),
           findMany: findManyMock,
+          groupBy: groupByMock,
+        },
+        user: {
+          findMany: userFindManyMock,
         },
       }),
     ),
@@ -74,7 +80,7 @@ function buildService() {
     adapter as never,
     metrics as never,
   );
-  return { service, resolver, findManyMock };
+  return { service, resolver, findManyMock, groupByMock, userFindManyMock };
 }
 
 describe('CopilotService', () => {
@@ -440,5 +446,45 @@ describe('CopilotService', () => {
     const where = findManyMock.mock.calls[0]![0]!.where;
     expect(where.createdAt.gte).toEqual(new Date('2026-05-01T00:00:00Z'));
     expect(where.createdAt.lt).toEqual(new Date('2026-05-22T10:00:00Z'));
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 13 — listSessionUsers (alimenta selector admin).
+  // ---------------------------------------------------------------------------
+
+  it('listSessionUsers join distinct userIds con users + fullName', async () => {
+    const { service, groupByMock, userFindManyMock } = buildService();
+    groupByMock.mockResolvedValueOnce([
+      { userId: 'u-1', _count: { sessionId: 12 }, _max: { createdAt: new Date('2026-05-22T11:00:00Z') } },
+      { userId: 'u-2', _count: { sessionId: 3 }, _max: { createdAt: new Date('2026-05-21T09:00:00Z') } },
+    ]);
+    userFindManyMock.mockResolvedValueOnce([
+      { id: 'u-1', fullName: 'María Recepción', email: 'maria@hotel.test' },
+      { id: 'u-2', fullName: null, email: 'lupita@hotel.test' },
+    ]);
+    const out = await service.listSessionUsers(user);
+    expect(out).toEqual([
+      {
+        userId: 'u-1',
+        fullName: 'María Recepción',
+        email: 'maria@hotel.test',
+        messageCount: 12,
+        lastActivityAt: '2026-05-22T11:00:00.000Z',
+      },
+      {
+        userId: 'u-2',
+        fullName: null,
+        email: 'lupita@hotel.test',
+        messageCount: 3,
+        lastActivityAt: '2026-05-21T09:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('listSessionUsers devuelve [] cuando no hay mensajes', async () => {
+    const { service, groupByMock } = buildService();
+    groupByMock.mockResolvedValueOnce([]);
+    const out = await service.listSessionUsers(user);
+    expect(out).toEqual([]);
   });
 });
