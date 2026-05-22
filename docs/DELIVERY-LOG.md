@@ -476,6 +476,76 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+## 2026-05-21 · [FEAT] · Copilot widgets — persistencia DB + prompt tight
+
+**Scope:** `packages/db`, `apps/api/src/copilot/`
+**Branch:** `claude/copilot-widgets-persistence` (sobre slice 1)
+**Refs:** slice 2 de Mockup B. El slice 1 dejó los widgets en memoria;
+este los hace durables y reduce divergencia widget↔texto del LLM.
+
+**Qué cambió.**
+
+- **Migración** `20260621000000_copilot_message_widgets`:
+  - `ALTER TABLE copilot_messages ADD COLUMN widgets jsonb NULL.`
+  - Forward-only, default NULL → retro-compat con filas existentes.
+- **Prisma model**: nuevo campo `widgets: Json?` en `CopilotMessage`.
+- **`CopilotService.persistMessage`**: nuevo parámetro opcional
+  `widgets?: CopilotWidget[]`. Serializa tal cual como `InputJsonValue`;
+  si no hay, escribe `JsonNull`.
+- **Call site** (path `proposal.kind === 'text'`): pasa
+  `proposal.widgets` a `persistMessage`. Los demás call sites
+  (mutating, fallback, decide) no llevan widgets — los tools mutating
+  no tienen widget asociado por diseño.
+- **System prompt — nuevo bloque "REGLA CRÍTICA — WIDGETS"**:
+  - Cuando se ejecuta un tool con widget asociado, la UI ya pinta la
+    tarjeta; el LLM NO debe replicar la tabla en texto.
+  - Su respuesta debe ser un resumen de 1-2 frases ("Tienes 3 tipos
+    disponibles esa noche — la doble estándar es la más barata").
+  - Ahorra tokens y elimina divergencia widget↔texto si el LLM
+    paráfrasea mal el contenido del widget.
+
+**Por qué.**
+
+Slice 1 dejó dos huecos:
+1. Los widgets vivían sólo en memoria de proceso. Audit, Grafana o un
+   futuro reload-from-DB no podían recuperarlos.
+2. El LLM, sin instrucciones, repetía la tabla en texto bajo el widget
+   — duplicando lo que la UI pintaba y reintroduciendo el riesgo de
+   alucinación en la versión texto.
+
+Ambos son cheap de cerrar y bloquean la confianza del operador en la
+arquitectura nueva: si después de mergear esto el recepcionista ve
+tarjeta + texto-tabla redundante, el feature pierde credibilidad.
+
+**Archivos clave.**
+
+- `packages/db/prisma/migrations/20260621000000_copilot_message_widgets/migration.sql`
+- `packages/db/prisma/schema.prisma` (`widgets Json?` en CopilotMessage)
+- `apps/api/src/copilot/copilot.service.ts` (persistMessage signature + call site)
+- `apps/api/src/copilot/anthropic-adapter.ts` (system prompt §WIDGETS)
+
+**Tests.**
+
+- 329/329 verdes (sin nuevos — la migración Prisma + el cambio de
+  persistMessage no añaden lógica testeable nueva; los tests del slice 1
+  ya cubren la propagación adapter → service → view).
+- Typecheck + lint verdes.
+
+**Sigue pendiente.**
+
+- **Reload-from-DB de sesiones**: hoy `sessions` es un `Map` in-memory;
+  al reiniciar el proceso (deploy) se pierde el historial del usuario.
+  Con widgets ya persistidos, montar `loadSession()` que hidrate desde
+  `copilot_messages` ordenado por `createdAt` es directo.
+- **Más widgets**: folio, reservation_summary, hsk_tasks, confirmation_card.
+- **Vista admin de sesiones**: con persistencia ya disponible, una
+  página `/admin/copilot/sessions` que liste interacciones del hotel
+  para depurar prompt drift.
+- **Compartir tipos** entre api y web-fo en `packages/shared` cuando
+  haya ≥3 widgets distintos.
+
+---
+
 ## 2026-05-21 · [FEAT] · Copilot widgets estructurados — primer slice (disponibilidad)
 
 **Scope:** `apps/api/src/copilot/`, `apps/web-fo/src/components/`,
