@@ -129,6 +129,56 @@ export class HousekeepingTasksService {
     return rows.map(toView);
   }
 
+  /**
+   * Sprint 13 — variante enriquecida para el Copilot. Devuelve cada
+   * tarea + número de habitación + nombre del usuario asignado, todo
+   * en un único `withTenant`. Mantenemos `list()` intacto para no
+   * romper consumers existentes (HSK PWA, controller).
+   */
+  async listEnriched(
+    user: AuthUser,
+    correlationId: string,
+    query: ListTasksQuery,
+  ): Promise<EnrichedTaskView[]> {
+    const ctx = tenantCtx(user, correlationId);
+    const where: Prisma.HousekeepingTaskWhereInput = { deletedAt: null };
+    if (query.propertyId) where.propertyId = query.propertyId;
+    if (query.assignedToUserId) where.assignedToUserId = query.assignedToUserId;
+    if (query.status) where.status = query.status;
+    if (query.taskType) where.taskType = query.taskType;
+    if (query.from || query.to) {
+      where.businessDate = {};
+      if (query.from) (where.businessDate as Prisma.DateTimeFilter).gte = new Date(query.from);
+      if (query.to) (where.businessDate as Prisma.DateTimeFilter).lte = new Date(query.to);
+    }
+    return this.prisma.withTenant(ctx, async (tx) => {
+      const rows = await tx.housekeepingTask.findMany({
+        where,
+        orderBy: [{ businessDate: 'desc' }, { createdAt: 'desc' }],
+        take: query.limit,
+        include: {
+          room: { select: { number: true, floor: true } },
+        },
+      });
+      // Resuelve el nombre del asignado en un segundo viaje agrupado.
+      const userIds = [...new Set(rows.map((r) => r.assignedToUserId).filter(Boolean))] as string[];
+      const users =
+        userIds.length === 0
+          ? []
+          : await tx.user.findMany({
+              where: { id: { in: userIds } },
+              select: { id: true, fullName: true, email: true },
+            });
+      const userById = new Map(users.map((u) => [u.id, u.fullName ?? u.email]));
+      return rows.map((row) => ({
+        ...toView(row),
+        roomNumber: row.room?.number ?? null,
+        roomFloor: row.room?.floor ?? null,
+        assigneeName: row.assignedToUserId ? userById.get(row.assignedToUserId) ?? null : null,
+      }));
+    });
+  }
+
   async findOne(user: AuthUser, correlationId: string, id: string): Promise<TaskView> {
     const ctx = tenantCtx(user, correlationId);
     const row = await this.prisma.withTenant(ctx, (tx) =>
@@ -672,6 +722,13 @@ export interface TaskView {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EnrichedTaskView extends TaskView {
+  /** Sprint 13 — campos resueltos para el widget del Copilot. */
+  roomNumber: string | null;
+  roomFloor: string | null;
+  assigneeName: string | null;
 }
 
 function toView(row: {

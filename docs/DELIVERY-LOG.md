@@ -80,6 +80,104 @@ Una o dos frases.
 
 ---
 
+## 2026-05-22 · [FEAT] · Copilot widget — hsk_tasks (cierra vertical housekeeping)
+
+**Scope:** `apps/api/src/housekeeping`, `apps/api/src/copilot/`,
+`apps/web-fo/src/components/`
+**Branch:** `claude/copilot-widget-hsk-tasks` (sobre reload-from-DB)
+**Refs:** completa el cuarteto de widgets read-only (availability +
+folio + reservation + hsk_tasks). Cierra la cobertura operacional
+diaria del Copilot.
+
+**Qué cambió.**
+
+- **`HousekeepingTasksService.listEnriched`** (nuevo, paralelo a
+  `list`):
+  - Mismo filtro que `list` pero hace `include: { room }` y resuelve
+    `User.fullName ?? email` por `assignedToUserId` en un segundo
+    query agrupado (1 lookup por todos los user IDs distintos).
+  - Devuelve `EnrichedTaskView[]` — extiende `TaskView` con
+    `roomNumber`, `roomFloor`, `assigneeName`.
+  - `list()` queda intacto para no romper HSK PWA + controller.
+- **`HskToolRouter`** ahora delega `hsk_list_today` en
+  `listEnriched`. El resultado tiene los campos que el widget
+  necesita sin viajes extra desde el adapter.
+- **Widget extractor `widgets.ts`**:
+  - Cuarta variante de `CopilotWidget`:
+    `{ kind: 'hsk_tasks'; data: HskTasksWidgetData }`.
+  - `HskTasksWidgetData` con `businessDate`, `rows[]` (id,
+    roomNumber, roomFloor, taskType, status, assigneeName,
+    startedAt, completedAt, durationMin, notes) y `counts` por
+    status (PENDING/IN_PROGRESS/DONE/BLOCKED).
+  - A diferencia de los otros widgets, **emitimos también con
+    array vacío** — un widget con `counts: {0,0,0,0}` confirma al
+    operador que se ejecutó la consulta y no había tareas, en
+    lugar de depender del LLM para distinguir "0 tareas" de
+    "olvidé llamar el tool".
+  - Validación defensiva: si una fila no tiene id/taskType/status
+    aborta el widget entero (fallback al texto del LLM).
+- **UI** (`apps/web-fo`):
+  - Cuarto tipo en union `CopilotWidget`.
+  - Nuevo componente `CopilotHskTasksWidget`:
+    - Header con `businessDate`.
+    - Fila de contadores coloreados por status (ámbar pendiente,
+      azul en curso, verde hecho, rosa bloqueado — sólo si > 0).
+    - Lista de hasta 8 tareas con chip de habitación, descripción
+      humana del tipo ("Salida · limpieza", "Estancia · limpieza",
+      "Inspección", "Mantenimiento"), notas truncadas con tooltip,
+      nombre del asignado y status chip (con duración si DONE).
+    - Si > 8: contador "Mostrando 8 de N".
+
+**Por qué.**
+
+El supervisor de housekeeping pregunta diariamente "¿cómo va la
+limpieza?", "¿quién tiene asignada la 305?", "¿cuánto le falta?".
+Hasta este commit la respuesta era un JSON crudo que el LLM
+parafraseaba. Ahora el widget muestra la operativa de un vistazo,
+con código de color por status, y los counts en cabecera dan el
+estado global del turno en 0.5 segundos.
+
+Con esta cuarta variante, el patrón Mockup B cubre las 4 verticales
+operacionales del MVP:
+- **availability**: front-desk → ver tarifas y disponibilidad.
+- **folio**: front-desk → balance y movimientos.
+- **reservation**: front-desk → ficha de reserva antes de mutar.
+- **hsk_tasks**: housekeeping → operativa del día.
+
+Próximos widgets son extensión natural (suggest_assignments,
+arrivals_today, departures_today) — patrón rodado.
+
+**Archivos clave.**
+
+- `apps/api/src/housekeeping/tasks.service.ts` (+ `listEnriched` +
+  `EnrichedTaskView`)
+- `apps/api/src/housekeeping/hsk-tool-router.ts` (usa `listEnriched`)
+- `apps/api/src/housekeeping/hsk-tool-router.spec.ts` (mock
+  actualizado)
+- `apps/api/src/copilot/widgets.ts` (+ `buildHskTasksWidget` +
+  tipos)
+- `apps/api/src/copilot/widgets.spec.ts` (+4 tests)
+- `apps/web-fo/src/lib/api.ts` (`CopilotHskTasksWidget` type)
+- `apps/web-fo/src/components/CopilotHskTasksWidget.tsx` (nuevo)
+- `apps/web-fo/src/components/CopilotSidebar.tsx` (wiring)
+
+**Tests.**
+
+- 341/341 verdes (+4 nuevos). Typecheck + lint verdes en api +
+  web-fo. Sin deps ni migraciones.
+
+**Sigue pendiente (próximos slices).**
+
+- **Mover tipos a `packages/shared`** — regla de 4 cumplida; ahora
+  tipos viven duplicados api↔web-fo en 4 sitios. ~half día deuda.
+- **Vista admin `/admin/copilot/sessions`** — depurar prompt drift
+  desde web; ahora ya tenemos persistencia + reload + 4 widgets.
+- **Persistencia de `pendingTools`** — si el negocio lo justifica.
+- **Más widgets**: `arrivals_today`, `departures_today`,
+  `suggest_assignments` para el supervisor HSK.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot — reload-from-DB de sesiones (cierra slice 2)
 
 **Scope:** `apps/api/src/copilot/copilot.service.ts`

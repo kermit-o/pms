@@ -15,7 +15,33 @@
 export type CopilotWidget =
   | { kind: 'availability'; data: AvailabilityWidgetData }
   | { kind: 'folio'; data: FolioWidgetData }
-  | { kind: 'reservation'; data: ReservationWidgetData };
+  | { kind: 'reservation'; data: ReservationWidgetData }
+  | { kind: 'hsk_tasks'; data: HskTasksWidgetData };
+
+export interface HskTaskRow {
+  id: string;
+  roomNumber: string | null;
+  roomFloor: string | null;
+  taskType: string;
+  status: string;
+  assigneeName: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMin: number | null;
+  notes: string | null;
+}
+
+export interface HskTasksWidgetData {
+  businessDate: string;
+  rows: HskTaskRow[];
+  /** Conteo por status — útil para el resumen del LLM. */
+  counts: {
+    PENDING: number;
+    IN_PROGRESS: number;
+    DONE: number;
+    BLOCKED: number;
+  };
+}
 
 export interface ReservationWidgetData {
   reservationId: string;
@@ -106,6 +132,8 @@ export function extractWidgetFromTool(
       return buildFolioWidget(toolResult);
     case 'get_reservation':
       return buildReservationWidget(toolResult);
+    case 'hsk_list_today':
+      return buildHskTasksWidget(toolInput, toolResult);
     default:
       return null;
   }
@@ -294,6 +322,54 @@ function buildReservationWidget(toolResult: unknown): CopilotWidget | null {
       cardBrand: typeof r.stripeCardBrand === 'string' ? r.stripeCardBrand : null,
       cardLast4: typeof r.stripeCardLast4 === 'string' ? r.stripeCardLast4 : null,
       folio,
+    },
+  };
+}
+
+function buildHskTasksWidget(
+  toolInput: unknown,
+  toolResult: unknown,
+): CopilotWidget | null {
+  if (!Array.isArray(toolResult)) return null;
+  const inputDate =
+    typeof (toolInput as Record<string, unknown>)?.businessDate === 'string'
+      ? ((toolInput as { businessDate: string }).businessDate)
+      : new Date().toISOString().slice(0, 10);
+
+  const rows: HskTaskRow[] = [];
+  const counts = { PENDING: 0, IN_PROGRESS: 0, DONE: 0, BLOCKED: 0 };
+  for (const raw of toolResult) {
+    const r = raw as Record<string, unknown>;
+    if (
+      typeof r.id !== 'string' ||
+      typeof r.taskType !== 'string' ||
+      typeof r.status !== 'string'
+    ) {
+      return null;
+    }
+    rows.push({
+      id: r.id,
+      roomNumber: typeof r.roomNumber === 'string' ? r.roomNumber : null,
+      roomFloor: typeof r.roomFloor === 'string' ? r.roomFloor : null,
+      taskType: r.taskType,
+      status: r.status,
+      assigneeName: typeof r.assigneeName === 'string' ? r.assigneeName : null,
+      startedAt: typeof r.startedAt === 'string' ? r.startedAt : null,
+      completedAt: typeof r.completedAt === 'string' ? r.completedAt : null,
+      durationMin: typeof r.durationMin === 'number' ? r.durationMin : null,
+      notes: typeof r.notes === 'string' ? r.notes : null,
+    });
+    if (r.status === 'PENDING') counts.PENDING += 1;
+    else if (r.status === 'IN_PROGRESS') counts.IN_PROGRESS += 1;
+    else if (r.status === 'DONE') counts.DONE += 1;
+    else if (r.status === 'BLOCKED') counts.BLOCKED += 1;
+  }
+  return {
+    kind: 'hsk_tasks',
+    data: {
+      businessDate: inputDate,
+      rows,
+      counts,
     },
   };
 }

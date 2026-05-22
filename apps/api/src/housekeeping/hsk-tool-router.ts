@@ -67,7 +67,9 @@ export class HskToolRouter {
       case 'hsk_list_today': {
         const i = input as HskListTodayInput;
         const date = i.businessDate ?? new Date().toISOString().slice(0, 10);
-        return this.tasks.list(user, correlationId, {
+        // Sprint 13 — usamos la variante enriquecida para que el widget
+        // muestre room number + nombre del asignado sin viajes extra.
+        return this.tasks.listEnriched(user, correlationId, {
           propertyId: i.propertyId,
           assignedToUserId: i.assignedToUserId,
           from: date,
