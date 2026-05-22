@@ -478,6 +478,40 @@ export class HousekeepingTasksService {
    * mostrar tal cual + un boton "aplicar todas" que ejecuta los reassign
    * correspondientes (mutating, requiere confirmacion humana).
    */
+  /**
+   * Sprint 13 — variante enriquecida para el Copilot. Calcula el plan
+   * y luego resuelve `fullName` de cada userId (candidates +
+   * suggestions) en un único `findMany`. Útil para el widget que
+   * muestra "Camila R." en lugar de un UUID.
+   */
+  async suggestAssignmentsEnriched(
+    user: AuthUser,
+    correlationId: string,
+    query: SuggestAssignmentsQuery,
+  ): Promise<AssignmentSuggestions> {
+    const raw = await this.suggestAssignments(user, correlationId, query);
+    const userIds = new Set<string>();
+    for (const c of raw.candidates) userIds.add(c.userId);
+    for (const s of raw.suggestions) userIds.add(s.suggestedUserId);
+    if (userIds.size === 0) return raw;
+    const ctx = tenantCtx(user, correlationId);
+    const users = await this.prisma.withTenant(ctx, (tx) =>
+      tx.user.findMany({
+        where: { id: { in: [...userIds] } },
+        select: { id: true, fullName: true, email: true },
+      }),
+    );
+    const userById = new Map(users.map((u) => [u.id, u.fullName ?? u.email]));
+    return {
+      ...raw,
+      candidates: raw.candidates.map((c) => ({ ...c, userName: userById.get(c.userId) ?? null })),
+      suggestions: raw.suggestions.map((s) => ({
+        ...s,
+        suggestedUserName: userById.get(s.suggestedUserId) ?? null,
+      })),
+    };
+  }
+
   async suggestAssignments(
     user: AuthUser,
     correlationId: string,
@@ -673,6 +707,8 @@ export interface AssignmentSuggestion {
   taskType: HousekeepingTaskType;
   currentlyAssignedToUserId: string | null;
   suggestedUserId: string;
+  /** Sprint 13 — resuelto en `suggestAssignmentsEnriched`; null en el método raw. */
+  suggestedUserName?: string | null;
   predictedMin: number;
 }
 
@@ -692,6 +728,8 @@ export interface AssignmentSuggestions {
   defaultDurationMin: number;
   candidates: {
     userId: string;
+    /** Sprint 13 — resuelto en `suggestAssignmentsEnriched`. */
+    userName?: string | null;
     totalAssignedMin: number;
     taskCount: number;
     remainingMin: number;

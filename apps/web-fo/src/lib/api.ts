@@ -837,10 +837,13 @@ export type CopilotFolioWidget = Extract<CopilotWidget, { kind: 'folio' }>;
 export type CopilotReservationWidget = Extract<CopilotWidget, { kind: 'reservation' }>;
 export type CopilotHskTasksWidget = Extract<CopilotWidget, { kind: 'hsk_tasks' }>;
 export type CopilotMovementsWidget = Extract<CopilotWidget, { kind: 'movements' }>;
+export type CopilotHskSuggestWidget = Extract<CopilotWidget, { kind: 'hsk_suggest' }>;
 export type CopilotAvailabilityRow = CopilotAvailabilityWidget['data']['rows'][number];
 export type CopilotFolioEntry = CopilotFolioWidget['data']['entries'][number];
 export type CopilotHskTaskRow = CopilotHskTasksWidget['data']['rows'][number];
 export type CopilotMovementRow = CopilotMovementsWidget['data']['rows'][number];
+export type CopilotHskCandidate = CopilotHskSuggestWidget['data']['candidates'][number];
+export type CopilotHskSuggestion = CopilotHskSuggestWidget['data']['suggestions'][number];
 
 export interface CopilotMessage {
   id: string;

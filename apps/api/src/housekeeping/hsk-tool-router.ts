@@ -80,7 +80,9 @@ export class HskToolRouter {
       case 'hsk_suggest_assignments': {
         const i = input as HskSuggestAssignmentsInput;
         const date = i.businessDate ?? new Date().toISOString().slice(0, 10);
-        return this.tasks.suggestAssignments(user, correlationId, {
+        // Sprint 13 — variante enriquecida (resuelve nombres de usuarios)
+        // para alimentar el widget del Copilot.
+        return this.tasks.suggestAssignmentsEnriched(user, correlationId, {
           propertyId: i.propertyId,
           businessDate: date,
           candidateUserIds: i.candidateUserIds,

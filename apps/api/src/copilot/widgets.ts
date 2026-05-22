@@ -27,8 +27,12 @@ export type {
   CopilotWidget,
   FolioEntry,
   FolioWidgetData,
+  HskCandidateLoad,
+  HskSuggestionRow,
+  HskSuggestWidgetData,
   HskTaskRow,
   HskTasksWidgetData,
+  HskUnmatchedRow,
   MovementRow,
   MovementsWidgetData,
   ReservationWidgetData,
@@ -61,6 +65,8 @@ export function extractWidgetFromTool(
       return buildHskTasksWidget(toolInput, toolResult);
     case 'list_movements':
       return buildMovementsWidget(toolResult);
+    case 'hsk_suggest_assignments':
+      return buildHskSuggestWidget(toolResult);
     default:
       return null;
   }
@@ -344,6 +350,53 @@ function buildMovementsWidget(toolResult: unknown): CopilotWidget | null {
       direction: r.direction,
       businessDate: r.date,
       rows,
+    },
+  };
+}
+
+function buildHskSuggestWidget(toolResult: unknown): CopilotWidget | null {
+  if (!toolResult || typeof toolResult !== 'object') return null;
+  const r = toolResult as Record<string, unknown>;
+  if (
+    typeof r.businessDate !== 'string' ||
+    typeof r.shiftCapacityMin !== 'number' ||
+    !Array.isArray(r.candidates) ||
+    !Array.isArray(r.suggestions) ||
+    !Array.isArray(r.unmatched)
+  ) {
+    return null;
+  }
+  const candidates = (r.candidates as Array<Record<string, unknown>>).map((c) => ({
+    userId: String(c.userId ?? ''),
+    userName: typeof c.userName === 'string' ? c.userName : null,
+    totalAssignedMin: typeof c.totalAssignedMin === 'number' ? c.totalAssignedMin : 0,
+    taskCount: typeof c.taskCount === 'number' ? c.taskCount : 0,
+    remainingMin: typeof c.remainingMin === 'number' ? c.remainingMin : 0,
+  }));
+  const suggestions = (r.suggestions as Array<Record<string, unknown>>).map((s) => ({
+    taskId: String(s.taskId ?? ''),
+    roomNumber: typeof s.roomNumber === 'string' ? s.roomNumber : '?',
+    floor: typeof s.floor === 'string' ? s.floor : null,
+    taskType: typeof s.taskType === 'string' ? s.taskType : 'CHECKOUT_CLEAN',
+    suggestedUserId: String(s.suggestedUserId ?? ''),
+    suggestedUserName: typeof s.suggestedUserName === 'string' ? s.suggestedUserName : null,
+    predictedMin: typeof s.predictedMin === 'number' ? s.predictedMin : 0,
+  }));
+  const unmatched = (r.unmatched as Array<Record<string, unknown>>).map((u) => ({
+    taskId: String(u.taskId ?? ''),
+    roomNumber: typeof u.roomNumber === 'string' ? u.roomNumber : '?',
+    taskType: typeof u.taskType === 'string' ? u.taskType : 'CHECKOUT_CLEAN',
+    predictedMin: typeof u.predictedMin === 'number' ? u.predictedMin : 0,
+    reason: typeof u.reason === 'string' ? u.reason : 'unknown',
+  }));
+  return {
+    kind: 'hsk_suggest',
+    data: {
+      businessDate: r.businessDate,
+      shiftCapacityMin: r.shiftCapacityMin,
+      candidates,
+      suggestions,
+      unmatched,
     },
   };
 }
