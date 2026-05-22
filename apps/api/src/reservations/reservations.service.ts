@@ -498,6 +498,52 @@ export class ReservationsService {
     return toDetail(found);
   }
 
+  /**
+   * Sprint 13 — lookup por código humano (e.g. "BBM01-AB12"). Pensado
+   * para el Copilot: el operador escribe el código y la reserva se
+   * resuelve sin que el LLM tenga que adivinar el UUID.
+   *
+   * Devuelve además `roomTypeName/code` y `roomNumber` (si está
+   * asignada) para que el widget pueda mostrar contexto operacional
+   * sin viajes extra. Cuidamos no romper `findOne()` extendiendo el
+   * select inline en lugar de modificar RESERVATION_DETAIL_SELECT.
+   */
+  async findByCode(
+    user: AuthUser,
+    correlationId: string,
+    propertyId: string,
+    code: string,
+  ): Promise<
+    ReservationDetail & {
+      roomTypeCode: string;
+      roomTypeName: string;
+      roomNumber: string | null;
+    }
+  > {
+    const ctx = tenantCtx(user, correlationId);
+    const found = await this.prisma.withTenant(ctx, (tx) =>
+      tx.reservation.findFirst({
+        where: { propertyId, code, deletedAt: null },
+        select: {
+          ...RESERVATION_DETAIL_SELECT,
+          roomType: { select: { code: true, name: true } },
+          room: { select: { number: true } },
+        },
+      }),
+    );
+    if (!found) {
+      throw new NotFoundException(
+        `Reservation ${code} not found in property ${propertyId}`,
+      );
+    }
+    return {
+      ...toDetail(found),
+      roomTypeCode: found.roomType.code,
+      roomTypeName: found.roomType.name,
+      roomNumber: found.room?.number ?? null,
+    };
+  }
+
   // -------------------------------------------------------------------------
   // Mutations (cancel + patch). Check-in/out + assign land in W2/W3.
   // -------------------------------------------------------------------------

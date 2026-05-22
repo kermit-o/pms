@@ -476,6 +476,100 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+## 2026-05-21 · [FEAT] · Copilot widget — reservation_summary (slice 4 de Mockup B)
+
+**Scope:** `packages/mcp-tools`, `apps/api/src/reservations`,
+`apps/api/src/copilot/`, `apps/web-fo/src/components/`
+**Branch:** `claude/copilot-widget-reservation-summary` (sobre folio)
+**Refs:** completa la "trilogía" de widgets read-only del front-desk
+(availability → folio → reservation_summary).
+
+**Qué cambió.**
+
+- **Tool nuevo `get_reservation`** (read-only, no financial):
+  - Schema Zod: `{ propertyId, reservationCode }`.
+  - Description orienta al LLM a no replicar campos en texto — UI
+    pinta la tarjeta; el modelo resume en 1-2 frases.
+- **Service** `ReservationsService.findByCode(user, cid, propertyId,
+  code)`:
+  - Resuelve por código humano (no UUID) — el operador escribe
+    "BBM01-AB12" y la reserva aparece.
+  - Extiende `RESERVATION_DETAIL_SELECT` inline con
+    `roomType {code, name}` y `room {number}` para no romper
+    `findOne()` y a la vez evitar viajes extra al pintar el widget.
+  - 404 si no existe en esa propiedad.
+- **Router**: `case 'get_reservation'` reusa el nuevo método.
+- **Widget extractor**:
+  - Tercera variante de `CopilotWidget`:
+    `{ kind: 'reservation'; data: ReservationWidgetData }`.
+  - `buildReservationWidget` valida campos requeridos, calcula
+    `nights` desde fechas serializadas, extrae el primary guest
+    del array `guests` y pasa `folio` opcional si está presente.
+  - Tolera fields opcionales nulos (sin huésped primario, sin
+    tarjeta tokenizada, sin habitación asignada, sin folio).
+- **UI** (`apps/web-fo`):
+  - Tercer tipo en union `CopilotWidget`.
+  - Nuevo componente `CopilotReservationWidget`:
+    - Header: chip de estado coloreado por estado (PENDING ámbar,
+      CONFIRMED aubergine, CHECKED_IN verde, CHECKED_OUT slate,
+      CANCELLED/NO_SHOW rosa), código en mono.
+    - Bloque destacado del huésped primario (nombre, email, phone).
+    - Grid 2×3 de campos clave: llegada, salida, estancia + pax,
+      tipo + habitación, total destacado, garantía + ****1234.
+    - Mini-bloque de saldo si hay folio (mismo color rule que el
+      widget de folio).
+    - Footer: botón "Abrir ficha →" a `/reservations/<id>`.
+
+**Por qué.**
+
+Junto a availability y folio, esta es la consulta de verificación
+más frecuente del recepcionista *antes* de mutar: "muéstrame la
+reserva X" → confirma datos → check-in / cancel / cargar. Antes el
+LLM parafraseaba; ahora el widget muestra todo lo crítico con un
+vistazo (incluido garantía Stripe y saldo de folio) sin riesgo de
+omitir un campo.
+
+Con esta trilogía cerrada (availability + folio + reservation), el
+patrón Mockup B está validado: en cada caso el LLM se limita a un
+resumen narrativo, los datos críticos vienen del tool, los CTAs
+están tipados. Próximos widgets se pueden añadir sin tocar
+arquitectura — sólo crear extractor + componente.
+
+**Archivos clave.**
+
+- `packages/mcp-tools/src/catalog/fo.ts` (+ `getReservationInput`,
+  `GetReservationInput`, registro en `foToolCatalog`)
+- `packages/mcp-tools/src/index.ts` (re-export)
+- `apps/api/src/reservations/reservations.service.ts`
+  (+ `findByCode`)
+- `apps/api/src/copilot/tool-router.ts` (case `get_reservation`)
+- `apps/api/src/copilot/widgets.ts` (+ `buildReservationWidget` +
+  tipos)
+- `apps/api/src/copilot/widgets.spec.ts` (+3 tests)
+- `apps/web-fo/src/lib/api.ts` (`CopilotReservationWidget` type)
+- `apps/web-fo/src/components/CopilotReservationWidget.tsx`
+  (nuevo)
+- `apps/web-fo/src/components/CopilotSidebar.tsx` (wiring)
+
+**Tests.**
+
+- 334/334 verdes (+3 nuevos). Typecheck + lint verdes en api +
+  mcp-tools + web-fo. Sin deps ni migraciones.
+
+**Sigue pendiente.**
+
+- **Widget `hsk_tasks`** — tareas pendientes con check rápido
+  inline. Cierra la vertical housekeeping.
+- **Reload-from-DB de sesiones** — hoy `sessions` es Map in-memory.
+  Con persistencia ya lista, hidratar mensajes+widgets desde
+  `copilot_messages` es directo.
+- **Vista admin** `/admin/copilot/sessions` — depurar prompt drift
+  desde la web.
+- **Mover tipos a `packages/shared`** — ahora ya tenemos 3 widgets,
+  se cumple la regla de 3 para deduplicar definición api↔web-fo.
+
+---
+
 ## 2026-05-21 · [FEAT] · Copilot widget — folio (slice 3 de Mockup B)
 
 **Scope:** `packages/mcp-tools`, `apps/api/src/folio`,

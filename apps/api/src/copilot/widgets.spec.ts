@@ -139,4 +139,80 @@ describe('extractWidgetFromTool', () => {
     };
     expect(extractWidgetFromTool('get_folio', {}, broken)).toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // get_reservation widget.
+  // ---------------------------------------------------------------------------
+
+  const sampleReservation = {
+    id: 'r-1',
+    code: 'BBM01-AB12',
+    status: 'CHECKED_IN',
+    arrivalDate: '2026-05-20T00:00:00.000Z',
+    departureDate: '2026-05-22T00:00:00.000Z',
+    adults: 2,
+    children: 0,
+    roomTypeId: 'rt-dbl',
+    roomTypeCode: 'DBL',
+    roomTypeName: 'Doble Estándar',
+    roomNumber: '203',
+    roomId: 'room-203',
+    totalAmount: '190.00',
+    currency: 'EUR',
+    guaranteeStatus: 'SECURED',
+    guaranteeType: 'CARD_ON_FILE',
+    stripeCardBrand: 'visa',
+    stripeCardLast4: '4242',
+    folio: { id: 'f-1', status: 'OPEN', balance: '95.00', currency: 'EUR' },
+    guests: [
+      {
+        isPrimary: true,
+        guest: {
+          id: 'g-1',
+          firstName: 'María',
+          lastName: 'Pérez',
+          email: 'maria@example.com',
+          phone: '+34 600 111 222',
+        },
+      },
+    ],
+  };
+
+  it('builds a reservation widget from get_reservation result', () => {
+    const widget = extractWidgetFromTool('get_reservation', {}, sampleReservation);
+    expect(widget).not.toBeNull();
+    expect(widget!.kind).toBe('reservation');
+    if (widget!.kind === 'reservation') {
+      expect(widget!.data.reservationCode).toBe('BBM01-AB12');
+      expect(widget!.data.nights).toBe(2);
+      expect(widget!.data.roomNumber).toBe('203');
+      expect(widget!.data.guest?.firstName).toBe('María');
+      expect(widget!.data.cardLast4).toBe('4242');
+      expect(widget!.data.folio?.balance).toBe('95.00');
+    }
+  });
+
+  it('reservation widget handles missing optional fields (no primary guest, no card, no room)', () => {
+    const sparse = {
+      ...sampleReservation,
+      guests: [],
+      stripeCardBrand: null,
+      stripeCardLast4: null,
+      roomNumber: null,
+      folio: null,
+    };
+    const widget = extractWidgetFromTool('get_reservation', {}, sparse);
+    expect(widget).not.toBeNull();
+    if (widget?.kind === 'reservation') {
+      expect(widget.data.guest).toBeNull();
+      expect(widget.data.cardLast4).toBeNull();
+      expect(widget.data.roomNumber).toBeNull();
+      expect(widget.data.folio).toBeNull();
+    }
+  });
+
+  it('returns null when reservation result is missing required fields', () => {
+    expect(extractWidgetFromTool('get_reservation', {}, null)).toBeNull();
+    expect(extractWidgetFromTool('get_reservation', {}, { id: 'r-1' })).toBeNull();
+  });
 });
