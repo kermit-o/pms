@@ -901,10 +901,38 @@ export interface CopilotReservationWidget {
   };
 }
 
+export interface CopilotHskTaskRow {
+  id: string;
+  roomNumber: string | null;
+  roomFloor: string | null;
+  taskType: string;
+  status: string;
+  assigneeName: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMin: number | null;
+  notes: string | null;
+}
+
+export interface CopilotHskTasksWidget {
+  kind: 'hsk_tasks';
+  data: {
+    businessDate: string;
+    rows: CopilotHskTaskRow[];
+    counts: {
+      PENDING: number;
+      IN_PROGRESS: number;
+      DONE: number;
+      BLOCKED: number;
+    };
+  };
+}
+
 export type CopilotWidget =
   | CopilotAvailabilityWidget
   | CopilotFolioWidget
-  | CopilotReservationWidget;
+  | CopilotReservationWidget
+  | CopilotHskTasksWidget;
 
 export interface CopilotMessage {
   id: string;

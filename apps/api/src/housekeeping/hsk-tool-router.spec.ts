@@ -22,6 +22,8 @@ function makeTasksMock() {
     start: vi.fn().mockResolvedValue({ id: TASK_ID, status: HousekeepingTaskStatus.IN_PROGRESS }),
     complete: vi.fn().mockResolvedValue({ id: TASK_ID, status: HousekeepingTaskStatus.COMPLETED }),
     list: vi.fn().mockResolvedValue([]),
+    // Sprint 13 W— hsk_list_today usa la variante enriquecida.
+    listEnriched: vi.fn().mockResolvedValue([]),
     suggestAssignments: vi.fn().mockResolvedValue({ suggestions: [], unmatched: [] }),
   };
 }
@@ -62,7 +64,9 @@ describe('HskToolRouter', () => {
     const tasks = makeTasksMock();
     const router = new HskToolRouter(tasks as never);
     await router.execute('hsk_list_today', { propertyId: PROPERTY_ID }, user, 'corr');
-    const call = tasks.list.mock.calls[0]![2];
+    // Sprint 13 — el router usa listEnriched (devuelve room number +
+    // assignee name para alimentar el widget del Copilot).
+    const call = tasks.listEnriched.mock.calls[0]![2];
     const today = new Date().toISOString().slice(0, 10);
     expect(call.from).toBe(today);
     expect(call.to).toBe(today);

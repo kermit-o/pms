@@ -45,7 +45,8 @@ describe('extractWidgetFromTool', () => {
   });
 
   it('returns null for unknown tool', () => {
-    expect(extractWidgetFromTool('hsk_list_today', {}, [])).toBeNull();
+    expect(extractWidgetFromTool('check_in', {}, {})).toBeNull();
+    expect(extractWidgetFromTool('forecast_demand', {}, [])).toBeNull();
   });
 
   it('returns null when tool result is empty array', () => {
@@ -214,5 +215,122 @@ describe('extractWidgetFromTool', () => {
   it('returns null when reservation result is missing required fields', () => {
     expect(extractWidgetFromTool('get_reservation', {}, null)).toBeNull();
     expect(extractWidgetFromTool('get_reservation', {}, { id: 'r-1' })).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // hsk_list_today widget.
+  // ---------------------------------------------------------------------------
+
+  const sampleTasks = [
+    {
+      id: 't-1',
+      propertyId: 'p-1',
+      roomId: 'room-203',
+      roomNumber: '203',
+      roomFloor: '2',
+      businessDate: '2026-05-22',
+      taskType: 'CHECKOUT_CLEAN',
+      status: 'PENDING',
+      assignedToUserId: 'u-1',
+      assigneeName: 'Camila R.',
+      assignedAt: null,
+      startedAt: null,
+      completedAt: null,
+      durationMin: null,
+      scheduledFor: null,
+      notes: null,
+      createdAt: '2026-05-22T07:00:00Z',
+      updatedAt: '2026-05-22T07:00:00Z',
+    },
+    {
+      id: 't-2',
+      propertyId: 'p-1',
+      roomId: 'room-205',
+      roomNumber: '205',
+      roomFloor: '2',
+      businessDate: '2026-05-22',
+      taskType: 'STAYOVER_CLEAN',
+      status: 'IN_PROGRESS',
+      assignedToUserId: 'u-2',
+      assigneeName: 'Lupita M.',
+      assignedAt: null,
+      startedAt: '2026-05-22T09:00:00Z',
+      completedAt: null,
+      durationMin: null,
+      scheduledFor: null,
+      notes: 'cliente sale tarde',
+      createdAt: '2026-05-22T07:00:00Z',
+      updatedAt: '2026-05-22T09:00:00Z',
+    },
+    {
+      id: 't-3',
+      propertyId: 'p-1',
+      roomId: 'room-110',
+      roomNumber: '110',
+      roomFloor: '1',
+      businessDate: '2026-05-22',
+      taskType: 'CHECKOUT_CLEAN',
+      status: 'DONE',
+      assignedToUserId: 'u-1',
+      assigneeName: 'Camila R.',
+      assignedAt: null,
+      startedAt: '2026-05-22T08:00:00Z',
+      completedAt: '2026-05-22T08:45:00Z',
+      durationMin: 45,
+      scheduledFor: null,
+      notes: null,
+      createdAt: '2026-05-22T07:00:00Z',
+      updatedAt: '2026-05-22T08:45:00Z',
+    },
+  ];
+
+  it('builds an hsk_tasks widget from hsk_list_today result', () => {
+    const widget = extractWidgetFromTool(
+      'hsk_list_today',
+      { propertyId: 'p-1', businessDate: '2026-05-22' },
+      sampleTasks,
+    );
+    expect(widget).not.toBeNull();
+    if (widget?.kind === 'hsk_tasks') {
+      expect(widget.data.businessDate).toBe('2026-05-22');
+      expect(widget.data.rows).toHaveLength(3);
+      expect(widget.data.counts).toEqual({ PENDING: 1, IN_PROGRESS: 1, DONE: 1, BLOCKED: 0 });
+      expect(widget.data.rows[0]!.roomNumber).toBe('203');
+      expect(widget.data.rows[1]!.assigneeName).toBe('Lupita M.');
+    }
+  });
+
+  it('hsk_tasks widget se emite también con array vacío (confirma 0 tareas)', () => {
+    const widget = extractWidgetFromTool(
+      'hsk_list_today',
+      { propertyId: 'p-1', businessDate: '2026-05-22' },
+      [],
+    );
+    expect(widget).not.toBeNull();
+    if (widget?.kind === 'hsk_tasks') {
+      expect(widget.data.rows).toHaveLength(0);
+      expect(widget.data.counts).toEqual({ PENDING: 0, IN_PROGRESS: 0, DONE: 0, BLOCKED: 0 });
+    }
+  });
+
+  it('hsk_tasks widget tolera tareas sin habitación asignada o sin asignatario', () => {
+    const sparse = [
+      {
+        id: 't-x',
+        taskType: 'INSPECTION',
+        status: 'PENDING',
+        // No roomNumber, no assigneeName.
+      },
+    ];
+    const widget = extractWidgetFromTool('hsk_list_today', {}, sparse);
+    if (widget?.kind === 'hsk_tasks') {
+      expect(widget.data.rows[0]!.roomNumber).toBeNull();
+      expect(widget.data.rows[0]!.assigneeName).toBeNull();
+    }
+  });
+
+  it('hsk_tasks widget rechaza filas sin id/taskType/status', () => {
+    const broken = [{ id: 't-1', taskType: 'INSPECTION' }]; // sin status
+    expect(extractWidgetFromTool('hsk_list_today', {}, broken)).toBeNull();
   });
 });
