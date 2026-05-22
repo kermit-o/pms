@@ -47,6 +47,36 @@ export class FolioService {
     return toFolioDetail(found);
   }
 
+  /**
+   * Sprint 13 — lookup folio por reservation code (lo que pide el
+   * operador en lenguaje natural: "qué debe la reserva BBM01-AB12").
+   * Une la búsqueda de reserva + folio en un único `withTenant` para
+   * mantener la atomicidad de RLS.
+   */
+  async findByReservationCode(
+    user: AuthUser,
+    correlationId: string,
+    propertyId: string,
+    reservationCode: string,
+  ): Promise<FolioDetail & { reservationCode: string }> {
+    const ctx = tenantCtx(user, correlationId);
+    const found = await this.prisma.withTenant(ctx, async (tx) => {
+      const reservation = await tx.reservation.findFirst({
+        where: { propertyId, code: reservationCode, deletedAt: null },
+        select: { id: true, code: true, folio: { select: FOLIO_DETAIL_SELECT } },
+      });
+      if (!reservation) return null;
+      if (!reservation.folio) return null;
+      return { code: reservation.code, folio: reservation.folio };
+    });
+    if (!found) {
+      throw new NotFoundException(
+        `Reservation ${reservationCode} not found or has no folio in property ${propertyId}`,
+      );
+    }
+    return { ...toFolioDetail(found.folio), reservationCode: found.code };
+  }
+
   async addCharge(
     user: AuthUser,
     correlationId: string,

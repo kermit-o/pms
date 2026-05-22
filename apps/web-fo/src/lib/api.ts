@@ -849,7 +849,29 @@ export interface CopilotAvailabilityWidget {
   };
 }
 
-export type CopilotWidget = CopilotAvailabilityWidget;
+export interface CopilotFolioEntry {
+  id: string;
+  type: string;
+  description: string;
+  amount: string;
+  currency: string;
+  postedAt: string;
+}
+
+export interface CopilotFolioWidget {
+  kind: 'folio';
+  data: {
+    folioId: string;
+    reservationCode: string;
+    reservationId: string;
+    status: string;
+    balance: string;
+    currency: string;
+    entries: CopilotFolioEntry[];
+  };
+}
+
+export type CopilotWidget = CopilotAvailabilityWidget | CopilotFolioWidget;
 
 export interface CopilotMessage {
   id: string;

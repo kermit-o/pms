@@ -476,6 +476,96 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+## 2026-05-21 · [FEAT] · Copilot widget — folio (slice 3 de Mockup B)
+
+**Scope:** `packages/mcp-tools`, `apps/api/src/folio`,
+`apps/api/src/copilot/`, `apps/web-fo/src/components/`
+**Branch:** `claude/copilot-widget-folio` (sobre persistencia)
+**Refs:** queries operacionales más frecuentes del recepcionista
+("qué debe la 203", "saldo de la reserva X", "movimientos del folio").
+
+**Qué cambió.**
+
+- **Tool nuevo `get_folio`** (read-only, no financial):
+  - Schema Zod: `{ propertyId, reservationCode }`.
+  - Description orienta al LLM: "Use this when the operator asks
+    '¿qué debe la reserva X?', 'saldo de la habitación 203'…
+    Returns balance, status, currency and the full list of entries.
+    The UI renders the result as a structured card — your reply
+    should be a 1-2 sentence summary, not a re-render of the data."
+- **Service** `FolioService.findByReservationCode(user, cid,
+  propertyId, reservationCode)`:
+  - Une la búsqueda de reserva por `(propertyId, code)` + lectura
+    del folio asociado en un único `withTenant` (atómico bajo RLS).
+  - Devuelve `FolioDetail & { reservationCode }`.
+  - 404 si la reserva no existe o no tiene folio.
+- **Router**: `case 'get_folio'` reusa el nuevo método.
+- **Widget extractor** (`widgets.ts`):
+  - Segunda variante de `CopilotWidget`: `{ kind: 'folio'; data }`.
+  - `FolioWidgetData` con `folioId`, `reservationId`,
+    `reservationCode`, `status`, `balance`, `currency`, `entries[]`.
+  - `buildFolioWidget(toolResult)` valida defensivamente todos los
+    campos requeridos; devuelve null si la forma no encaja (mejor
+    fallback a texto que enseñar tarjeta corrupta).
+- **UI** (`apps/web-fo`):
+  - `CopilotMessage.widgets` ahora acepta `CopilotFolioWidget`.
+  - Nuevo componente `CopilotFolioWidget`:
+    - Cabecera: chip de estado (OPEN verde / CLOSED gris), código
+      de reserva en mono.
+    - Bloque destacado del saldo con color según signo (ámbar
+      pendiente, verde a favor del huésped, neutro a cero).
+    - Lista de entries (máx 6 visibles) con chip de tipo
+      (CHARGE / PAYMENT / TAX…), descripción truncada, timestamp
+      legible (`21 may, 10:00`), monto con signo.
+    - Si hay >6 entries: "Mostrando 6 de N movimientos."
+    - Footer: botón "Abrir ficha →" a `/reservations/<id>` +
+      `folioId` cortado a 8 chars como referencia técnica.
+
+**Por qué.**
+
+El recepcionista hace estas preguntas al Copilot todo el día
+("¿cuánto debe el 305?", "muéstrame el folio de Pérez"). Hasta
+ahora el LLM tenía que parafrasear el JSON del tool — riesgo de
+omisión o alucinación de cifras. Con el widget el saldo y la lista
+de movimientos vienen del tool tal cual; el LLM se limita a un
+resumen ("Saldo abierto de 285€ con 3 movimientos, último cargo
+hace 2h"). Cero divergencia widget↔texto si el LLM obedece la
+regla de prompt; cero riesgo si la ignora (el widget es la fuente
+visual autoritativa).
+
+**Archivos clave.**
+
+- `packages/mcp-tools/src/catalog/fo.ts` (+ `getFolioInput`,
+  `GetFolioInput`, registro en `foToolCatalog`)
+- `packages/mcp-tools/src/index.ts` (re-export)
+- `apps/api/src/folio/folio.service.ts` (+ `findByReservationCode`)
+- `apps/api/src/copilot/tool-router.ts` (case `get_folio`)
+- `apps/api/src/copilot/widgets.ts` (+ `buildFolioWidget` + tipos)
+- `apps/api/src/copilot/widgets.spec.ts` (+2 tests)
+- `apps/web-fo/src/lib/api.ts` (`CopilotFolioWidget` type)
+- `apps/web-fo/src/components/CopilotFolioWidget.tsx` (nuevo)
+- `apps/web-fo/src/components/CopilotSidebar.tsx` (wiring)
+
+**Tests.**
+
+- 331/331 verdes (+2 nuevos). Typecheck + lint verdes en api,
+  mcp-tools, web-fo.
+- No migraciones, no deps.
+
+**Sigue pendiente.**
+
+- **Widget `reservation_summary`** para "ver reserva BCN-A1B2C3"
+  (header + huésped + fechas + balance + asignación de habitación).
+- **Widget `hsk_tasks`** para "qué tareas tengo pendientes" con
+  check rápido inline.
+- **Reload-from-DB de sesiones** (hoy `sessions` es Map in-memory;
+  con persistencia ya en sitio, hidratar mensajes+widgets desde
+  `copilot_messages` ordenado por createdAt es directo).
+- **Vista admin** `/admin/copilot/sessions` para depurar prompt drift.
+- Mover tipos a `packages/shared` cuando haya ≥3 widgets distintos.
+
+---
+
 ## 2026-05-21 · [FEAT] · Copilot widgets — persistencia DB + prompt tight
 
 **Scope:** `packages/db`, `apps/api/src/copilot/`

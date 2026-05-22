@@ -112,6 +112,13 @@ export const addFolioChargeInput = z.object({
 });
 export type AddFolioChargeInput = z.infer<typeof addFolioChargeInput>;
 
+export const getFolioInput = z.object({
+  propertyId: z.string().uuid(),
+  /** Código humano de la reserva, ej. "BBM01-AB12". */
+  reservationCode: z.string().min(1).max(40),
+});
+export type GetFolioInput = z.infer<typeof getFolioInput>;
+
 export const assignRoomInput = z.object({
   reservationId: z.string().uuid(),
   roomId: z.string().uuid(),
@@ -203,6 +210,14 @@ export const foToolCatalog = {
     inputSchema: checkOutInput,
     mutating: true,
     financial: true,
+  },
+  get_folio: {
+    name: 'get_folio',
+    description:
+      'Read-only: returns the folio of a reservation by its human code (e.g. "BBM01-AB12"). Use this when the operator asks "¿qué debe la reserva X?", "saldo de la habitación 203", "movimientos del folio de Pérez". Returns balance, status, currency and the full list of entries (charges + payments). The UI renders the result as a structured card — your reply should be a 1-2 sentence summary, not a re-render of the data.',
+    inputSchema: getFolioInput,
+    mutating: false,
+    financial: false,
   },
   add_folio_charge: {
     name: 'add_folio_charge',

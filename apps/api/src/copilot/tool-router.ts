@@ -9,6 +9,7 @@ import {
   type ForecastDemandInput,
   type FoToolName,
   type GenerateReportInput,
+  type GetFolioInput,
   type QueryAvailabilityInput,
   type ListRoomTypesInput,
   type RecallGuestHistoryInput,
@@ -158,6 +159,15 @@ export class FoToolRouter {
         return this.reservations.checkOut(user, correlationId, i.reservationId, {
           settle: i.settle,
         });
+      }
+      case 'get_folio': {
+        const i = input as GetFolioInput;
+        return this.folio.findByReservationCode(
+          user,
+          correlationId,
+          i.propertyId,
+          i.reservationCode,
+        );
       }
       case 'add_folio_charge': {
         const i = input as AddFolioChargeInput;
