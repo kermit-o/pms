@@ -57,6 +57,9 @@ function buildService() {
   const userFindManyMock = vi.fn().mockResolvedValue([] as unknown[]);
   const sessionFindFirstMock = vi.fn().mockResolvedValue(null as unknown);
   const sessionCreateMock = vi.fn().mockResolvedValue({});
+  const pendingFindManyMock = vi.fn().mockResolvedValue([] as unknown[]);
+  const pendingCreateMock = vi.fn().mockResolvedValue({});
+  const pendingUpdateManyMock = vi.fn().mockResolvedValue({ count: 1 });
   const prisma = {
     withTenant: vi.fn(async (_ctx, fn: (tx: unknown) => Promise<unknown>) =>
       fn({
@@ -68,6 +71,11 @@ function buildService() {
         copilotSession: {
           findFirst: sessionFindFirstMock,
           create: sessionCreateMock,
+        },
+        copilotPendingTool: {
+          findMany: pendingFindManyMock,
+          create: pendingCreateMock,
+          updateMany: pendingUpdateManyMock,
         },
         user: {
           findMany: userFindManyMock,
@@ -94,6 +102,9 @@ function buildService() {
     userFindManyMock,
     sessionFindFirstMock,
     sessionCreateMock,
+    pendingFindManyMock,
+    pendingCreateMock,
+    pendingUpdateManyMock,
   };
 }
 
@@ -548,11 +559,91 @@ describe('CopilotService', () => {
         role: 'USER',
         contentText: 'qué',
         widgets: null,
+        pendingToolId: null,
         userId: user.sub,
         createdAt: new Date('2026-05-22T08:00:00Z'),
       },
     ]);
     const view = await service.getSession(user, 'pre-migration-session');
     expect(view.propertyId).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 13 — copilot_pending_tools: sobreviven al reload con sus
+  // botones Approve/Reject.
+  // ---------------------------------------------------------------------------
+
+  it('reload hidrata pending tools y los conecta al mensaje', async () => {
+    const { service, sessionFindFirstMock, findManyMock, pendingFindManyMock } = buildService();
+    sessionFindFirstMock.mockResolvedValueOnce({
+      propertyId: PROPERTY_ID,
+      userId: user.sub,
+      createdAt: new Date('2026-05-22T08:00:00Z'),
+    });
+    findManyMock.mockResolvedValueOnce([
+      {
+        id: 'msg-user',
+        role: 'USER',
+        contentText: 'check-in 305',
+        widgets: null,
+        pendingToolId: null,
+        userId: user.sub,
+        createdAt: new Date('2026-05-22T08:00:00Z'),
+      },
+      {
+        id: 'msg-proposal',
+        role: 'TOOL_USE',
+        contentText: 'Sugerencia: ejecutar check_in.',
+        widgets: null,
+        pendingToolId: 'pt-1',
+        userId: user.sub,
+        createdAt: new Date('2026-05-22T08:00:05Z'),
+      },
+    ]);
+    pendingFindManyMock.mockResolvedValueOnce([
+      {
+        id: 'pt-1',
+        toolName: 'check_in',
+        input: { reservationId: 'r-1' },
+        financial: false,
+        createdAt: new Date('2026-05-22T08:00:05Z'),
+      },
+    ]);
+    const view = await service.getSession(user, 'pending-session');
+    expect(view.pendingTools).toHaveLength(1);
+    expect(view.pendingTools[0]!.tool).toBe('check_in');
+    expect(view.pendingTools[0]!.status).toBe('pending');
+    // El mensaje conserva el link al pending tool.
+    const proposal = view.messages.find((m) => m.id === 'msg-proposal');
+    expect(proposal?.pendingToolId).toBe('pt-1');
+    expect(proposal?.pendingTool?.name).toBe('check_in');
+  });
+
+  it('reload sólo carga pending tools en estado pending (los decided ya no aparecen)', async () => {
+    const { service, sessionFindFirstMock, findManyMock, pendingFindManyMock } = buildService();
+    sessionFindFirstMock.mockResolvedValueOnce({
+      propertyId: null,
+      userId: user.sub,
+      createdAt: new Date('2026-05-22T08:00:00Z'),
+    });
+    findManyMock.mockResolvedValueOnce([
+      {
+        id: 'msg-1',
+        role: 'USER',
+        contentText: 'algo',
+        widgets: null,
+        pendingToolId: null,
+        userId: user.sub,
+        createdAt: new Date('2026-05-22T08:00:00Z'),
+      },
+    ]);
+    // El mock devuelve [] porque el findMany se filtra por status='pending';
+    // los 'approved'/'rejected'/'failed' no se cargan de vuelta.
+    pendingFindManyMock.mockResolvedValueOnce([]);
+    const view = await service.getSession(user, 'decided-session');
+    expect(view.pendingTools).toEqual([]);
+    // El findMany se llamó con el filtro status='pending'.
+    const callArgs = pendingFindManyMock.mock.calls[0]![0];
+    expect(callArgs.where.status).toBe('pending');
   });
 });

@@ -1045,6 +1045,29 @@ model DevicePairing {
 // lo exija. Ver docs/SPRINT-6-PLAN.md §2.2.
 // ----------------------------------------------------------------------------
 
+/// Sprint 13 — Pending tool persistente. Antes la propuesta mutating
+/// quedaba sólo en el Map in-memory; tras un deploy desaparecían los
+/// botones Approve/Reject aunque el mensaje seguía visible. Esta
+/// tabla persiste el estado hasta que el operador decide.
+///
+/// `status` es texto + check constraint en lugar de enum SQL para
+/// mantener forward-compat al añadir estados (e.g. 'timeout').
+/// No hay FK física a `copilot_sessions.id` para no atar el insert
+/// path a la persistencia de la session shell.
+model CopilotPendingTool {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId  String    @map("session_id") @db.Uuid
+  toolName   String    @map("tool_name")
+  input      Json
+  financial  Boolean   @default(false)
+  status     String    @default("pending")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  decidedAt  DateTime? @map("decided_at")
+
+  @@index([sessionId, status])
+  @@map("copilot_pending_tools")
+}
+
 /// Sprint 13 — Sesión del Copilot. Antes el `sessionId` sólo vivía
 /// como columna del primer mensaje en `copilot_messages`, lo que
 /// obligaba a perder `propertyId` al recargar. Esta tabla pequeña
@@ -1085,6 +1108,10 @@ model CopilotMessage {
   // texto (disponibilidad, folio, etc.). JSON tal cual; el cliente sabe
   // pintarlos. Persistir habilita audit + futuro reload-from-DB.
   widgets          Json?
+  // Sprint 13 — link al pending_tool si el mensaje es una propuesta
+  // mutating ("Sugerencia: ejecutar X"). Permite rehidratar los
+  // botones Approve/Reject tras un reload de sesión.
+  pendingToolId    String?            @map("pending_tool_id") @db.Uuid
   createdAt        DateTime           @default(now()) @map("created_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
