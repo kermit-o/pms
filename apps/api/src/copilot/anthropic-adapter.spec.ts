@@ -162,6 +162,49 @@ describe('AnthropicAdapter', () => {
       expect(out.proposal.text).toMatch(/saturado/);
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 13 — anti-alucinación: si el LLM cuela un placeholder monetario,
+  // el adapter lo sanea antes de devolverlo a la UI.
+  // ---------------------------------------------------------------------------
+
+  it('sanitiza placeholders monetarios alucinados antes de devolver el texto', async () => {
+    createMock.mockResolvedValueOnce({
+      content: [
+        {
+          type: 'text',
+          text:
+            '| Doble | 95 € |\n| Junior Suite | desde más € |\n| Suite | desde más € |',
+        },
+      ],
+      usage: { input_tokens: 5, output_tokens: 10 },
+    });
+    const { adapter } = buildAdapter();
+    const out = await adapter.propose(session, user, 'cid', 'precios doble');
+    expect(out.proposal.kind).toBe('text');
+    if (out.proposal.kind === 'text') {
+      expect(out.proposal.text).not.toMatch(/desde más/i);
+      expect(out.proposal.text).toContain('[precio no consultado]');
+      // El aviso meta al recepcionista DEBE aparecer.
+      expect(out.proposal.text).toMatch(/datos no verificados/i);
+      // El precio legítimo se preserva tal cual.
+      expect(out.proposal.text).toContain('95 €');
+    }
+  });
+
+  it('no toca el texto cuando todos los precios son legítimos', async () => {
+    const clean = '| Doble | 95 € |\n| Twin | 95 € |\n| Superior | 130 € |';
+    createMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: clean }],
+      usage: { input_tokens: 5, output_tokens: 5 },
+    });
+    const { adapter } = buildAdapter();
+    const out = await adapter.propose(session, user, 'cid', 'precios');
+    if (out.proposal.kind === 'text') {
+      expect(out.proposal.text).toBe(clean);
+      expect(out.proposal.text).not.toMatch(/datos no verificados/i);
+    }
+  });
 });
 
 describe('friendlyAnthropicError', () => {

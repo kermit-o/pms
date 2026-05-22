@@ -6,6 +6,10 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { AuthUser } from '../auth';
 import type { Env } from '../config/env.schema';
 import { type AnyToolName, ToolResolver } from './tool-resolver';
+import {
+  SANITIZED_WARNING,
+  validateAssistantText,
+} from './response-validator';
 import type {
   AdapterCallbacks,
   AdapterResult,
@@ -115,13 +119,14 @@ export class AnthropicAdapter implements CopilotAdapter {
       );
 
       if (!toolUse) {
-        const text = resp.content
+        const rawText = resp.content
           .filter((b): b is Anthropic.Beta.Messages.BetaTextBlock => b.type === 'text')
           .map((b) => b.text)
           .join('\n')
           .trim();
+        const finalText = this.sanitize(rawText);
         return {
-          proposal: { kind: 'text', text: text || '…' },
+          proposal: { kind: 'text', text: finalText || '…' },
           telemetry: this.telemetry(start, totalInput, totalOutput, totalCacheRead, totalCacheWrite),
         };
       }
@@ -196,6 +201,22 @@ export class AnthropicAdapter implements CopilotAdapter {
     };
   }
 
+  /**
+   * Sprint 13 — post-LLM safety net. Si el LLM intenta colar un
+   * placeholder monetario alucinado (ej. "desde más €"), reemplazamos
+   * el fragmento por `[precio no consultado]` y antepone un aviso al
+   * recepcionista. Loggeamos las violaciones para diagnosticar prompt
+   * drift sin retry — el validador es idempotente y barato (regex).
+   */
+  private sanitize(rawText: string): string {
+    const validation = validateAssistantText(rawText);
+    if (validation.ok) return rawText;
+    this.log.warn(
+      `copilot.response validator flagged ${validation.violations.length} violation(s): ${validation.violations.join(' | ')}`,
+    );
+    return `${SANITIZED_WARNING}\n\n${validation.sanitized}`;
+  }
+
   private telemetry(
     start: number,
     inputTokens: number,
@@ -238,6 +259,20 @@ function buildSystemPrompt(
     'list_room_types para resolver el roomTypeId, luego procede.',
     'JAMÁS inventes un UUID. Si no tienes uno real del catálogo NO ejecutes',
     'el tool — vuelve a llamar list_room_types o pregunta al usuario.',
+    '',
+    'REGLA CRÍTICA — PRECIOS Y CIFRAS:',
+    'NUNCA inventes ni aproximes precios, tarifas, disponibilidad o',
+    'cualquier cifra numérica. Si no llamaste a un tool que devolviera',
+    'el dato, DEBES decir explícitamente "no tengo ese dato" y proponer',
+    'consultar (ej. "puedo consultarlo si confirmas la fecha").',
+    'PROHIBIDO escribir: "desde más €", "a partir de € [sin número]",',
+    '"precio a consultar", "varía según temporada/fecha", "precio',
+    'orientativo", o cualquier símbolo de moneda (€/$/£) sin número',
+    'inmediatamente anterior. Si en una tabla no tienes el precio de',
+    'una fila, OMITE LA FILA — no la rellenes con un placeholder.',
+    'Si listas tipos de habitación pero sólo consultaste el rate de',
+    'algunos, lista SÓLO los que tienes y di "los demás no los he',
+    'consultado, pídemelo si los necesitas".',
     '',
     'REGLA CRÍTICA — GRUPOS:',
     'Si el usuario pide MÁS DE UNA habitación o menciona "grupo", "tour",',
