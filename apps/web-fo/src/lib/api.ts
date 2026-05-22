@@ -826,113 +826,19 @@ export type FoToolName =
  * NO los reformateamos a través del LLM, así garantizamos que el precio
  * en pantalla es el real.
  */
-export interface CopilotAvailabilityRow {
-  roomTypeId: string;
-  code: string;
-  name: string;
-  description: string | null;
-  maxOccupancy: number;
-  available: number;
-  totalRooms: number;
-  pricePerNight: string;
-  totalForStay: string;
-  currency: string;
-}
-
-export interface CopilotAvailabilityWidget {
-  kind: 'availability';
-  data: {
-    arrival: string;
-    departure: string;
-    nights: number;
-    rows: CopilotAvailabilityRow[];
-  };
-}
-
-export interface CopilotFolioEntry {
-  id: string;
-  type: string;
-  description: string;
-  amount: string;
-  currency: string;
-  postedAt: string;
-}
-
-export interface CopilotFolioWidget {
-  kind: 'folio';
-  data: {
-    folioId: string;
-    reservationCode: string;
-    reservationId: string;
-    status: string;
-    balance: string;
-    currency: string;
-    entries: CopilotFolioEntry[];
-  };
-}
-
-export interface CopilotReservationWidget {
-  kind: 'reservation';
-  data: {
-    reservationId: string;
-    reservationCode: string;
-    status: string;
-    arrival: string;
-    departure: string;
-    nights: number;
-    adults: number;
-    children: number;
-    totalAmount: string;
-    currency: string;
-    roomTypeCode: string;
-    roomTypeName: string;
-    roomNumber: string | null;
-    guest: {
-      firstName: string;
-      lastName: string;
-      email: string | null;
-      phone: string | null;
-    } | null;
-    guaranteeStatus: string;
-    guaranteeType: string;
-    cardBrand: string | null;
-    cardLast4: string | null;
-    folio: { id: string; status: string; balance: string; currency: string } | null;
-  };
-}
-
-export interface CopilotHskTaskRow {
-  id: string;
-  roomNumber: string | null;
-  roomFloor: string | null;
-  taskType: string;
-  status: string;
-  assigneeName: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  durationMin: number | null;
-  notes: string | null;
-}
-
-export interface CopilotHskTasksWidget {
-  kind: 'hsk_tasks';
-  data: {
-    businessDate: string;
-    rows: CopilotHskTaskRow[];
-    counts: {
-      PENDING: number;
-      IN_PROGRESS: number;
-      DONE: number;
-      BLOCKED: number;
-    };
-  };
-}
-
-export type CopilotWidget =
-  | CopilotAvailabilityWidget
-  | CopilotFolioWidget
-  | CopilotReservationWidget
-  | CopilotHskTasksWidget;
+// Sprint 13 — tipos compartidos con `apps/api` vía `@pms/copilot-widget-types`.
+// Re-exportamos los nombres prefijados con `Copilot*` que ya usan los
+// componentes (CopilotAvailabilityWidget.tsx, etc.) como aliases de
+// `Extract` sobre el union, así una sola fuente garantiza paridad.
+import type { CopilotWidget } from '@pms/copilot-widget-types';
+export type { CopilotWidget };
+export type CopilotAvailabilityWidget = Extract<CopilotWidget, { kind: 'availability' }>;
+export type CopilotFolioWidget = Extract<CopilotWidget, { kind: 'folio' }>;
+export type CopilotReservationWidget = Extract<CopilotWidget, { kind: 'reservation' }>;
+export type CopilotHskTasksWidget = Extract<CopilotWidget, { kind: 'hsk_tasks' }>;
+export type CopilotAvailabilityRow = CopilotAvailabilityWidget['data']['rows'][number];
+export type CopilotFolioEntry = CopilotFolioWidget['data']['entries'][number];
+export type CopilotHskTaskRow = CopilotHskTasksWidget['data']['rows'][number];
 
 export interface CopilotMessage {
   id: string;

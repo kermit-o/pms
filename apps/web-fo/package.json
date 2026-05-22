@@ -13,6 +13,7 @@
     "test:e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
+    "@pms/copilot-widget-types": "workspace:*",
     "@stripe/react-stripe-js": "^3.0.0",
     "@stripe/stripe-js": "^4.10.0",
     "next": "15.0.3",

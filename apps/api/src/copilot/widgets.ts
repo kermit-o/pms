@@ -1,113 +1,35 @@
 /**
- * Sprint 13 — Copilot widgets (Mockup B, first slice).
+ * Sprint 13 — Copilot widget extractors (Mockup B).
  *
- * Cuando el agentic loop ejecuta un tool read-only que devuelve datos
- * estructurados (disponibilidad, ficha de reserva, folio…), en lugar
- * de depender del LLM para reformatearlos al usuario — el adapter los
- * convierte directamente a un `CopilotWidget` tipado que la UI sabe
- * pintar como tarjetas. Garantía por diseño: el precio que ve el
- * recepcionista es exactamente el que devolvió el tool, no una
- * paráfrasis del LLM.
+ * Convierte resultados de tools read-only en widgets tipados que la UI
+ * pinta como tarjetas. Los TIPOS viven en `@pms/copilot-widget-types`
+ * (compartidos con web-fo); aquí sólo está la lógica de conversión con
+ * validación defensiva — si la forma del result no encaja con el widget
+ * esperado, devolvemos `null` y el adapter cae al texto del LLM (mejor
+ * sin tarjeta que con huecos).
  *
- * Este módulo es puro: sólo conversión + validación. Sin I/O.
+ * Garantía por diseño: el contenido que ve el recepcionista en el
+ * widget viene EXACTAMENTE del tool, sin paráfrasis del LLM.
  */
 
-export type CopilotWidget =
-  | { kind: 'availability'; data: AvailabilityWidgetData }
-  | { kind: 'folio'; data: FolioWidgetData }
-  | { kind: 'reservation'; data: ReservationWidgetData }
-  | { kind: 'hsk_tasks'; data: HskTasksWidgetData };
+import type {
+  AvailabilityRow,
+  CopilotWidget,
+  FolioEntry,
+  HskTaskRow,
+  ReservationWidgetData,
+} from '@pms/copilot-widget-types';
 
-export interface HskTaskRow {
-  id: string;
-  roomNumber: string | null;
-  roomFloor: string | null;
-  taskType: string;
-  status: string;
-  assigneeName: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  durationMin: number | null;
-  notes: string | null;
-}
-
-export interface HskTasksWidgetData {
-  businessDate: string;
-  rows: HskTaskRow[];
-  /** Conteo por status — útil para el resumen del LLM. */
-  counts: {
-    PENDING: number;
-    IN_PROGRESS: number;
-    DONE: number;
-    BLOCKED: number;
-  };
-}
-
-export interface ReservationWidgetData {
-  reservationId: string;
-  reservationCode: string;
-  status: string;
-  arrival: string;
-  departure: string;
-  nights: number;
-  adults: number;
-  children: number;
-  totalAmount: string;
-  currency: string;
-  roomTypeCode: string;
-  roomTypeName: string;
-  roomNumber: string | null;
-  guest: {
-    firstName: string;
-    lastName: string;
-    email: string | null;
-    phone: string | null;
-  } | null;
-  guaranteeStatus: string;
-  guaranteeType: string;
-  cardBrand: string | null;
-  cardLast4: string | null;
-  folio: { id: string; status: string; balance: string; currency: string } | null;
-}
-
-export interface AvailabilityWidgetData {
-  arrival: string;
-  departure: string;
-  nights: number;
-  rows: AvailabilityRow[];
-}
-
-export interface AvailabilityRow {
-  roomTypeId: string;
-  code: string;
-  name: string;
-  description: string | null;
-  maxOccupancy: number;
-  available: number;
-  totalRooms: number;
-  pricePerNight: string;
-  totalForStay: string;
-  currency: string;
-}
-
-export interface FolioEntry {
-  id: string;
-  type: string;
-  description: string;
-  amount: string;
-  currency: string;
-  postedAt: string;
-}
-
-export interface FolioWidgetData {
-  folioId: string;
-  reservationCode: string;
-  reservationId: string;
-  status: string;
-  balance: string;
-  currency: string;
-  entries: FolioEntry[];
-}
+export type {
+  AvailabilityRow,
+  AvailabilityWidgetData,
+  CopilotWidget,
+  FolioEntry,
+  FolioWidgetData,
+  HskTaskRow,
+  HskTasksWidgetData,
+  ReservationWidgetData,
+} from '@pms/copilot-widget-types';
 
 /**
  * Convierte el resultado de un tool read-only en un widget, si el tool
