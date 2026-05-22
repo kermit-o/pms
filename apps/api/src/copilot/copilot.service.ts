@@ -92,6 +92,60 @@ export class CopilotService {
     );
   }
 
+  /**
+   * Sprint 13 — persiste un pending tool para que sobreviva al reload.
+   * Best-effort: si la DB falla, el pending tool vive sólo en memoria
+   * (comportamiento pre-commit). Estado inicial siempre 'pending'.
+   */
+  private async persistPendingTool(
+    user: AuthUser,
+    sessionId: string,
+    pendingId: string,
+    toolName: string,
+    input: unknown,
+    financial: boolean,
+  ): Promise<void> {
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: sessionId };
+    await this.prisma.withTenant(ctx, (tx) =>
+      tx.copilotPendingTool.create({
+        data: {
+          id: pendingId,
+          sessionId,
+          toolName,
+          input: input as Prisma.InputJsonValue,
+          financial,
+          status: 'pending',
+        },
+      }),
+    );
+  }
+
+  /**
+   * Sprint 13 — actualiza el status del pending tool tras la decisión
+   * del operador. Idempotente: el `where` incluye status=pending para
+   * que decisiones duplicadas no rompan nada.
+   */
+  private async markPendingDecided(
+    user: AuthUser,
+    sessionId: string,
+    pendingId: string,
+    status: 'approved' | 'rejected' | 'failed',
+  ): Promise<void> {
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: sessionId };
+    await this.prisma
+      .withTenant(ctx, (tx) =>
+        tx.copilotPendingTool.updateMany({
+          where: { id: pendingId, status: 'pending' },
+          data: { status, decidedAt: new Date() },
+        }),
+      )
+      .catch((err) =>
+        this.log.warn(
+          `copilot.pending mark ${status} failed ${pendingId}: ${(err as Error).message}`,
+        ),
+      );
+  }
+
   async getSession(user: AuthUser, sessionId: string): Promise<SessionView> {
     const session = await this.requireSession(user, sessionId);
     return toView(session);
@@ -375,6 +429,19 @@ export class CopilotService {
       createdAt: new Date(),
       status: 'pending',
     });
+    // Sprint 13 — persistir el pending tool best-effort para que
+    // sobreviva al reload (junto con el `pendingToolId` que se
+    // adjunta al mensaje abajo, vía persistMessage).
+    void this.persistPendingTool(
+      user,
+      sessionId,
+      pendingId,
+      proposal.tool,
+      proposal.input,
+      meta.financial,
+    ).catch((err) =>
+      this.log.warn(`copilot.pending persist failed ${pendingId}: ${(err as Error).message}`),
+    );
     const proposalMsg = `Sugerencia: ejecutar \`${proposal.tool}\`. Por seguridad necesito confirmación humana${
       meta.financial ? ' (acción financiera)' : ''
     }.`;
@@ -396,6 +463,7 @@ export class CopilotService {
       toolInput: proposal.input as Prisma.InputJsonValue,
       contentText: proposalMsg,
       telemetry,
+      pendingToolId: pendingId,
     });
     return toView(session);
   }
@@ -418,6 +486,7 @@ export class CopilotService {
 
     if (decision === 'reject') {
       pending.status = 'rejected';
+      void this.markPendingDecided(user, session.id, pending.id, 'rejected');
       const rejMsg = `Operación \`${pending.tool}\` rechazada por el operador.`;
       session.messages.push({
         id: randomUUID(),
@@ -436,6 +505,7 @@ export class CopilotService {
     try {
       const result = await this.resolver.execute(pending.tool, pending.input, user, correlationId);
       pending.status = 'approved';
+      void this.markPendingDecided(user, session.id, pending.id, 'approved');
       const okMsg = `Ejecutado \`${pending.tool}\`. Resultado:\n\n\`\`\`json\n${truncateJson(
         result,
       )}\n\`\`\``;
@@ -454,6 +524,7 @@ export class CopilotService {
       });
     } catch (err) {
       pending.status = 'failed';
+      void this.markPendingDecided(user, session.id, pending.id, 'failed');
       const failMsg = `Falló \`${pending.tool}\`: ${(err as Error).message}`;
       session.messages.push({
         id: randomUUID(),
@@ -499,6 +570,9 @@ export class CopilotService {
       /** Sprint 13 — widgets emitidos por el adapter; se serializan JSON
        *  tal cual para audit + futuro reload-from-DB. */
       widgets?: CopilotWidget[];
+      /** Sprint 13 — link al pending_tool si el mensaje es una
+       *  propuesta mutating; permite rehidratar botones tras reload. */
+      pendingToolId?: string | null;
     },
   ): Promise<void> {
     // Metricas: incrementar siempre, persistir DB best-effort.
@@ -550,6 +624,7 @@ export class CopilotService {
               fields.widgets && fields.widgets.length > 0
                 ? (fields.widgets as unknown as Prisma.InputJsonValue)
                 : Prisma.JsonNull,
+            pendingToolId: fields.pendingToolId ?? null,
           },
         });
       });
@@ -599,11 +674,11 @@ export class CopilotService {
   ): Promise<Session | null> {
     const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: sessionId };
     return this.prisma.withTenant(ctx, async (tx) => {
-      // Sprint 13 — preferimos cargar el shell (con propertyId) si
-      // existe. Sin shell sólo tenemos los mensajes; el cliente verá
-      // propertyId=null como antes (retro-compat con sesiones
-      // creadas antes de la migración).
-      const [shell, rows] = await Promise.all([
+      // Sprint 13 — cargamos shell + mensajes + pending tools en
+      // paralelo. Sin shell se sigue cargando con propertyId=null
+      // (retro-compat). Los pending tools rehidratan los botones
+      // Approve/Reject tras un deploy.
+      const [shell, rows, pendings] = await Promise.all([
         tx.copilotSession.findFirst({
           where: { id: sessionId, deletedAt: null },
           select: { propertyId: true, userId: true, createdAt: true },
@@ -616,27 +691,56 @@ export class CopilotService {
             role: true,
             contentText: true,
             widgets: true,
+            pendingToolId: true,
             createdAt: true,
             userId: true,
           },
         }),
+        tx.copilotPendingTool.findMany({
+          where: { sessionId, status: 'pending' },
+          select: {
+            id: true,
+            toolName: true,
+            input: true,
+            financial: true,
+            createdAt: true,
+          },
+        }),
       ]);
-      // Si no hay shell NI mensajes, no es una sesión real.
       if (!shell && rows.length === 0) return null;
-      const messages: SessionMessage[] = rows.map((r) => ({
-        id: r.id,
-        role: r.role === CopilotMessageRole.USER ? 'user' : 'assistant',
-        content: r.contentText ?? '',
-        widgets: rowWidgets(r.widgets),
-        createdAt: r.createdAt,
-      }));
+      const pendingToolsMap = new Map<string, PendingTool>();
+      for (const p of pendings) {
+        pendingToolsMap.set(p.id, {
+          id: p.id,
+          tool: p.toolName as AnyToolName,
+          input: p.input,
+          financial: p.financial,
+          status: 'pending',
+          createdAt: p.createdAt,
+        });
+      }
+      const messages: SessionMessage[] = rows.map((r) => {
+        const pendingToolId = r.pendingToolId ?? undefined;
+        const pending = pendingToolId ? pendingToolsMap.get(pendingToolId) : undefined;
+        return {
+          id: r.id,
+          role: r.role === CopilotMessageRole.USER ? 'user' : 'assistant',
+          content: r.contentText ?? '',
+          widgets: rowWidgets(r.widgets),
+          pendingToolId: pending ? pendingToolId : undefined,
+          pendingTool: pending
+            ? { name: pending.tool, input: pending.input, financial: pending.financial }
+            : undefined,
+          createdAt: r.createdAt,
+        };
+      });
       return {
         id: sessionId,
         tenantId: user.tenantId,
         userId: shell?.userId ?? rows[0]?.userId ?? user.sub,
         propertyId: shell?.propertyId ?? null,
         messages,
-        pendingTools: new Map(),
+        pendingTools: pendingToolsMap,
         createdAt: shell?.createdAt ?? rows[0]?.createdAt ?? new Date(),
       };
     });

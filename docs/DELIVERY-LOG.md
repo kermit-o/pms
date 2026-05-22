@@ -476,6 +476,91 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+## 2026-05-22 · [FEAT] · Copilot — pending tools persistentes (cierra última limitación de reload)
+
+**Scope:** `packages/db`, `apps/api/src/copilot`
+**Branch:** `claude/copilot-persist-pending-tools` (sobre copilot_sessions)
+**Refs:** cierra la última limitación documentada del reload-from-DB.
+Antes una propuesta mutating sin aprobar perdía sus botones tras
+deploy: el mensaje quedaba visible pero sin Approve/Reject; el
+operador tenía que re-pedir al Copilot.
+
+**Qué cambió.**
+
+- **Migración** `20260623000000_copilot_pending_tools`:
+  - Nueva tabla `copilot_pending_tools(id, session_id, tool_name,
+    input jsonb, financial bool, status text + check, created_at,
+    decided_at NULL)`. Status como text + check
+    `IN ('pending','approved','rejected','failed')` en lugar de
+    enum SQL para añadir estados futuros sin migración.
+  - Nueva columna `copilot_messages.pending_tool_id uuid?` para
+    reconectar la propuesta con su pending tool al rehidratar.
+  - Sin FK física a `copilot_sessions.id` para mantener el insert
+    path independiente del shell.
+- **Prisma**: `model CopilotPendingTool` + `pendingToolId` en
+  `CopilotMessage`.
+- **`CopilotService`**:
+  - `persistPendingTool(user, sessionId, pendingId, toolName,
+    input, financial)`: insert best-effort tras añadir al Map.
+  - `markPendingDecided(user, sessionId, pendingId, status)`:
+    update idempotente (`where: { id, status: 'pending' }`); log
+    warn en fallo, no rompe el response.
+  - `persistMessage` acepta `pendingToolId?` y lo persiste en la
+    columna nueva.
+  - `confirmTool` llama `markPendingDecided` con
+    'approved' / 'rejected' / 'failed' según el path.
+  - `loadSessionFromDb` carga shell + mensajes + pending tools
+    (sólo `status='pending'`) en paralelo. Reconstruye el Map y
+    rellena `pendingToolId` + `pendingTool` en los mensajes con
+    `message.pendingToolId` matcheado a `pt.id`.
+
+**Por qué.**
+
+Era la última pieza para que el Copilot fuera estable bajo
+deploys. Patrón observado: el operador propone un check-in,
+mientras pulsa Approve se redespliega el API, y aparece el
+mensaje sin botones — confunde. Persistir cierra ese loop.
+
+Decisiones de diseño:
+- **Status text + check** en lugar de enum SQL: añadir estados
+  ('timeout' eventual) no exige migración.
+- **Best-effort en `persistPendingTool`**: si la DB falla, el
+  pending vive en memoria. Tras reload se pierde — mismo
+  comportamiento que pre-commit. Mejor que bloquear el flujo
+  síncrono del Copilot por un fallo de persistencia.
+- **Sólo `status='pending'` en el reload**: las decisiones ya
+  cerradas (approved/rejected/failed) no vuelven a aparecer como
+  botones — eso sería incorrecto.
+- **`updateMany` con filtro `status='pending'`**: idempotente
+  contra carreras (doble click en Approve).
+
+**Archivos clave.**
+
+- `packages/db/prisma/migrations/20260623000000_copilot_pending_tools/migration.sql`
+- `packages/db/prisma/schema.prisma` (`CopilotPendingTool` +
+  `pendingToolId` en `CopilotMessage`)
+- `apps/api/src/copilot/copilot.service.ts` (3 helpers nuevos +
+  reload extendido)
+- `apps/api/src/copilot/copilot.service.spec.ts` (+2 tests +
+  mocks adicionales)
+
+**Tests.**
+
+- 364/364 verdes (+2 nuevos: reload hidrata pending y los conecta
+  al mensaje, sólo carga status='pending'). Typecheck + lint
+  verdes.
+
+**Sigue pendiente.**
+
+- Sin items críticos en el plan del Copilot. La pila está
+  completa: hotfix + validador alucinaciones + 6 widgets +
+  persistencia + reload + admin + filtros + CSV + selector +
+  shared types + propertyId + pending tools. Los próximos
+  stretchs (widgets `forecast_demand`, `recall_guest_history`)
+  son opcionales y dependen del feedback de uso real del piloto.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot — tabla `copilot_sessions` (propertyId sobrevive a reload)
 
 **Scope:** `packages/db`, `apps/api/src/copilot`
