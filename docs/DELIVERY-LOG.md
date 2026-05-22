@@ -80,6 +80,91 @@ Una o dos frases.
 
 ---
 
+## 2026-05-22 · [FEAT] · Copilot — reload-from-DB de sesiones (cierra slice 2)
+
+**Scope:** `apps/api/src/copilot/copilot.service.ts`
+**Branch:** `claude/copilot-session-reload-from-db` (sobre slice 4)
+**Refs:** convierte la persistencia DB del slice 2 en valor real:
+hasta este commit los mensajes y widgets se guardaban en
+`copilot_messages` pero el `Map<sessionId, Session>` in-memory era
+la única fuente al servir requests. Tras un deploy o reinicio el
+operador perdía toda su conversación.
+
+**Qué cambió.**
+
+- `CopilotService.getSession()` pasa a `async`. La firma del
+  controller ya era async — sólo `await` extra en la línea de llamada.
+- `requireSession()` ahora intenta hidratar desde DB cuando el Map
+  no tiene la sesión:
+  1. Hit en memoria → devuelve y valida tenant (igual que antes).
+  2. Miss → llama a `loadSessionFromDb(user, sessionId)`.
+  3. Si hay mensajes en DB → reconstruye `Session`, la cachea en el
+     Map y la devuelve. Log de información para visibilidad.
+  4. Si no hay mensajes → 404 (sesión no existe).
+- `loadSessionFromDb` (privado):
+  - Query `copilotMessage.findMany({ where: { sessionId }, orderBy:
+    { createdAt: 'asc' } })` dentro de `withTenant` (RLS aplica).
+  - Mapea cada row a `SessionMessage` con `widgets` deserializado
+    vía nuevo helper `rowWidgets(raw)`.
+  - El primer row da `userId` y `createdAt` de la sesión.
+- `rowWidgets(raw): CopilotWidget[] | undefined`: deserializador
+  defensivo. Si `widgets` no es array (corrupto, schema cambió,
+  null) devuelve undefined. Mejor recuperar el mensaje sin tarjetas
+  que fallar la carga entera.
+
+**Limitaciones documentadas (en JSDoc del método).**
+
+- `propertyId` no se persiste — no hay tabla `copilot_sessions`. Tras
+  reload queda `null`; el LLM pide al usuario que confirme la primera
+  vez que lo necesite. Aceptable: el coste de añadir otra tabla por
+  un único campo no justifica el cambio.
+- `pendingTools` se descartan tras reload. Si el servidor reinició
+  mientras había un mutating sin aprobar, el mensaje queda en el feed
+  sin botones Approve/Reject; el usuario re-propone. Mejor que
+  arrastrar pending tools potencialmente stale al reanudar (el
+  usuario no aprueba algo que ya no recuerda haber pedido).
+
+**Por qué.**
+
+Slice 2 dejó la persistencia en sitio pero sin loader: el JSON estaba
+en DB sólo para audit. Con este commit la persistencia se convierte
+en mecanismo de continuidad real:
+- Deploy a Fly → la sesión sobrevive.
+- Worker reinicia por OOM → la sesión sobrevive.
+- Multi-instancia futura (load balancer entre N pods) → cualquier pod
+  puede atender un request porque la fuente de verdad es la DB. Hoy
+  ya estamos en single-pod, pero el camino queda abierto sin
+  refactor adicional.
+
+**Archivos clave.**
+
+- `apps/api/src/copilot/copilot.service.ts`
+  (`getSession` async, `requireSession` async + hidratación,
+  `loadSessionFromDb`, `rowWidgets` helper)
+- `apps/api/src/copilot/copilot.service.spec.ts`
+  (mock `findMany` añadido, 3 tests nuevos de reload, 2 tests
+  existentes actualizados a `async`/`await`)
+
+**Tests.**
+
+- 337/337 verdes (+3 nuevos: hidratación con widgets, 404 sin
+  mensajes, hit-en-memoria no toca DB).
+- Typecheck + lint verdes.
+- Sin migraciones, sin deps.
+
+**Sigue pendiente (próximos slices).**
+
+- **Widget `hsk_tasks`** — cierra la vertical housekeeping. Patrón ya
+  rodado; ~1 día.
+- **Persistencia de `pendingTools`** — si el negocio lo justifica.
+  Hoy aceptamos perderlos tras reload; podría añadirse otra tabla
+  pequeña `copilot_pending_tools` si dolemos.
+- **Vista admin `/admin/copilot/sessions`** — depurar prompt drift
+  desde web; ahora ya tenemos persistencia + reload para alimentarla.
+- **Mover tipos a `packages/shared`** — regla de 3 cumplida.
+
+---
+
 ## 2026-05-21 · [FEAT] · Copilot widget — reservation_summary (slice 4 de Mockup B)
 
 **Scope:** `packages/mcp-tools`, `apps/api/src/reservations`,

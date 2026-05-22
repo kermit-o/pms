@@ -52,9 +52,15 @@ function buildService() {
       return { proposal: stubProposal(content) };
     }),
   };
+  const findManyMock = vi.fn().mockResolvedValue([] as unknown[]);
   const prisma = {
     withTenant: vi.fn(async (_ctx, fn: (tx: unknown) => Promise<unknown>) =>
-      fn({ copilotMessage: { create: vi.fn().mockResolvedValue({}) } }),
+      fn({
+        copilotMessage: {
+          create: vi.fn().mockResolvedValue({}),
+          findMany: findManyMock,
+        },
+      }),
     ),
   };
   const metrics = {
@@ -68,15 +74,15 @@ function buildService() {
     adapter as never,
     metrics as never,
   );
-  return { service, resolver };
+  return { service, resolver, findManyMock };
 }
 
 describe('CopilotService', () => {
-  it('opens a session scoped to the user tenant', () => {
+  it('opens a session scoped to the user tenant', async () => {
     const { service } = buildService();
     const out = service.createSession(user, PROPERTY_ID);
     expect(out.sessionId).toMatch(/^[0-9a-f-]{36}$/);
-    const view = service.getSession(user, out.sessionId);
+    const view = await service.getSession(user, out.sessionId);
     expect(view.propertyId).toBe(PROPERTY_ID);
     expect(view.messages).toEqual([]);
   });
@@ -155,7 +161,7 @@ describe('CopilotService', () => {
     expect(view.messages.at(-1)!.content).toContain('rechazada');
   });
 
-  it('rejects sessions that belong to another tenant', () => {
+  it('rejects sessions that belong to another tenant', async () => {
     const { service } = buildService();
     const { sessionId } = service.createSession(user, undefined);
     const otherUser: AuthUser = {
@@ -164,7 +170,7 @@ describe('CopilotService', () => {
       email: 'other@example.com',
       roles: ['front_desk'],
     };
-    expect(() => service.getSession(otherUser, sessionId)).toThrow();
+    await expect(service.getSession(otherUser, sessionId)).rejects.toThrow();
   });
 
   // Ensures the test is self-consistent: ROOM_TYPE_ID is unused but kept as a
@@ -241,5 +247,69 @@ describe('CopilotService', () => {
     // Stub no encadena tools internamente, asi que solo veremos status + done.
     expect(events[0]).toEqual({ type: 'status', phase: 'thinking' });
     expect(events[events.length - 1]!.type).toBe('done');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 13 — reload-from-DB de sesiones (cierra el loop de slice 2).
+  // ---------------------------------------------------------------------------
+
+  it('reload: hydrata una sesión desde DB cuando el Map in-memory no la tiene', async () => {
+    const { service, findManyMock } = buildService();
+    const sessionId = '99999999-9999-9999-9999-999999999999';
+    findManyMock.mockResolvedValueOnce([
+      {
+        id: 'msg-1',
+        role: 'USER',
+        contentText: '¿qué precios hay el lunes?',
+        widgets: null,
+        userId: user.sub,
+        createdAt: new Date('2026-05-21T09:00:00Z'),
+      },
+      {
+        id: 'msg-2',
+        role: 'ASSISTANT',
+        contentText: 'Hay 3 tipos disponibles esa noche.',
+        widgets: [
+          {
+            kind: 'availability',
+            data: {
+              arrival: '2026-05-26',
+              departure: '2026-05-27',
+              nights: 1,
+              rows: [],
+            },
+          },
+        ],
+        userId: user.sub,
+        createdAt: new Date('2026-05-21T09:00:10Z'),
+      },
+    ]);
+    const view = await service.getSession(user, sessionId);
+    expect(view.sessionId).toBe(sessionId);
+    expect(view.messages).toHaveLength(2);
+    expect(view.messages[0]!.role).toBe('user');
+    expect(view.messages[1]!.role).toBe('assistant');
+    expect(view.messages[1]!.widgets).toHaveLength(1);
+    // propertyId se pierde tras reload (no hay tabla copilot_sessions).
+    expect(view.propertyId).toBeNull();
+    // pendingTools se descartan tras reload.
+    expect(view.pendingTools).toEqual([]);
+  });
+
+  it('reload: 404 cuando la sesión no tiene mensajes en DB', async () => {
+    const { service, findManyMock } = buildService();
+    findManyMock.mockResolvedValueOnce([]);
+    await expect(
+      service.getSession(user, '88888888-8888-8888-8888-888888888888'),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('reload: una sesión ya en memoria no toca DB', async () => {
+    const { service, findManyMock } = buildService();
+    const { sessionId } = service.createSession(user, PROPERTY_ID);
+    findManyMock.mockClear();
+    const view = await service.getSession(user, sessionId);
+    expect(view.propertyId).toBe(PROPERTY_ID);
+    expect(findManyMock).not.toHaveBeenCalled();
   });
 });

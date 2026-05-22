@@ -66,8 +66,8 @@ export class CopilotService {
     return { sessionId };
   }
 
-  getSession(user: AuthUser, sessionId: string): SessionView {
-    const session = this.requireSession(user, sessionId);
+  async getSession(user: AuthUser, sessionId: string): Promise<SessionView> {
+    const session = await this.requireSession(user, sessionId);
     return toView(session);
   }
 
@@ -118,7 +118,7 @@ export class CopilotService {
     content: string,
     callbacks?: AdapterCallbacks,
   ): Promise<SessionView> {
-    const session = this.requireSession(user, sessionId);
+    const session = await this.requireSession(user, sessionId);
 
     session.messages.push({
       id: randomUUID(),
@@ -246,7 +246,7 @@ export class CopilotService {
     pendingToolId: string,
     decision: 'approve' | 'reject',
   ): Promise<SessionView> {
-    const session = this.requireSession(user, sessionId);
+    const session = await this.requireSession(user, sessionId);
     const pending = session.pendingTools.get(pendingToolId);
     if (!pending) {
       throw new NotFoundException(`Pending tool ${pendingToolId} not found`);
@@ -398,19 +398,95 @@ export class CopilotService {
     }
   }
 
-  private requireSession(user: AuthUser, sessionId: string): Session {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new NotFoundException(`Session ${sessionId} not found`);
-    if (session.tenantId !== user.tenantId) {
-      throw new BadRequestException('Session does not belong to this tenant');
+  /**
+   * Sprint 13 — devuelve la sesión desde memoria si existe; si no, intenta
+   * hidratarla desde `copilot_messages`. Tras un deploy o reinicio del
+   * proceso el Map in-memory queda vacío; este path evita perder la
+   * conversación del operador.
+   *
+   * Limitaciones conocidas:
+   *  - `propertyId` no se persiste (no hay tabla copilot_sessions), así
+   *    que tras reload queda `null` y el LLM pedirá al usuario que lo
+   *    confirme la primera vez que lo necesite.
+   *  - `pendingTools` se persisten implícitamente como mensajes
+   *    `tool_proposal` con su id en el contenido; tras reload se
+   *    pierden — un mutating sin aprobar deja un mensaje viejo en el
+   *    feed pero sin botones Approve/Reject. El usuario reformula y
+   *    re-propone. Mejor que arrastrar pending tools potencialmente
+   *    stale al reanudar.
+   */
+  private async requireSession(user: AuthUser, sessionId: string): Promise<Session> {
+    const existing = this.sessions.get(sessionId);
+    if (existing) {
+      if (existing.tenantId !== user.tenantId) {
+        throw new BadRequestException('Session does not belong to this tenant');
+      }
+      return existing;
     }
-    return session;
+    const hydrated = await this.loadSessionFromDb(user, sessionId);
+    if (!hydrated) throw new NotFoundException(`Session ${sessionId} not found`);
+    this.sessions.set(sessionId, hydrated);
+    this.log.log(
+      `copilot.session hydrated from DB sessionId=${sessionId} messages=${hydrated.messages.length}`,
+    );
+    return hydrated;
+  }
+
+  private async loadSessionFromDb(
+    user: AuthUser,
+    sessionId: string,
+  ): Promise<Session | null> {
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: sessionId };
+    const rows = await this.prisma.withTenant(ctx, (tx) =>
+      tx.copilotMessage.findMany({
+        where: { sessionId },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          role: true,
+          contentText: true,
+          widgets: true,
+          createdAt: true,
+          userId: true,
+        },
+      }),
+    );
+    if (rows.length === 0) return null;
+    const messages: SessionMessage[] = rows.map((r) => ({
+      id: r.id,
+      role: r.role === CopilotMessageRole.USER ? 'user' : 'assistant',
+      content: r.contentText ?? '',
+      widgets: rowWidgets(r.widgets),
+      createdAt: r.createdAt,
+    }));
+    return {
+      id: sessionId,
+      tenantId: user.tenantId,
+      userId: rows[0]!.userId,
+      propertyId: null,
+      messages,
+      pendingTools: new Map(),
+      createdAt: rows[0]!.createdAt,
+    };
   }
 }
 
 function truncateJson(value: unknown, max = 1500): string {
   const json = JSON.stringify(value, null, 2);
   return json.length > max ? `${json.slice(0, max)}\n…(truncated)` : json;
+}
+
+/**
+ * Sprint 13 — Deserializa el campo `widgets jsonb` de copilot_messages a
+ * `CopilotWidget[]`. Cualquier corrupción (mal serializado, schema cambió)
+ * se ignora silenciosamente; mejor recuperar el mensaje sin tarjetas que
+ * fallar la carga entera de la sesión.
+ */
+function rowWidgets(raw: Prisma.JsonValue | null): CopilotWidget[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  // Confiamos en lo que el adapter persistió en su día. Si la forma
+  // cambió entre versiones, el cliente sabrá ignorar widgets desconocidos.
+  return raw as unknown as CopilotWidget[];
 }
 
 // ---------------------------------------------------------------------------
