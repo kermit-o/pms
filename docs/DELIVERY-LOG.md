@@ -476,6 +476,55 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+## 2026-05-22 · [DOCS] · Sprint 14 — plan tentativo (post-Copilot)
+
+**Scope:** `docs/SPRINT-14-PLAN.md`
+**Branch:** `claude/sprint-14-plan` (sobre admin-nav-link)
+**Refs:** cierra la cadena Copilot del Sprint 13 con dirección para
+el siguiente sprint.
+
+**Qué cambió.**
+
+- Nuevo `docs/SPRINT-14-PLAN.md` con:
+  - **§1 Pre-requisito**: orden estricto de merge de las 17 ramas
+    de Sprint 13 (3 pre-Copilot + 17 Copilot, ya enumeradas).
+  - **§2 W1 Stripe Billing al tenant**: el siguiente bloqueador
+    real del negocio. Plan + decisiones del PO + sprint count
+    (3-4 días).
+  - **§3 W2 Verifactu / e-invoicing**: plazo legal España
+    julio 2026. El más grande (5-7 días) y de mayor riesgo
+    (AEAT + crypto). Recomendación: piloto de bajo volumen
+    primero.
+  - **§4 W3 2º channel manager `[deferred]`**: esperar feedback
+    del piloto antes de empezar.
+  - **§5 Candidatos secundarios** si los principales avanzan
+    rápido (billing past_due agresivo, reports PDF,
+    calendar resize, admin Copilot dashboard, widget
+    `forecast_demand`).
+  - **§6 Out of scope explícito**.
+  - **§7 Orden sugerido** para arrancar.
+  - **§8 Riesgos**.
+
+**Por qué.**
+
+La pila Copilot quedó completa con 17 ramas pendientes de merge.
+Sin un norte documentado para Sprint 14, el PO entra al próximo
+ciclo desde cero. El plan deja explícito qué decisiones de producto
+necesito antes de tirar (precio Stripe, ADR puppeteer, modo
+Verifactu test) — sigue el patrón de `SPRINT-12-PLAN.md` y
+`SPRINT-13-PLAN.md`.
+
+**Archivos clave.**
+
+- `docs/SPRINT-14-PLAN.md` (nuevo, ~150 líneas)
+
+**Sigue pendiente.**
+
+PO revisar el plan, aprobar W1 + W2 + decisiones pendientes,
+mergear las 17 ramas de S13.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot — link "Admin · Copilot" en nav (discoverability)
 
 **Scope:** `apps/web-fo/src/app/layout.tsx`
