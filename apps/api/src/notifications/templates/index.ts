@@ -18,7 +18,8 @@ export type TemplateName =
   | 'reservation_confirmation'
   | 'reservation_cancelled'
   | 'front_desk_new_reservation'
-  | 'onboarding_verify';
+  | 'onboarding_verify'
+  | 'onboarding_welcome';
 export type Locale = 'es' | 'en';
 
 export interface RenderedTemplate {
@@ -172,6 +173,48 @@ const TEMPLATES: Record<TemplateName, TplDict> = {
 </p>
 <p style="color:#5c2a4d;"><a href="{{ backofficeUrl }}" style="color:#5c2a4d;">Abrir en back-office →</a></p>`,
       text: `Nueva reserva — {{ code }}\n\nHuésped: {{ guestFirstName }} {{ guestLastName }}\nOrigen: {{ source }}\n{{ arrival }} → {{ departure }} · {{ roomTypeName }}\nTotal: {{ totalAmount }} {{ currency }}\n\n{{ backofficeUrl }}`,
+    },
+  },
+  onboarding_welcome: {
+    es: {
+      subject: '🎉 {{ hotelName }} ya está listo en Aubergine',
+      html: `<h2 style="margin:0 0 8px 0;color:#451f3a;">Bienvenido a Aubergine</h2>
+<p style="color:#5c2a4d;">Hola {{ adminFullName }}, tu hotel <strong>{{ hotelName }}</strong> ya está configurado y listo para empezar a operar.</p>
+<p style="background:#f6eef3;padding:12px 16px;border-radius:8px;color:#2a132a;">
+  <strong style="display:block;font-size:14px;letter-spacing:0.05em;">Tus accesos</strong>
+  Back-office: <a href="{{ backofficeUrl }}" style="color:#5c2a4d;">{{ backofficeUrl }}</a><br>
+  Booking público (IBE): <a href="{{ ibeUrl }}" style="color:#5c2a4d;">{{ ibeUrl }}</a><br>
+  Admin: {{ adminEmail }}
+</p>
+<p style="color:#5c2a4d;"><strong>Próximos pasos en los primeros 7 días:</strong></p>
+<ol style="color:#5c2a4d;padding-left:20px;">
+  <li>Configura tus tipos de habitación y tarifas en el back-office.</li>
+  <li>Conecta Stripe para garantías de tarjeta (Ajustes → Pagos).</li>
+  <li>Publica tu IBE público desde Ajustes de la propiedad.</li>
+  <li>Conecta tu channel manager si trabajas con Booking/Expedia.</li>
+</ol>
+<p style="color:#5c2a4d;">¿Dudas? Respóndenos a este email o escribe a <a href="mailto:soporte@aubergine.me" style="color:#5c2a4d;">soporte@aubergine.me</a>. Te respondemos en horario laboral (CET) en menos de 4 horas.</p>`,
+      text: `Bienvenido a Aubergine\n\nHola {{ adminFullName }}, tu hotel {{ hotelName }} ya está listo.\n\nAccesos:\n- Back-office: {{ backofficeUrl }}\n- IBE público: {{ ibeUrl }}\n- Admin: {{ adminEmail }}\n\nPróximos pasos (7 días):\n 1. Configura tipos de habitación y tarifas.\n 2. Conecta Stripe (Ajustes → Pagos).\n 3. Publica tu IBE público.\n 4. Conecta tu channel manager.\n\nSoporte: soporte@aubergine.me (respuesta < 4h horario laboral CET).`,
+    },
+    en: {
+      subject: '🎉 {{ hotelName }} is ready on Aubergine',
+      html: `<h2 style="margin:0 0 8px 0;color:#451f3a;">Welcome to Aubergine</h2>
+<p style="color:#5c2a4d;">Hi {{ adminFullName }}, your hotel <strong>{{ hotelName }}</strong> is set up and ready to operate.</p>
+<p style="background:#f6eef3;padding:12px 16px;border-radius:8px;color:#2a132a;">
+  <strong style="display:block;font-size:14px;letter-spacing:0.05em;">Your access</strong>
+  Back-office: <a href="{{ backofficeUrl }}" style="color:#5c2a4d;">{{ backofficeUrl }}</a><br>
+  Public booking (IBE): <a href="{{ ibeUrl }}" style="color:#5c2a4d;">{{ ibeUrl }}</a><br>
+  Admin: {{ adminEmail }}
+</p>
+<p style="color:#5c2a4d;"><strong>First 7 days:</strong></p>
+<ol style="color:#5c2a4d;padding-left:20px;">
+  <li>Set up room types and rates in the back-office.</li>
+  <li>Connect Stripe for card guarantees (Settings → Payments).</li>
+  <li>Publish your public IBE (Property settings).</li>
+  <li>Connect your channel manager if you use Booking/Expedia.</li>
+</ol>
+<p style="color:#5c2a4d;">Questions? Reply to this email or write to <a href="mailto:soporte@aubergine.me" style="color:#5c2a4d;">soporte@aubergine.me</a>. We respond in under 4 working hours (CET).</p>`,
+      text: `Welcome to Aubergine\n\nHi {{ adminFullName }}, your hotel {{ hotelName }} is ready.\n\nAccess:\n- Back-office: {{ backofficeUrl }}\n- Public IBE: {{ ibeUrl }}\n- Admin: {{ adminEmail }}\n\nFirst 7 days:\n 1. Set up room types and rates.\n 2. Connect Stripe (Settings → Payments).\n 3. Publish your public IBE.\n 4. Connect your channel manager.\n\nSupport: soporte@aubergine.me (under 4h working CET).`,
     },
   },
 };

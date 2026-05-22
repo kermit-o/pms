@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ApiError, publicOnboardingSetup } from '@/lib/api';
+import { OnboardingStepper } from '../stepper';
 
 export const dynamic = 'force-dynamic';
 
@@ -177,6 +178,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <main className="flex min-h-screen items-center justify-center bg-aubergine-50 px-6 py-12">
       <div className="w-full max-w-2xl space-y-4 rounded-2xl bg-white p-8 shadow-sm ring-1 ring-aubergine-100">
         <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">Aubergine</p>
+        <OnboardingStepper current="setup" />
         <h1 className="text-2xl font-semibold text-aubergine-700">Configura tu hotel</h1>
         {children}
       </div>
