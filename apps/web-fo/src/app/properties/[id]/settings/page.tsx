@@ -113,6 +113,14 @@ export default async function PropertySettingsPage({ params, searchParams }: Pro
           Código <span className="font-mono">{settings.code}</span> · ID{' '}
           <span className="font-mono text-xs">{settings.id}</span>
         </p>
+        <nav className="mt-3 flex gap-3 text-xs">
+          <Link
+            href={`/properties/${id}/rate-plans`}
+            className="rounded-full bg-aubergine-50 px-3 py-1 text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-100"
+          >
+            Rate plans →
+          </Link>
+        </nav>
       </header>
 
       <Status section="ibe" sp={sp} />

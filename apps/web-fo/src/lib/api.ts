@@ -1349,3 +1349,76 @@ export async function setPropertyBlockedIps(
     body: JSON.stringify({ ips }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Rate Plans (Sprint 13 W1 backend, W2 admin UI)
+// ---------------------------------------------------------------------------
+
+export interface RatePlanListItem {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isPublic: boolean;
+  currency: string;
+  nonRefundable: boolean;
+  discountPct: string | null;
+  attributes: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateRatePlanInput {
+  code: string;
+  name: string;
+  description?: string;
+  isPublic?: boolean;
+  currency?: string;
+  nonRefundable?: boolean;
+  discountPct?: number;
+  dailyRate?: number;
+}
+
+export interface UpdateRatePlanInput {
+  name?: string;
+  description?: string;
+  isPublic?: boolean;
+  nonRefundable?: boolean;
+  /** null limpia el descuento. */
+  discountPct?: number | null;
+  /** null limpia el override. */
+  dailyRate?: number | null;
+}
+
+export async function listRatePlans(
+  accessToken: string | undefined,
+  propertyId: string,
+): Promise<RatePlanListItem[]> {
+  return apiFetch(`/properties/${encodeURIComponent(propertyId)}/rate-plans`, {
+    accessToken,
+  });
+}
+
+export async function createRatePlan(
+  accessToken: string | undefined,
+  propertyId: string,
+  input: CreateRatePlanInput,
+): Promise<{ id: string; code: string; name: string }> {
+  return apiFetch(`/properties/${encodeURIComponent(propertyId)}/rate-plans`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateRatePlan(
+  accessToken: string | undefined,
+  id: string,
+  input: UpdateRatePlanInput,
+): Promise<{ id: string; code: string; name: string }> {
+  return apiFetch(`/rate-plans/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
