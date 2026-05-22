@@ -14,7 +14,35 @@
 
 export type CopilotWidget =
   | { kind: 'availability'; data: AvailabilityWidgetData }
-  | { kind: 'folio'; data: FolioWidgetData };
+  | { kind: 'folio'; data: FolioWidgetData }
+  | { kind: 'reservation'; data: ReservationWidgetData };
+
+export interface ReservationWidgetData {
+  reservationId: string;
+  reservationCode: string;
+  status: string;
+  arrival: string;
+  departure: string;
+  nights: number;
+  adults: number;
+  children: number;
+  totalAmount: string;
+  currency: string;
+  roomTypeCode: string;
+  roomTypeName: string;
+  roomNumber: string | null;
+  guest: {
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+  } | null;
+  guaranteeStatus: string;
+  guaranteeType: string;
+  cardBrand: string | null;
+  cardLast4: string | null;
+  folio: { id: string; status: string; balance: string; currency: string } | null;
+}
 
 export interface AvailabilityWidgetData {
   arrival: string;
@@ -76,6 +104,8 @@ export function extractWidgetFromTool(
       return buildAvailabilityWidget(toolInput, toolResult);
     case 'get_folio':
       return buildFolioWidget(toolResult);
+    case 'get_reservation':
+      return buildReservationWidget(toolResult);
     default:
       return null;
   }
@@ -182,6 +212,88 @@ function buildFolioWidget(toolResult: unknown): CopilotWidget | null {
       balance: r.balance,
       currency: r.currency,
       entries,
+    },
+  };
+}
+
+function buildReservationWidget(toolResult: unknown): CopilotWidget | null {
+  if (!toolResult || typeof toolResult !== 'object') return null;
+  const r = toolResult as Record<string, unknown>;
+  if (
+    typeof r.id !== 'string' ||
+    typeof r.code !== 'string' ||
+    typeof r.status !== 'string' ||
+    typeof r.arrivalDate !== 'string' ||
+    typeof r.departureDate !== 'string' ||
+    typeof r.totalAmount !== 'string' ||
+    typeof r.currency !== 'string' ||
+    typeof r.adults !== 'number' ||
+    typeof r.roomTypeCode !== 'string' ||
+    typeof r.roomTypeName !== 'string'
+  ) {
+    return null;
+  }
+  // Calculamos nights desde las fechas (las date strings ya vienen
+  // serializadas como ISO de toDetail()).
+  const arrival = new Date(r.arrivalDate);
+  const departure = new Date(r.departureDate);
+  const nights = Math.max(
+    1,
+    Math.round((departure.getTime() - arrival.getTime()) / 86_400_000),
+  );
+
+  // Primary guest del array `guests` (lo serializa toDetail).
+  let primaryGuest: ReservationWidgetData['guest'] = null;
+  if (Array.isArray(r.guests)) {
+    const primary = (r.guests as Array<Record<string, unknown>>).find(
+      (g) => g.isPrimary === true,
+    );
+    const g = primary?.guest as Record<string, unknown> | undefined;
+    if (g && typeof g.firstName === 'string' && typeof g.lastName === 'string') {
+      primaryGuest = {
+        firstName: g.firstName,
+        lastName: g.lastName,
+        email: typeof g.email === 'string' ? g.email : null,
+        phone: typeof g.phone === 'string' ? g.phone : null,
+      };
+    }
+  }
+
+  let folio: ReservationWidgetData['folio'] = null;
+  if (r.folio && typeof r.folio === 'object') {
+    const f = r.folio as Record<string, unknown>;
+    if (
+      typeof f.id === 'string' &&
+      typeof f.status === 'string' &&
+      typeof f.balance === 'string' &&
+      typeof f.currency === 'string'
+    ) {
+      folio = { id: f.id, status: f.status, balance: f.balance, currency: f.currency };
+    }
+  }
+
+  return {
+    kind: 'reservation',
+    data: {
+      reservationId: r.id,
+      reservationCode: r.code,
+      status: r.status,
+      arrival: r.arrivalDate.slice(0, 10),
+      departure: r.departureDate.slice(0, 10),
+      nights,
+      adults: r.adults,
+      children: typeof r.children === 'number' ? r.children : 0,
+      totalAmount: r.totalAmount,
+      currency: r.currency,
+      roomTypeCode: r.roomTypeCode,
+      roomTypeName: r.roomTypeName,
+      roomNumber: typeof r.roomNumber === 'string' ? r.roomNumber : null,
+      guest: primaryGuest,
+      guaranteeStatus: typeof r.guaranteeStatus === 'string' ? r.guaranteeStatus : 'PENDING',
+      guaranteeType: typeof r.guaranteeType === 'string' ? r.guaranteeType : 'NONE',
+      cardBrand: typeof r.stripeCardBrand === 'string' ? r.stripeCardBrand : null,
+      cardLast4: typeof r.stripeCardLast4 === 'string' ? r.stripeCardLast4 : null,
+      folio,
     },
   };
 }

@@ -10,6 +10,7 @@ import {
   type FoToolName,
   type GenerateReportInput,
   type GetFolioInput,
+  type GetReservationInput,
   type QueryAvailabilityInput,
   type ListRoomTypesInput,
   type RecallGuestHistoryInput,
@@ -163,6 +164,15 @@ export class FoToolRouter {
       case 'get_folio': {
         const i = input as GetFolioInput;
         return this.folio.findByReservationCode(
+          user,
+          correlationId,
+          i.propertyId,
+          i.reservationCode,
+        );
+      }
+      case 'get_reservation': {
+        const i = input as GetReservationInput;
+        return this.reservations.findByCode(
           user,
           correlationId,
           i.propertyId,

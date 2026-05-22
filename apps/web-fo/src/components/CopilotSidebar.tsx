@@ -5,6 +5,7 @@ import type { CopilotSession } from '@/lib/api';
 import { streamCopilotMessage } from '@/lib/copilot-stream';
 import { CopilotAvailabilityWidget } from './CopilotAvailabilityWidget';
 import { CopilotFolioWidget } from './CopilotFolioWidget';
+import { CopilotReservationWidget } from './CopilotReservationWidget';
 
 /**
  * Aubergine FO copilot. The component owns its own session lifecycle:
@@ -190,6 +191,8 @@ export default function CopilotSidebar() {
                     return <CopilotAvailabilityWidget key={idx} widget={w} />;
                   if (w.kind === 'folio')
                     return <CopilotFolioWidget key={idx} widget={w} />;
+                  if (w.kind === 'reservation')
+                    return <CopilotReservationWidget key={idx} widget={w} />;
                   return null;
                 })}
                 {m.pendingToolId && (

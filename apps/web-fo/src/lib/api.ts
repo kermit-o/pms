@@ -871,7 +871,40 @@ export interface CopilotFolioWidget {
   };
 }
 
-export type CopilotWidget = CopilotAvailabilityWidget | CopilotFolioWidget;
+export interface CopilotReservationWidget {
+  kind: 'reservation';
+  data: {
+    reservationId: string;
+    reservationCode: string;
+    status: string;
+    arrival: string;
+    departure: string;
+    nights: number;
+    adults: number;
+    children: number;
+    totalAmount: string;
+    currency: string;
+    roomTypeCode: string;
+    roomTypeName: string;
+    roomNumber: string | null;
+    guest: {
+      firstName: string;
+      lastName: string;
+      email: string | null;
+      phone: string | null;
+    } | null;
+    guaranteeStatus: string;
+    guaranteeType: string;
+    cardBrand: string | null;
+    cardLast4: string | null;
+    folio: { id: string; status: string; balance: string; currency: string } | null;
+  };
+}
+
+export type CopilotWidget =
+  | CopilotAvailabilityWidget
+  | CopilotFolioWidget
+  | CopilotReservationWidget;
 
 export interface CopilotMessage {
   id: string;

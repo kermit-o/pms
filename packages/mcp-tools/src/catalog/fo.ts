@@ -119,6 +119,13 @@ export const getFolioInput = z.object({
 });
 export type GetFolioInput = z.infer<typeof getFolioInput>;
 
+export const getReservationInput = z.object({
+  propertyId: z.string().uuid(),
+  /** Código humano de la reserva, ej. "BBM01-AB12". */
+  reservationCode: z.string().min(1).max(40),
+});
+export type GetReservationInput = z.infer<typeof getReservationInput>;
+
 export const assignRoomInput = z.object({
   reservationId: z.string().uuid(),
   roomId: z.string().uuid(),
@@ -216,6 +223,14 @@ export const foToolCatalog = {
     description:
       'Read-only: returns the folio of a reservation by its human code (e.g. "BBM01-AB12"). Use this when the operator asks "¿qué debe la reserva X?", "saldo de la habitación 203", "movimientos del folio de Pérez". Returns balance, status, currency and the full list of entries (charges + payments). The UI renders the result as a structured card — your reply should be a 1-2 sentence summary, not a re-render of the data.',
     inputSchema: getFolioInput,
+    mutating: false,
+    financial: false,
+  },
+  get_reservation: {
+    name: 'get_reservation',
+    description:
+      'Read-only: returns the full reservation detail (status, dates, guest, room type, room number if assigned, total, guarantee, balance) by its human code (e.g. "BBM01-AB12"). Use when the operator asks "abre la reserva X", "ver la reserva de Pérez", "estado de BBM01-AB12". The UI renders the result as a structured summary card — your reply should be a 1-2 sentence summary, NOT a re-render of fields.',
+    inputSchema: getReservationInput,
     mutating: false,
     financial: false,
   },
