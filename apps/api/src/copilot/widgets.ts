@@ -17,6 +17,7 @@ import type {
   CopilotWidget,
   FolioEntry,
   HskTaskRow,
+  MovementRow,
   ReservationWidgetData,
 } from '@pms/copilot-widget-types';
 
@@ -28,6 +29,8 @@ export type {
   FolioWidgetData,
   HskTaskRow,
   HskTasksWidgetData,
+  MovementRow,
+  MovementsWidgetData,
   ReservationWidgetData,
 } from '@pms/copilot-widget-types';
 
@@ -56,6 +59,8 @@ export function extractWidgetFromTool(
       return buildReservationWidget(toolResult);
     case 'hsk_list_today':
       return buildHskTasksWidget(toolInput, toolResult);
+    case 'list_movements':
+      return buildMovementsWidget(toolResult);
     default:
       return null;
   }
@@ -292,6 +297,53 @@ function buildHskTasksWidget(
       businessDate: inputDate,
       rows,
       counts,
+    },
+  };
+}
+
+function buildMovementsWidget(toolResult: unknown): CopilotWidget | null {
+  if (!toolResult || typeof toolResult !== 'object') return null;
+  const r = toolResult as Record<string, unknown>;
+  if (
+    (r.direction !== 'arrival' && r.direction !== 'departure') ||
+    typeof r.date !== 'string' ||
+    !Array.isArray(r.items)
+  ) {
+    return null;
+  }
+  const rows: MovementRow[] = [];
+  for (const raw of r.items) {
+    const it = raw as Record<string, unknown>;
+    if (
+      typeof it.id !== 'string' ||
+      typeof it.code !== 'string' ||
+      typeof it.status !== 'string'
+    ) {
+      return null;
+    }
+    const guest = it.primaryGuest as Record<string, unknown> | null | undefined;
+    rows.push({
+      reservationId: it.id,
+      reservationCode: it.code,
+      guestFirstName: guest && typeof guest.firstName === 'string' ? guest.firstName : null,
+      guestLastName: guest && typeof guest.lastName === 'string' ? guest.lastName : null,
+      roomNumber: typeof it.roomNumber === 'string' ? it.roomNumber : null,
+      roomTypeCode: typeof it.roomTypeCode === 'string' ? it.roomTypeCode : null,
+      adults: typeof it.adults === 'number' ? it.adults : 0,
+      children: typeof it.children === 'number' ? it.children : 0,
+      totalAmount: typeof it.totalAmount === 'string' ? it.totalAmount : '0',
+      currency: typeof it.currency === 'string' ? it.currency : 'EUR',
+      status: it.status,
+      guaranteeStatus: typeof it.guaranteeStatus === 'string' ? it.guaranteeStatus : 'PENDING',
+      folioBalance: typeof it.folioBalance === 'string' ? it.folioBalance : null,
+    });
+  }
+  return {
+    kind: 'movements',
+    data: {
+      direction: r.direction,
+      businessDate: r.date,
+      rows,
     },
   };
 }

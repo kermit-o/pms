@@ -80,6 +80,94 @@ Una o dos frases.
 
 ---
 
+## 2026-05-22 · [FEAT] · Copilot widget — movements (arrivals + departures)
+
+**Scope:** `packages/copilot-widget-types`, `packages/mcp-tools`,
+`apps/api/src/copilot`, `apps/web-fo/src/components`
+**Branch:** `claude/copilot-widget-arrivals-departures` (sobre csv-export)
+**Refs:** dos consultas más frecuentes del recepcionista del turno
+mañana ("qué llegadas hay hoy") y del turno tarde ("quién se va").
+Un único tool + un único widget cubre las dos.
+
+**Qué cambió.**
+
+- **Tool nuevo `list_movements`** (read-only):
+  - Input `{ propertyId, direction: 'arrival'|'departure', date? }`.
+  - Description orienta al LLM: "use direction='arrival' para
+    '¿qué llegadas hay hoy?'; direction='departure' para
+    '¿quién se va hoy?'. Default date = today."
+  - Decisión: un tool con `direction` enum en lugar de 2 tools
+    separados — menos catálogo, mismo LLM-discoverability.
+- **Router**: el case usa `reservations.list()` existente
+  con filtros que dependen de `direction`:
+  - arrival → `arrivalFrom = arrivalTo = date`, status
+    `CONFIRMED,PENDING`.
+  - departure → `departureFrom = departureTo = date`, status
+    `CHECKED_IN`.
+  Devuelve `{ direction, date, items }` — el extractor lee la
+  intención del propio result, no del input.
+- **Tipos compartidos** `packages/copilot-widget-types`:
+  - Quinta variante: `{ kind: 'movements'; data: MovementsWidgetData }`.
+  - `MovementsWidgetData { direction, businessDate, rows[] }`.
+  - `MovementRow` con `reservationCode`, guest first/last,
+    `roomNumber`, `roomTypeCode`, pax, total, currency, status,
+    `guaranteeStatus`, `folioBalance`.
+- **Widget extractor**: `buildMovementsWidget` valida
+  defensivamente `direction` enum + array `items`; cada row exige
+  id/code/status. Devuelve `null` si la forma no encaja.
+- **Componente UI** `CopilotMovementsWidget`:
+  - Header con `direction` (Llegadas / Salidas) + counter chip.
+  - Lista hasta 12 movements, cada uno con:
+    - chip habitación (o "sin hab." si no asignada),
+    - guest "Apellido, Nombre",
+    - código de reserva en mono,
+    - meta line con roomType + pax + total.
+    - badge ámbar "GAR" si arrival con `guaranteeStatus !== 'SECURED'`
+      (aviso al recepcionista: pedir tarjeta al check-in).
+    - badge rosa con balance si departure con saldo pendiente
+      (aviso: cobrar antes de check-out).
+    - botón "Ver" → ficha de reserva.
+  - Si > 12: link a `/arrivals` o `/departures` según direction.
+- **Wired** en `CopilotSidebar` + `/admin/copilot/sessions/[id]`.
+
+**Por qué.**
+
+Llegadas y salidas son las dos consultas operacionales más repetidas
+del front-desk a lo largo del día. Antes el LLM listaba reservas en
+texto plano (alto coste de tokens + riesgo de omitir un nombre o
+confundir habitación). Con el widget el operador ve la lista
+escaneable en 2 segundos, y los badges de "garantía pendiente" /
+"saldo pendiente" hacen visibles las acciones que tiene que tomar
+sin pedírselas al Copilot.
+
+**Archivos clave.**
+
+- `packages/copilot-widget-types/src/index.ts` (+ MovementRow,
+  MovementsWidgetData, kind 'movements')
+- `packages/mcp-tools/src/catalog/fo.ts` (+ tool + input)
+- `packages/mcp-tools/src/index.ts` (re-export)
+- `apps/api/src/copilot/tool-router.ts` (case)
+- `apps/api/src/copilot/widgets.ts` (extractor + re-export tipos)
+- `apps/api/src/copilot/widgets.spec.ts` (+5 tests)
+- `apps/web-fo/src/lib/api.ts` (CopilotMovementsWidget alias)
+- `apps/web-fo/src/components/CopilotMovementsWidget.tsx` (nuevo)
+- `apps/web-fo/src/components/CopilotSidebar.tsx` (wiring)
+- `apps/web-fo/src/app/admin/copilot/sessions/[id]/page.tsx` (wiring)
+
+**Tests.**
+
+- 357/357 verdes (+5: arrival/departure happy paths, vacío,
+  direction inválida, items malformados). Typecheck + lint verdes
+  api + web-fo. Sin deps ni migraciones.
+
+**Sigue pendiente.**
+
+- **Widget `suggest_assignments`** (HSK supervisor) — completa la
+  cobertura de los tools que ya existen.
+- **Persistencia opt-in pendingTools** — sólo si el negocio lo pide.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot admin — export CSV del listado filtrado
 
 **Scope:** `apps/api/src/copilot`, `apps/web-fo/src/app/admin/copilot`,

@@ -333,4 +333,112 @@ describe('extractWidgetFromTool', () => {
     const broken = [{ id: 't-1', taskType: 'INSPECTION' }]; // sin status
     expect(extractWidgetFromTool('hsk_list_today', {}, broken)).toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // list_movements widget (arrivals / departures).
+  // ---------------------------------------------------------------------------
+
+  const sampleMovement = {
+    direction: 'arrival',
+    date: '2026-05-22',
+    items: [
+      {
+        id: 'r-1',
+        code: 'BBM01-AB12',
+        status: 'CONFIRMED',
+        arrivalDate: '2026-05-22',
+        departureDate: '2026-05-24',
+        adults: 2,
+        children: 0,
+        roomTypeId: 'rt-dbl',
+        roomTypeCode: 'DBL',
+        roomTypeName: 'Doble',
+        roomNumber: '203',
+        totalAmount: '190.00',
+        currency: 'EUR',
+        guaranteeStatus: 'SECURED',
+        folioBalance: '190.00',
+        primaryGuest: {
+          id: 'g-1',
+          firstName: 'María',
+          lastName: 'Pérez',
+          email: 'm@example.com',
+          phone: null,
+          membershipLevel: null,
+        },
+      },
+      {
+        id: 'r-2',
+        code: 'BBM01-CD34',
+        status: 'PENDING',
+        arrivalDate: '2026-05-22',
+        departureDate: '2026-05-23',
+        adults: 1,
+        children: 0,
+        roomTypeId: 'rt-ind',
+        roomTypeCode: 'IND',
+        roomTypeName: 'Individual',
+        roomNumber: null,
+        totalAmount: '60.00',
+        currency: 'EUR',
+        guaranteeStatus: 'PENDING',
+        folioBalance: '60.00',
+        primaryGuest: {
+          id: 'g-2',
+          firstName: 'Pedro',
+          lastName: 'Gómez',
+          email: null,
+          phone: null,
+          membershipLevel: null,
+        },
+      },
+    ],
+  };
+
+  it('builds a movements widget para arrival', () => {
+    const widget = extractWidgetFromTool('list_movements', {}, sampleMovement);
+    expect(widget).not.toBeNull();
+    if (widget?.kind === 'movements') {
+      expect(widget.data.direction).toBe('arrival');
+      expect(widget.data.businessDate).toBe('2026-05-22');
+      expect(widget.data.rows).toHaveLength(2);
+      expect(widget.data.rows[0]!.guestLastName).toBe('Pérez');
+      expect(widget.data.rows[0]!.roomNumber).toBe('203');
+      expect(widget.data.rows[1]!.roomNumber).toBeNull();
+    }
+  });
+
+  it('movements widget también funciona para departure', () => {
+    const widget = extractWidgetFromTool('list_movements', {}, {
+      ...sampleMovement,
+      direction: 'departure',
+    });
+    if (widget?.kind === 'movements') {
+      expect(widget.data.direction).toBe('departure');
+    }
+  });
+
+  it('movements widget acepta items vacío (confirma 0 llegadas)', () => {
+    const widget = extractWidgetFromTool('list_movements', {}, {
+      direction: 'arrival',
+      date: '2026-05-22',
+      items: [],
+    });
+    if (widget?.kind === 'movements') {
+      expect(widget.data.rows).toHaveLength(0);
+    }
+  });
+
+  it('movements widget rechaza direction inválida', () => {
+    const broken = { ...sampleMovement, direction: 'sideways' };
+    expect(extractWidgetFromTool('list_movements', {}, broken)).toBeNull();
+  });
+
+  it('movements widget rechaza items sin id/code/status', () => {
+    const broken = {
+      ...sampleMovement,
+      items: [{ id: 'r-x', code: 'X' }], // sin status
+    };
+    expect(extractWidgetFromTool('list_movements', {}, broken)).toBeNull();
+  });
 });

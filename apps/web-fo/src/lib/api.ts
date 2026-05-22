@@ -836,9 +836,11 @@ export type CopilotAvailabilityWidget = Extract<CopilotWidget, { kind: 'availabi
 export type CopilotFolioWidget = Extract<CopilotWidget, { kind: 'folio' }>;
 export type CopilotReservationWidget = Extract<CopilotWidget, { kind: 'reservation' }>;
 export type CopilotHskTasksWidget = Extract<CopilotWidget, { kind: 'hsk_tasks' }>;
+export type CopilotMovementsWidget = Extract<CopilotWidget, { kind: 'movements' }>;
 export type CopilotAvailabilityRow = CopilotAvailabilityWidget['data']['rows'][number];
 export type CopilotFolioEntry = CopilotFolioWidget['data']['entries'][number];
 export type CopilotHskTaskRow = CopilotHskTasksWidget['data']['rows'][number];
+export type CopilotMovementRow = CopilotMovementsWidget['data']['rows'][number];
 
 export interface CopilotMessage {
   id: string;

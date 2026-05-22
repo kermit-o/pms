@@ -6,6 +6,7 @@ import { streamCopilotMessage } from '@/lib/copilot-stream';
 import { CopilotAvailabilityWidget } from './CopilotAvailabilityWidget';
 import { CopilotFolioWidget } from './CopilotFolioWidget';
 import { CopilotHskTasksWidget } from './CopilotHskTasksWidget';
+import { CopilotMovementsWidget } from './CopilotMovementsWidget';
 import { CopilotReservationWidget } from './CopilotReservationWidget';
 
 /**
@@ -196,6 +197,8 @@ export default function CopilotSidebar() {
                     return <CopilotReservationWidget key={idx} widget={w} />;
                   if (w.kind === 'hsk_tasks')
                     return <CopilotHskTasksWidget key={idx} widget={w} />;
+                  if (w.kind === 'movements')
+                    return <CopilotMovementsWidget key={idx} widget={w} />;
                   return null;
                 })}
                 {m.pendingToolId && (

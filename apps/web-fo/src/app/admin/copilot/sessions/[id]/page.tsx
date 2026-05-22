@@ -5,6 +5,7 @@ import { ApiError, getCopilotSession, type CopilotSession } from '@/lib/api';
 import { CopilotAvailabilityWidget } from '@/components/CopilotAvailabilityWidget';
 import { CopilotFolioWidget } from '@/components/CopilotFolioWidget';
 import { CopilotHskTasksWidget } from '@/components/CopilotHskTasksWidget';
+import { CopilotMovementsWidget } from '@/components/CopilotMovementsWidget';
 import { CopilotReservationWidget } from '@/components/CopilotReservationWidget';
 
 export const dynamic = 'force-dynamic';
@@ -86,6 +87,8 @@ export default async function CopilotSessionAdminDetailPage({ params }: Props) {
                 return <CopilotReservationWidget key={idx} widget={w} />;
               if (w.kind === 'hsk_tasks')
                 return <CopilotHskTasksWidget key={idx} widget={w} />;
+              if (w.kind === 'movements')
+                return <CopilotMovementsWidget key={idx} widget={w} />;
               return null;
             })}
           </li>
