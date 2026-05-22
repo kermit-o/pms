@@ -80,6 +80,89 @@ Una o dos frases.
 
 ---
 
+## 2026-05-22 · [FEAT] · Copilot — tabla `copilot_sessions` (propertyId sobrevive a reload)
+
+**Scope:** `packages/db`, `apps/api/src/copilot`
+**Branch:** `claude/copilot-persist-session-property` (sobre suggest)
+**Refs:** cierra la limitación documentada en el slice de
+reload-from-DB: hasta este commit, tras reiniciar el proceso la
+sesión hidratada perdía `propertyId` (no había dónde persistirlo)
+y el LLM tenía que preguntar al usuario "¿qué propiedad?" en su
+siguiente turno.
+
+**Qué cambió.**
+
+- **Migración** `20260622000000_copilot_sessions`:
+  - Nueva tabla pequeña `copilot_sessions(id, tenant_id, user_id,
+    property_id NULL, created_at, deleted_at NULL)`.
+  - FK cascada por tenant, índice `(tenant_id, created_at)`.
+  - **No** hay FK física `copilot_messages.session_id ↔
+    copilot_sessions.id` para no romper el insert-order existente
+    (el primer mensaje se persiste antes de existir la sesión en
+    el peor caso).
+- **Prisma schema**: `model CopilotSession` + back-relation
+  `copilotSessions` en `Tenant`.
+- **`CopilotService.createSession`**: tras escribir la sesión en
+  el `Map` in-memory, dispara un `persistSessionShell` best-effort
+  (no bloquea el response del POST). Si DB falla, la sesión vive
+  sólo en memoria (mismo comportamiento que antes del commit).
+- **`loadSessionFromDb`**: carga shell + mensajes en paralelo
+  (`Promise.all`).
+  - Si hay shell → usa `shell.propertyId`, `shell.userId`,
+    `shell.createdAt`.
+  - Si no hay shell pero sí mensajes → retro-compat, usa los del
+    primer mensaje (igual que antes), `propertyId=null`.
+  - Si no hay nada → null (404).
+- Comentario JSDoc del `requireSession` queda obsoleto pero la
+  limitación de pendingTools se mantiene (no se persisten).
+
+**Por qué.**
+
+Tras un deploy a Fly los operadores notaban que el Copilot "perdía
+contexto" — pedía la propiedad de nuevo. Diagnóstico: el reload
+recreaba la sesión sin `propertyId`. Con esta tabla pequeña el
+contexto sobrevive sin tocar el flujo de inserts de mensajes.
+
+Decisiones de diseño:
+- **Sin FK física** entre messages y sessions: el `Map.set` +
+  insert de primer mensaje deben funcionar aunque el insert del
+  shell falle. Mejor consistencia eventual que bloqueos.
+- **Best-effort en createSession**: el `await
+  prisma.session.create` lo evitamos para no encolar latencia en
+  el response. Si la persistencia falla, log warn + sesión sólo
+  en memoria (pre-commit behavior). El operador notará la pérdida
+  tras reload, no antes.
+- **Retro-compat con sesiones pre-migración**: el load fallback
+  a propertyId=null si no hay shell row, así no rompemos sesiones
+  ya existentes en DB.
+
+**Archivos clave.**
+
+- `packages/db/prisma/migrations/20260622000000_copilot_sessions/migration.sql`
+- `packages/db/prisma/schema.prisma` (modelo + back-rel)
+- `apps/api/src/copilot/copilot.service.ts`
+  (`persistSessionShell` + `loadSessionFromDb` con Promise.all)
+- `apps/api/src/copilot/copilot.service.spec.ts` (+3 tests
+  + mock `copilotSession.create/findFirst`)
+
+**Tests.**
+
+- 362/362 verdes (+3: createSession persiste shell con propertyId,
+  reload hidrata propertyId desde shell, fallback a null sin shell).
+  Typecheck + lint verdes. Migración forward-only segura.
+
+**Sigue pendiente.**
+
+- **Persistencia opt-in pendingTools** — la única limitación
+  documentada que queda en `requireSession`. Sólo si el negocio
+  lo pide (tras reload el mensaje de la propuesta queda sin
+  botones Approve/Reject; el operador re-propone). Aceptable como
+  está hoy.
+- **Widgets adicionales** (forecast_demand, recall_guest_history)
+  como estiramiento — patrón rodado.
+
+---
+
 ## 2026-05-22 · [FEAT] · Copilot widget — hsk_suggest (planificación HSK supervisor)
 
 **Scope:** `packages/copilot-widget-types`, `apps/api/src/housekeeping`,

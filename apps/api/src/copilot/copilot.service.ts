@@ -63,7 +63,33 @@ export class CopilotService {
       pendingTools: new Map(),
       createdAt: new Date(),
     });
+    // Sprint 13 — persistir la sesión en DB para que sobreviva al
+    // reinicio del proceso conservando su `propertyId`. Best-effort:
+    // si la DB falla la sesión vive sólo en memoria (mismo
+    // comportamiento que hasta este commit). El log queda visible
+    // para diagnóstico.
+    void this.persistSessionShell(user, sessionId, propertyId).catch((err) =>
+      this.log.warn(`copilot.session persist failed (non-fatal) ${sessionId}: ${(err as Error).message}`),
+    );
     return { sessionId };
+  }
+
+  private async persistSessionShell(
+    user: AuthUser,
+    sessionId: string,
+    propertyId: string | undefined,
+  ): Promise<void> {
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: sessionId };
+    await this.prisma.withTenant(ctx, (tx) =>
+      tx.copilotSession.create({
+        data: {
+          id: sessionId,
+          tenantId: user.tenantId,
+          userId: user.sub,
+          propertyId: propertyId ?? null,
+        },
+      }),
+    );
   }
 
   async getSession(user: AuthUser, sessionId: string): Promise<SessionView> {
@@ -572,37 +598,48 @@ export class CopilotService {
     sessionId: string,
   ): Promise<Session | null> {
     const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: sessionId };
-    const rows = await this.prisma.withTenant(ctx, (tx) =>
-      tx.copilotMessage.findMany({
-        where: { sessionId },
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          role: true,
-          contentText: true,
-          widgets: true,
-          createdAt: true,
-          userId: true,
-        },
-      }),
-    );
-    if (rows.length === 0) return null;
-    const messages: SessionMessage[] = rows.map((r) => ({
-      id: r.id,
-      role: r.role === CopilotMessageRole.USER ? 'user' : 'assistant',
-      content: r.contentText ?? '',
-      widgets: rowWidgets(r.widgets),
-      createdAt: r.createdAt,
-    }));
-    return {
-      id: sessionId,
-      tenantId: user.tenantId,
-      userId: rows[0]!.userId,
-      propertyId: null,
-      messages,
-      pendingTools: new Map(),
-      createdAt: rows[0]!.createdAt,
-    };
+    return this.prisma.withTenant(ctx, async (tx) => {
+      // Sprint 13 — preferimos cargar el shell (con propertyId) si
+      // existe. Sin shell sólo tenemos los mensajes; el cliente verá
+      // propertyId=null como antes (retro-compat con sesiones
+      // creadas antes de la migración).
+      const [shell, rows] = await Promise.all([
+        tx.copilotSession.findFirst({
+          where: { id: sessionId, deletedAt: null },
+          select: { propertyId: true, userId: true, createdAt: true },
+        }),
+        tx.copilotMessage.findMany({
+          where: { sessionId },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            role: true,
+            contentText: true,
+            widgets: true,
+            createdAt: true,
+            userId: true,
+          },
+        }),
+      ]);
+      // Si no hay shell NI mensajes, no es una sesión real.
+      if (!shell && rows.length === 0) return null;
+      const messages: SessionMessage[] = rows.map((r) => ({
+        id: r.id,
+        role: r.role === CopilotMessageRole.USER ? 'user' : 'assistant',
+        content: r.contentText ?? '',
+        widgets: rowWidgets(r.widgets),
+        createdAt: r.createdAt,
+      }));
+      return {
+        id: sessionId,
+        tenantId: user.tenantId,
+        userId: shell?.userId ?? rows[0]?.userId ?? user.sub,
+        propertyId: shell?.propertyId ?? null,
+        messages,
+        pendingTools: new Map(),
+        createdAt: shell?.createdAt ?? rows[0]?.createdAt ?? new Date(),
+      };
+    });
   }
 }
 

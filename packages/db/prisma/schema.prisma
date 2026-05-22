@@ -56,6 +56,7 @@ model Tenant {
   devicePairings      DevicePairing[]
   cancellationPolicies CancellationPolicy[]
   copilotMessages     CopilotMessage[]
+  copilotSessions     CopilotSession[]
   guestMemoryChunks   GuestMemoryChunk[]
 
   @@map("tenants")
@@ -1043,6 +1044,26 @@ model DevicePairing {
 // caliente (cada turno); rotacion via job NA cuando la politica del tenant
 // lo exija. Ver docs/SPRINT-6-PLAN.md §2.2.
 // ----------------------------------------------------------------------------
+
+/// Sprint 13 — Sesión del Copilot. Antes el `sessionId` sólo vivía
+/// como columna del primer mensaje en `copilot_messages`, lo que
+/// obligaba a perder `propertyId` al recargar. Esta tabla pequeña
+/// cierra el hueco sin tocar el flujo de creación de mensajes (no
+/// hay FK física entre messages.sessionId y sessions.id para
+/// preservar el orden de inserts).
+model CopilotSession {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  propertyId String?   @map("property_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("copilot_sessions")
+}
 
 model CopilotMessage {
   id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

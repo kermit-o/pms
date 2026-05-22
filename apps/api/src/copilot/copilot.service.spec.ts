@@ -55,6 +55,8 @@ function buildService() {
   const findManyMock = vi.fn().mockResolvedValue([] as unknown[]);
   const groupByMock = vi.fn().mockResolvedValue([] as unknown[]);
   const userFindManyMock = vi.fn().mockResolvedValue([] as unknown[]);
+  const sessionFindFirstMock = vi.fn().mockResolvedValue(null as unknown);
+  const sessionCreateMock = vi.fn().mockResolvedValue({});
   const prisma = {
     withTenant: vi.fn(async (_ctx, fn: (tx: unknown) => Promise<unknown>) =>
       fn({
@@ -62,6 +64,10 @@ function buildService() {
           create: vi.fn().mockResolvedValue({}),
           findMany: findManyMock,
           groupBy: groupByMock,
+        },
+        copilotSession: {
+          findFirst: sessionFindFirstMock,
+          create: sessionCreateMock,
         },
         user: {
           findMany: userFindManyMock,
@@ -80,7 +86,15 @@ function buildService() {
     adapter as never,
     metrics as never,
   );
-  return { service, resolver, findManyMock, groupByMock, userFindManyMock };
+  return {
+    service,
+    resolver,
+    findManyMock,
+    groupByMock,
+    userFindManyMock,
+    sessionFindFirstMock,
+    sessionCreateMock,
+  };
 }
 
 describe('CopilotService', () => {
@@ -486,5 +500,59 @@ describe('CopilotService', () => {
     groupByMock.mockResolvedValueOnce([]);
     const out = await service.listSessionUsers(user);
     expect(out).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 13 — copilot_sessions shell: propertyId sobrevive al reload.
+  // ---------------------------------------------------------------------------
+
+  it('createSession persiste un shell row con propertyId', async () => {
+    const { service, sessionCreateMock } = buildService();
+    const { sessionId } = service.createSession(user, PROPERTY_ID);
+    // El persist es best-effort + async; esperamos a que la promesa
+    // pendiente se ejecute.
+    await new Promise((r) => setImmediate(r));
+    expect(sessionCreateMock).toHaveBeenCalledOnce();
+    const created = sessionCreateMock.mock.calls[0]![0]!.data;
+    expect(created.id).toBe(sessionId);
+    expect(created.propertyId).toBe(PROPERTY_ID);
+  });
+
+  it('reload hidrata propertyId desde el shell row', async () => {
+    const { service, sessionFindFirstMock, findManyMock } = buildService();
+    sessionFindFirstMock.mockResolvedValueOnce({
+      propertyId: PROPERTY_ID,
+      userId: user.sub,
+      createdAt: new Date('2026-05-22T08:00:00Z'),
+    });
+    findManyMock.mockResolvedValueOnce([
+      {
+        id: 'msg-1',
+        role: 'USER',
+        contentText: '¿llegadas hoy?',
+        widgets: null,
+        userId: user.sub,
+        createdAt: new Date('2026-05-22T08:00:00Z'),
+      },
+    ]);
+    const view = await service.getSession(user, 'persisted-session');
+    expect(view.propertyId).toBe(PROPERTY_ID);
+  });
+
+  it('reload sin shell pero con mensajes: propertyId=null (retro-compat)', async () => {
+    const { service, sessionFindFirstMock, findManyMock } = buildService();
+    sessionFindFirstMock.mockResolvedValueOnce(null);
+    findManyMock.mockResolvedValueOnce([
+      {
+        id: 'msg-1',
+        role: 'USER',
+        contentText: 'qué',
+        widgets: null,
+        userId: user.sub,
+        createdAt: new Date('2026-05-22T08:00:00Z'),
+      },
+    ]);
+    const view = await service.getSession(user, 'pre-migration-session');
+    expect(view.propertyId).toBeNull();
   });
 });
