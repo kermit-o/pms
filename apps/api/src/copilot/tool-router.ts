@@ -11,6 +11,7 @@ import {
   type GenerateReportInput,
   type GetFolioInput,
   type GetReservationInput,
+  type ListMovementsInput,
   type QueryAvailabilityInput,
   type ListRoomTypesInput,
   type RecallGuestHistoryInput,
@@ -178,6 +179,25 @@ export class FoToolRouter {
           i.propertyId,
           i.reservationCode,
         );
+      }
+      case 'list_movements': {
+        const i = input as ListMovementsInput;
+        const date = i.date ?? new Date().toISOString().slice(0, 10);
+        // Para arrivals: reservas CONFIRMED/PENDING con arrivalDate=date.
+        // Para departures: reservas CHECKED_IN con departureDate=date.
+        const arrivals = i.direction === 'arrival';
+        const out = await this.reservations.list(user, correlationId, {
+          propertyId: i.propertyId,
+          arrivalFrom: arrivals ? date : undefined,
+          arrivalTo: arrivals ? date : undefined,
+          departureFrom: arrivals ? undefined : date,
+          departureTo: arrivals ? undefined : date,
+          status: arrivals ? 'CONFIRMED,PENDING' : 'CHECKED_IN',
+          limit: '100',
+        });
+        // El widget extractor lee `direction` desde el toolInput; pasamos
+        // los items tal cual del list (rico, incluye roomNumber + guest).
+        return { direction: i.direction, date, items: out.items };
       }
       case 'add_folio_charge': {
         const i = input as AddFolioChargeInput;

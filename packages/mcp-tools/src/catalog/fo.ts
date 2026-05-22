@@ -126,6 +126,16 @@ export const getReservationInput = z.object({
 });
 export type GetReservationInput = z.infer<typeof getReservationInput>;
 
+export const listMovementsInput = z.object({
+  propertyId: z.string().uuid(),
+  /** 'arrival' = llegadas previstas (CONFIRMED/PENDING con arrivalDate);
+   *  'departure' = salidas previstas (CHECKED_IN con departureDate). */
+  direction: z.enum(['arrival', 'departure']),
+  /** Fecha business YYYY-MM-DD; default hoy. */
+  date: isoDate.optional(),
+});
+export type ListMovementsInput = z.infer<typeof listMovementsInput>;
+
 export const assignRoomInput = z.object({
   reservationId: z.string().uuid(),
   roomId: z.string().uuid(),
@@ -231,6 +241,14 @@ export const foToolCatalog = {
     description:
       'Read-only: returns the full reservation detail (status, dates, guest, room type, room number if assigned, total, guarantee, balance) by its human code (e.g. "BBM01-AB12"). Use when the operator asks "abre la reserva X", "ver la reserva de Pérez", "estado de BBM01-AB12". The UI renders the result as a structured summary card — your reply should be a 1-2 sentence summary, NOT a re-render of fields.',
     inputSchema: getReservationInput,
+    mutating: false,
+    financial: false,
+  },
+  list_movements: {
+    name: 'list_movements',
+    description:
+      'Read-only: lists reservations checking IN or OUT on a given day. Use direction="arrival" for "¿qué llegadas hay hoy?" / "llegadas de mañana"; direction="departure" for "¿quién se va hoy?" / "salidas del jueves". Default date = today. The UI renders the result as a structured card; your reply should be a 1-2 sentence summary, not a re-render of names.',
+    inputSchema: listMovementsInput,
     mutating: false,
     financial: false,
   },

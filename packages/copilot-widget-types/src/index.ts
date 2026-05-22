@@ -122,6 +122,33 @@ export interface HskTasksWidgetData {
 }
 
 // ---------------------------------------------------------------------------
+// movements — list_movements (arrivals + departures con un único tool)
+// ---------------------------------------------------------------------------
+
+export interface MovementRow {
+  reservationId: string;
+  reservationCode: string;
+  guestFirstName: string | null;
+  guestLastName: string | null;
+  roomNumber: string | null;
+  roomTypeCode: string | null;
+  adults: number;
+  children: number;
+  totalAmount: string;
+  currency: string;
+  status: string;
+  guaranteeStatus: string;
+  folioBalance: string | null;
+}
+
+export interface MovementsWidgetData {
+  /** 'arrival' (entradas previstas) o 'departure' (salidas previstas). */
+  direction: 'arrival' | 'departure';
+  businessDate: string;
+  rows: MovementRow[];
+}
+
+// ---------------------------------------------------------------------------
 // Discriminated union — la lista crece añadiendo variantes nuevas.
 // ---------------------------------------------------------------------------
 
@@ -129,6 +156,7 @@ export type CopilotWidget =
   | { kind: 'availability'; data: AvailabilityWidgetData }
   | { kind: 'folio'; data: FolioWidgetData }
   | { kind: 'reservation'; data: ReservationWidgetData }
-  | { kind: 'hsk_tasks'; data: HskTasksWidgetData };
+  | { kind: 'hsk_tasks'; data: HskTasksWidgetData }
+  | { kind: 'movements'; data: MovementsWidgetData };
 
 export type CopilotWidgetKind = CopilotWidget['kind'];
