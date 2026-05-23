@@ -36,13 +36,16 @@ function buildService(opts: { tenant?: unknown; secret?: string; priceId?: strin
   const tenantFindUnique = vi.fn().mockResolvedValue(tenant);
   const tenantUpdate = vi.fn().mockResolvedValue(tenant);
   const tenantUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
-  const prisma = {
+  const prisma: Record<string, unknown> = {
     tenant: {
       findUnique: tenantFindUnique,
       update: tenantUpdate,
       updateMany: tenantUpdateMany,
     },
   };
+  prisma.withTenant = vi.fn(
+    <T,>(_ctx: unknown, fn: (tx: unknown) => Promise<T>): Promise<T> => fn(prisma),
+  );
   const config = {
     get: vi.fn().mockImplementation((key: string) => {
       if (key === 'STRIPE_SECRET_KEY') return opts.secret ?? 'sk_test_x';

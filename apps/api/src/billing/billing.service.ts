@@ -69,18 +69,20 @@ export class BillingService {
    * muestre el CTA "Empezar trial".
    */
   async getSubscription(user: AuthUser): Promise<TenantSubscription> {
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: user.tenantId },
-      select: {
-        id: true,
-        name: true,
-        stripeCustomerId: true,
-        stripeSubscriptionId: true,
-        subscriptionStatus: true,
-        currentPeriodEnd: true,
-        trialEndsAt: true,
-      },
-    });
+    const tenant = await this.prisma.withTenant({ tenantId: user.tenantId }, (tx) =>
+      tx.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: {
+          id: true,
+          name: true,
+          stripeCustomerId: true,
+          stripeSubscriptionId: true,
+          subscriptionStatus: true,
+          currentPeriodEnd: true,
+          trialEndsAt: true,
+        },
+      }),
+    );
     if (!tenant) throw new BadRequestException('Tenant not found');
     return {
       tenantId: tenant.id,
@@ -105,17 +107,19 @@ export class BillingService {
       );
     }
 
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: user.tenantId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        stripeCustomerId: true,
-        stripeSubscriptionId: true,
-        subscriptionStatus: true,
-      },
-    });
+    const tenant = await this.prisma.withTenant({ tenantId: user.tenantId }, (tx) =>
+      tx.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          stripeCustomerId: true,
+          stripeSubscriptionId: true,
+          subscriptionStatus: true,
+        },
+      }),
+    );
     if (!tenant) throw new BadRequestException('Tenant not found');
     if (tenant.stripeSubscriptionId) {
       // Ya existe — devuelve el estado actual sin tocar Stripe.
@@ -159,29 +163,31 @@ export class BillingService {
     );
 
     // 3. Persistir.
-    const updated = await this.prisma.tenant.update({
-      where: { id: tenant.id },
-      data: {
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subscription.id,
-        subscriptionStatus: subscription.status,
-        currentPeriodEnd: subscription.current_period_end
-          ? new Date(subscription.current_period_end * 1000)
-          : null,
-        trialEndsAt: subscription.trial_end
-          ? new Date(subscription.trial_end * 1000)
-          : null,
-      },
-      select: {
-        id: true,
-        name: true,
-        stripeCustomerId: true,
-        stripeSubscriptionId: true,
-        subscriptionStatus: true,
-        currentPeriodEnd: true,
-        trialEndsAt: true,
-      },
-    });
+    const updated = await this.prisma.withTenant({ tenantId: user.tenantId }, (tx) =>
+      tx.tenant.update({
+        where: { id: tenant.id },
+        data: {
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscription.id,
+          subscriptionStatus: subscription.status,
+          currentPeriodEnd: subscription.current_period_end
+            ? new Date(subscription.current_period_end * 1000)
+            : null,
+          trialEndsAt: subscription.trial_end
+            ? new Date(subscription.trial_end * 1000)
+            : null,
+        },
+        select: {
+          id: true,
+          name: true,
+          stripeCustomerId: true,
+          stripeSubscriptionId: true,
+          subscriptionStatus: true,
+          currentPeriodEnd: true,
+          trialEndsAt: true,
+        },
+      }),
+    );
     this.log.log(
       `Subscription created tenant=${tenant.id} sub=${subscription.id} status=${subscription.status}`,
     );
@@ -202,10 +208,12 @@ export class BillingService {
    */
   async createPortalSession(user: AuthUser, returnUrl: string): Promise<{ url: string }> {
     const stripe = this.requireStripe();
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: user.tenantId },
-      select: { stripeCustomerId: true },
-    });
+    const tenant = await this.prisma.withTenant({ tenantId: user.tenantId }, (tx) =>
+      tx.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: { stripeCustomerId: true },
+      }),
+    );
     if (!tenant?.stripeCustomerId) {
       throw new BadRequestException(
         'No subscription. Empieza con "Activar suscripción" antes de abrir el portal.',
@@ -265,17 +273,19 @@ export class BillingService {
       this.log.warn(`Subscription ${sub.id} sin metadata.tenantId — ignored`);
       return;
     }
-    await this.prisma.tenant.updateMany({
-      where: { id: tenantId },
-      data: {
-        stripeSubscriptionId: sub.id,
-        subscriptionStatus: sub.status,
-        currentPeriodEnd: sub.current_period_end
-          ? new Date(sub.current_period_end * 1000)
-          : null,
-        trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
-      },
-    });
+    await this.prisma.withTenant({ tenantId }, (tx) =>
+      tx.tenant.updateMany({
+        where: { id: tenantId },
+        data: {
+          stripeSubscriptionId: sub.id,
+          subscriptionStatus: sub.status,
+          currentPeriodEnd: sub.current_period_end
+            ? new Date(sub.current_period_end * 1000)
+            : null,
+          trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
+        },
+      }),
+    );
     this.log.log(`Subscription sync tenant=${tenantId} status=${sub.status}`);
   }
 }
