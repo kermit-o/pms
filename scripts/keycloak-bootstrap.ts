@@ -31,7 +31,10 @@ const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD ?? 'admin_de
 const REALM = process.env.KEYCLOAK_REALM ?? 'pms';
 const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID ?? 'pms-api';
 const CLIENT_SECRET = process.env.KEYCLOAK_CLIENT_SECRET ?? 'pms-api-dev-secret';
-const DEMO_TENANT_ID = '11111111-1111-1111-1111-111111111111';
+// Debe coincidir con PILOTO_TENANT_ID en scripts/seed-piloto.ts — el demo
+// user se scopea al tenant realmente sembrado en la DB.
+const DEMO_TENANT_ID =
+  process.env.DEMO_TENANT_ID ?? '22222222-2222-2222-2222-222222222222';
 const DEMO_USER_EMAIL = process.env.DEMO_USER_EMAIL ?? 'admin@demo.local';
 const DEMO_USER_PASSWORD = process.env.DEMO_USER_PASSWORD ?? 'demo123';
 
