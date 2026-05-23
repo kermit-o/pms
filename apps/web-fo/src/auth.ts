@@ -7,6 +7,22 @@ import Keycloak from 'next-auth/providers/keycloak';
 // environment (NextAuth surfaces a clear error on first request).
 const keycloakIssuer = process.env.KEYCLOAK_ISSUER ?? 'http://localhost:8080/realms/pms';
 
+// Keycloak pone realm_access.roles en el access token, no en el id_token/profile
+// (el tenant_id sí va al id_token vía protocol-mapper). Para gating de UI
+// decodificamos el payload del access token sin verificar firma — la API
+// revalida la firma en cada request, esto no es un boundary de seguridad.
+function extractRealmRoles(accessToken: string): string[] | null {
+  const parts = accessToken.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const payload = Buffer.from(parts[1]!, 'base64').toString('utf8');
+    const claims = JSON.parse(payload) as { realm_access?: { roles?: string[] } };
+    return Array.isArray(claims.realm_access?.roles) ? claims.realm_access.roles : null;
+  } catch {
+    return null;
+  }
+}
+
 declare module 'next-auth' {
   interface Session {
     accessToken?: string;
@@ -41,15 +57,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           typeof account.expires_at === 'number'
             ? account.expires_at * 1000
             : Date.now() + 60 * 1000;
+        const roles = extractRealmRoles(account.access_token);
+        if (roles) t.roles = roles;
       }
       if (profile && typeof profile === 'object') {
         const claims = profile as Record<string, unknown>;
         if (typeof claims.tenant_id === 'string') {
           t.tenantId = claims.tenant_id;
-        }
-        const realmAccess = claims.realm_access as { roles?: string[] } | undefined;
-        if (Array.isArray(realmAccess?.roles)) {
-          t.roles = realmAccess.roles;
         }
       }
 
@@ -81,6 +95,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             t.accessToken = refreshed.access_token;
             t.accessTokenExpiresAt = Date.now() + refreshed.expires_in * 1000;
             if (refreshed.refresh_token) t.refreshToken = refreshed.refresh_token;
+            const roles = extractRealmRoles(refreshed.access_token);
+            if (roles) t.roles = roles;
             return token;
           }
           // 401/400 → refresh inválido (caducado o revocado). Marca token
