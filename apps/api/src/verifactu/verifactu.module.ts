@@ -8,6 +8,7 @@ import {
   type AeatClient,
 } from './aeat';
 import { InvoiceService } from './invoice.service';
+import { VerifactuController } from './verifactu.controller';
 
 /**
  * Verifactu (ADR-030). Esqueleto del módulo.
@@ -26,6 +27,7 @@ import { InvoiceService } from './invoice.service';
  * sucesivos (issue, submit-worker, certificate-vault).
  */
 @Module({
+  controllers: [VerifactuController],
   providers: [
     StubAeatClient,
     AeatClientFactory,

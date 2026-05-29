@@ -1491,3 +1491,32 @@ export async function updateRatePlan(
     body: JSON.stringify(input),
   });
 }
+
+export interface IssueInvoiceInput {
+  folioId: string;
+  customerName: string;
+  customerNif?: string;
+  customerAddress?: string;
+  series?: string;
+}
+
+export interface IssuedInvoice {
+  id: string;
+  series: string;
+  number: number;
+  invoiceNumber: string;
+  totalAmount: string;
+  status: 'DRAFT' | 'ISSUED' | 'SUBMITTED' | 'ACCEPTED' | 'REJECTED' | 'VOIDED';
+  alreadyExisted: boolean;
+}
+
+export async function issueInvoice(
+  accessToken: string | undefined,
+  input: IssueInvoiceInput,
+): Promise<IssuedInvoice> {
+  return apiFetch(`/verifactu/invoices/issue`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}

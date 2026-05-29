@@ -80,6 +80,59 @@ Una o dos frases.
 
 ---
 
+## 2026-05-29 · [FEAT] · Sprint 14 W2 — Verifactu: HTTP API + proxy back-office
+
+**Scope:** `apps/api/src/verifactu`, `apps/web-fo/src/lib/api.ts`,
+`apps/web-fo/src/app/api/verifactu/invoices/issue`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** continúa la cadena del W2 (último commit del servicio: `4900314`)
+
+**Qué cambió.**
+
+- **`VerifactuController`** (`apps/api/src/verifactu/verifactu.controller.ts`):
+  expone `POST /verifactu/invoices/issue`. RBAC vía `@Roles('tenant_admin',
+  'front_desk')` (los guards globales `JwtAuthGuard` + `RolesGuard` se
+  aplican automáticamente). DTO Zod (`IssueInvoiceDto`) con `safeParse` →
+  `BadRequestException` con detalle de issues.
+- **Proxy Next.js** en `apps/web-fo/src/app/api/verifactu/invoices/issue/route.ts`:
+  inyecta `accessToken` desde la sesión NextAuth y reenvía al API.
+  Traduce `ApiError` → `Response` con el status original.
+- **Helper `lib/api.ts`** (`issueInvoice` + tipos `IssueInvoiceInput`,
+  `IssuedInvoice`) — listo para consumir desde server actions.
+
+**Por qué.**
+
+Sin controller, `InvoiceService.issue()` solo era invocable desde código.
+Con esto, el back-office (y cualquier integración futura: copilot tool,
+script de migración, tests e2e) puede emitir facturas atómicas con la
+misma garantía de idempotencia y RBAC del resto del PMS.
+
+**Archivos clave.**
+
+- `apps/api/src/verifactu/verifactu.controller.ts`
+- `apps/api/src/verifactu/dto.ts` (Zod)
+- `apps/api/src/verifactu/verifactu.module.ts` (controllers registry)
+- `apps/web-fo/src/app/api/verifactu/invoices/issue/route.ts` (proxy)
+- `apps/web-fo/src/lib/api.ts` (helper)
+
+**Tests.**
+
+- Verifactu suite sigue 18/18 verde (la lógica testeada — DTO Zod + service
+  — no cambia). Sin controller spec: el controller es un thin wrapper sin
+  ramas adicionales; Zod y el service ya están cubiertos.
+- Typecheck `@pms/api`, `@pms/web-fo` y lint `@pms/api`: verdes.
+
+**Sigue pendiente (commits sucesivos en esta misma rama).**
+
+- UI server action en `apps/web-fo/src/app/folios/[id]` (botón "Emitir
+  factura") que invoque la ruta proxy nueva.
+- Signer XAdES-BES + descifrado on-demand del `.p12`.
+- `SubmitWorker` consumer JetStream + retries + DLQ tras 6 fallos.
+- `PreprodAeatClient` HTTP real.
+- UI `/admin/billing/certificate` (subida del `.p12`).
+
+---
+
 ## 2026-05-29 · [FEAT] · Sprint 14 W2 — Verifactu: InvoiceService.issue() emite la factura legal
 
 **Scope:** `apps/api/src/verifactu`, `packages/eventbus/src/catalog`,
