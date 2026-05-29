@@ -7,6 +7,7 @@ import {
   StubAeatClient,
   type AeatClient,
 } from './aeat';
+import { InvoiceService } from './invoice.service';
 
 /**
  * Verifactu (ADR-030). Esqueleto del módulo.
@@ -33,8 +34,9 @@ import {
       useFactory: (factory: AeatClientFactory): AeatClient => factory.build(),
       inject: [AeatClientFactory],
     },
+    InvoiceService,
   ],
-  exports: [AEAT_CLIENT],
+  exports: [AEAT_CLIENT, InvoiceService],
 })
 export class VerifactuModule implements OnModuleInit {
   private readonly log = new Logger(VerifactuModule.name);
