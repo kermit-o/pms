@@ -1,6 +1,6 @@
 # ADR-030 — Arquitectura Verifactu (e-invoicing AEAT)
 
-- **Status:** Proposed — pendiente aprobación PO antes de scaffolding del módulo.
+- **Status:** Accepted (2026-05-29, PO Outman El Ouary Achi).
 - **Date:** 2026-05-29
 - **Sprint:** S14 W2 (`claude/s14-w2-verifactu`)
 - **Driver:** RD 1007/2023 obliga a emitir facturas verificables (envío en
@@ -240,6 +240,6 @@ Eventos NATS:
 
 ## 5. Aprobación
 
-- [ ] Product Owner — Outman El Ouary Achi
-- [ ] Tras aprobación → scaffolding del módulo en commits sucesivos en
-      esta misma rama `claude/s14-w2-verifactu`.
+- [x] Product Owner — Outman El Ouary Achi — 2026-05-29.
+- [x] Scaffolding del módulo continúa en commits sucesivos sobre
+      `claude/s14-w2-verifactu`.
