@@ -80,6 +80,79 @@ Una o dos frases.
 
 ---
 
+## 2026-05-29 · [FEAT] · Sprint 14 W2 — Verifactu: InvoiceService.issue() emite la factura legal
+
+**Scope:** `apps/api/src/verifactu`, `packages/eventbus/src/catalog`,
+`packages/db/src/index.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** commit `4900314` · continúa el scaffolding registrado más abajo (ADR-030 §3)
+
+**Qué cambió.**
+
+- **`InvoiceService.issue(user, correlationId, input)`** — emite la
+  factura inmutable a partir de un `Folio` cerrado. Dentro de
+  `withTenant`:
+  1. `pg_advisory_xact_lock(hashtext('verifactu-invoice'), hashtext(tenant:series))`
+     serializa la asignación del número (sin tabla de secuencia
+     adicional; el lock se libera al commit).
+  2. Carga el folio + entries; exige `status ∈ {CLOSED, SETTLED}`.
+  3. **Idempotencia.** Si ya hay una `Invoice` no-`VOIDED` para el
+     `folioId`, la retorna sin publicar evento ni crear duplicado.
+  4. Calcula `subtotal / taxAmount / totalAmount / lines` con el helper
+     puro `computeInvoiceTotals` (sum CHARGE+DISCOUNT+ADJUSTMENT = base
+     imponible; sum TAX = IVA; total = suma).
+  5. Allocate `number = MAX(number)+1` per `(tenant, series)`. Serie por
+     defecto `'A'` (validada con `/^[A-Z][A-Z0-9-]{0,7}$/`).
+  6. `INSERT invoice (status=ISSUED)` + `INSERT invoice_submission
+     (attempt_number=1, status=PENDING)`. El worker se encarga del envío
+     real cuando exista.
+- Tras commit, publica `verifactu.invoice.submit_requested` con
+  `{invoiceId, invoiceNumber}` al stream NATS.
+- **Catálogo de eventos** (`packages/eventbus`): nuevo entry
+  `verifactu.invoice.submit_requested` (schema Zod + reexport tipo).
+  Solo añadimos el evento que ya consumimos; `submitted` y `rejected`
+  llegan con el `SubmitWorker`.
+- **`@pms/db`** re-exporta los tres enums + modelos nuevos (`InvoiceStatus`,
+  `InvoiceSubmissionStatus`, `Invoice`, `InvoiceSubmission`,
+  `VerifactuCertificate`).
+
+**Por qué.**
+
+Es la primera mitad útil del módulo: produce facturas legalmente válidas
+desde el folio, con número monotónico per (tenant, series) y
+idempotencia frente a doble-click del operador o reintentos del cliente.
+El envío real a AEAT queda desacoplado en cola — esa parte se valida
+contra el endpoint de pre-producción cuando el `.p12` esté cargado.
+
+**Archivos clave.**
+
+- `apps/api/src/verifactu/invoice.service.ts` (servicio + advisory lock)
+- `apps/api/src/verifactu/invoice-totals.ts` (helper puro de cálculo)
+- `apps/api/src/verifactu/invoice.service.spec.ts` (6 tests con mocks)
+- `apps/api/src/verifactu/invoice-totals.spec.ts` (4 tests)
+- `packages/eventbus/src/catalog/verifactu.ts` (Zod schema del evento)
+
+**Tests.**
+
+- Vitest verifactu suite: 18/18 verde (4 totals + 6 service + 3 stub-aeat
+  + 5 module-guards).
+- Typecheck (`@pms/api`, `@pms/web-fo`) y lint (`@pms/api`) verdes.
+
+**Sigue pendiente (commits sucesivos en esta misma rama).**
+
+- `VerifactuController` con `POST /verifactu/invoices/issue/:folioId`
+  (RBAC: `tenant_admin`) + DTO Zod.
+- Wiring opcional desde `FolioService.close()` para emitir factura
+  inmediatamente al cerrar — pendiente de decisión: ¿siempre, o sólo
+  cuando el operador lo solicite? (ver issue interno).
+- Signer XAdES-BES + descifrado on-demand del `.p12` (AES-256-GCM con
+  `VERIFACTU_MASTER_KEY`).
+- `SubmitWorker` consumer JetStream con backoff y DLQ tras 6 fallos.
+- `PreprodAeatClient` (HTTP real contra endpoint de pre-producción AEAT).
+- UI back-office `/admin/billing/certificate` (subida del `.p12`).
+
+---
+
 ## 2026-05-29 · [FEAT] · Sprint 14 W2 — Verifactu scaffolding (ADR-030 + esquema + módulo)
 
 **Scope:** `docs/adr/030-verifactu-architecture.md`, `packages/db/prisma`,
