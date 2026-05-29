@@ -24,6 +24,7 @@ import { PublicIbeModule } from './public-ibe';
 import { PublicOnboardingModule } from './public-onboarding';
 import { RatePlansModule } from './rate-plans';
 import { ReportsModule } from './reports';
+import { VerifactuModule } from './verifactu';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { ReportsModule } from './reports';
     CashModule,
     ChannelManagerModule,
     HousekeepingModule,
+    VerifactuModule,
   ],
 })
 export class AppModule {}

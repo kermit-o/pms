@@ -111,6 +111,18 @@ export const envSchema = z.object({
   // 0 desactiva el paso.
   ORPHAN_TENANT_TTL_DAYS: z.coerce.number().int().min(0).max(90).default(7),
 
+  // Verifactu (Sprint 14 W2) — e-invoicing AEAT. Tres modos:
+  //   stub        Sin red. Valida XML y devuelve un CSV determinista.
+  //   preprod     Endpoint de pre-producción de la AEAT (QA).
+  //   production  Endpoint real. Solo permitido cuando NODE_ENV=production
+  //               (guard en VerifactuModule).
+  // VERIFACTU_MASTER_KEY se usa para envolver/descifrar los .p12 de cada
+  // tenant; requerido cuando el modo no es stub. VERIFACTU_CERT_DIR es el
+  // directorio donde viven los .p12.enc.
+  VERIFACTU_MODE: z.enum(['stub', 'preprod', 'production']).default('stub'),
+  VERIFACTU_MASTER_KEY: z.string().min(32).optional(),
+  VERIFACTU_CERT_DIR: z.string().default('/data/verifactu'),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])

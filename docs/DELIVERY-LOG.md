@@ -80,6 +80,72 @@ Una o dos frases.
 
 ---
 
+## 2026-05-29 · [FEAT] · Sprint 14 W2 — Verifactu scaffolding (ADR-030 + esquema + módulo)
+
+**Scope:** `docs/adr/030-verifactu-architecture.md`, `packages/db/prisma`,
+`apps/api/src/verifactu`, `apps/api/src/config/env.schema.ts`,
+`apps/api/src/app.module.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 (Accepted) · commits `bb95077`, `5c44003`, scaffolding posterior
+
+**Qué cambió.**
+
+- **ADR-030 aceptado.** Cuatro decisiones del PO: AEAT propio (no AGFA),
+  certificado cifrado en disco con `VERIFACTU_MASTER_KEY` (no Vault),
+  factura emitida al cierre de folio (no por cargo), retries con backoff
+  exponencial + DLQ tras 6 fallos.
+- **Esquema Prisma + migración** (`20260629000000_verifactu_invoices`):
+  tres tablas RLS-isolated por tenant, con triggers de auditoría y
+  `GRANT … TO pms_app` (mismo patrón que ses_hospedajes_submissions):
+  - `invoices` — factura inmutable, único por `(tenant, series, number)`.
+  - `invoice_submissions` — un row por intento de envío AEAT.
+  - `verifactu_certificates` — metadata del `.p12.enc` (1 por tenant).
+- **Módulo `apps/api/src/verifactu/`** — esqueleto:
+  - `AeatClient` interface + token `AEAT_CLIENT`.
+  - `StubAeatClient` (default; CSV determinista via SHA-256, sin red).
+  - `AeatClientFactory` resuelve por `VERIFACTU_MODE`.
+  - `VerifactuModule.onModuleInit` con tres guards de seguridad:
+    NODE_ENV=production exige MODE=production y viceversa; MODE!=stub
+    requiere `VERIFACTU_MASTER_KEY` (≥32 chars).
+- **Env vars** (`env.schema.ts`): `VERIFACTU_MODE` (stub|preprod|production,
+  default stub), `VERIFACTU_MASTER_KEY` (opcional), `VERIFACTU_CERT_DIR`
+  (default `/data/verifactu`).
+
+**Por qué.**
+
+Hotelero español necesita Verifactu para operar legalmente (deuda fiscal).
+Decisión post-Copilot: priorizar W2 (Verifactu) sobre W1 (housekeeping
+templates) y W3 (group reservations). Este commit cierra el esqueleto —
+sin lógica de servicio todavía — para descongelar trabajo paralelo
+(UI cert vault, pricing engine, signer XAdES) en commits sucesivos.
+
+**Archivos clave.**
+
+- `docs/adr/030-verifactu-architecture.md`
+- `packages/db/prisma/schema.prisma` (modelos Invoice/InvoiceSubmission/VerifactuCertificate)
+- `packages/db/prisma/migrations/20260629000000_verifactu_invoices/migration.sql`
+- `apps/api/src/verifactu/verifactu.module.ts` (guards prod/preprod/stub)
+- `apps/api/src/verifactu/aeat/{aeat-client.interface,stub-aeat-client,aeat-client.factory}.ts`
+- `apps/api/src/config/env.schema.ts` (3 nuevas vars)
+- `apps/api/src/app.module.ts` (registro)
+
+**Tests.**
+
+- `stub-aeat-client.spec.ts` — 3 tests (CSV determinista, force-reject, mode).
+- `verifactu.module.spec.ts` — 5 tests cubriendo los 3 guards + paths felices.
+- Typecheck + lint API: verdes. Vitest verifactu suite: 8/8 verde.
+
+**Sigue pendiente (commits sucesivos en esta misma rama).**
+
+- `InvoiceService.issue()` + secuencia per (tenant, series, year) con
+  `SELECT … FOR UPDATE`.
+- Signer XAdES-BES con descifrado on-demand del `.p12` (AES-256-GCM).
+- `SubmitWorker` NATS JetStream consumer + retries con backoff y DLQ.
+- `PreprodAeatClient` (HTTP real) y placeholder `ProductionAeatClient`.
+- UI back-office `/admin/billing/certificate` para subir el `.p12`.
+
+---
+
 ## 2026-05-21 · [FEAT] · Sprint 13 W2 — Admin UI de rate plans en web-fo
 
 **Scope:** `apps/web-fo/src/app/properties/[id]/rate-plans`,
