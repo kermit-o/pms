@@ -176,3 +176,29 @@ describe('InvoiceService.issue', () => {
     );
   });
 });
+
+describe('InvoiceService.findByFolio', () => {
+  it('returns null when no invoice exists for the folio', async () => {
+    const { service } = makeService({ existingInvoice: null });
+    const r = await service.findByFolio(user, 'corr-1', 'f1');
+    expect(r).toBeNull();
+  });
+
+  it('returns the active invoice with alreadyExisted=true', async () => {
+    const { service } = makeService({
+      existingInvoice: {
+        id: 'inv-7',
+        series: 'A',
+        number: 99,
+        totalAmount: new Prisma.Decimal('250.00'),
+        status: InvoiceStatus.ISSUED,
+      },
+    });
+    const r = await service.findByFolio(user, 'corr-1', 'f1');
+    expect(r).not.toBeNull();
+    expect(r!.id).toBe('inv-7');
+    expect(r!.invoiceNumber).toBe('A-99');
+    expect(r!.totalAmount).toBe('250');
+    expect(r!.alreadyExisted).toBe(true);
+  });
+});

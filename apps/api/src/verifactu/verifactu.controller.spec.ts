@@ -15,10 +15,13 @@ const USER: AuthUser = {
 
 const REQ = { id: 'corr-1' } as unknown as FastifyRequest;
 
-function makeController(certs: Partial<CertificateVaultService> = {}) {
-  const invoices = {} as InvoiceService;
+function makeController(
+  certs: Partial<CertificateVaultService> = {},
+  invoices: Partial<InvoiceService> = {},
+) {
   const certService = certs as CertificateVaultService;
-  return new VerifactuController(invoices, certService);
+  const invoiceService = invoices as InvoiceService;
+  return new VerifactuController(invoiceService, certService);
 }
 
 const validMeta: CertificateMetadata = {
@@ -86,6 +89,33 @@ describe('VerifactuController · certificate endpoints', () => {
     it('throws NotFound when no certificate exists', async () => {
       const ctrl = makeController({ getMetadata: vi.fn().mockResolvedValue(null) });
       await expect(ctrl.getCertificate(USER, REQ)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('GET /verifactu/invoices/by-folio/:folioId', () => {
+    it('returns the invoice when one exists', async () => {
+      const invoice = {
+        id: 'inv-7',
+        series: 'A',
+        number: 99,
+        invoiceNumber: 'A-99',
+        totalAmount: '250',
+        status: 'ISSUED' as const,
+        alreadyExisted: true,
+      };
+      const findByFolio = vi.fn().mockResolvedValue(invoice);
+      const ctrl = makeController({}, { findByFolio });
+      await expect(
+        ctrl.getInvoiceByFolio(USER, REQ, '00000000-0000-0000-0000-000000000111'),
+      ).resolves.toEqual(invoice);
+      expect(findByFolio).toHaveBeenCalledWith(USER, 'corr-1', '00000000-0000-0000-0000-000000000111');
+    });
+
+    it('throws NotFound when no invoice exists for the folio', async () => {
+      const ctrl = makeController({}, { findByFolio: vi.fn().mockResolvedValue(null) });
+      await expect(
+        ctrl.getInvoiceByFolio(USER, REQ, '00000000-0000-0000-0000-000000000111'),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

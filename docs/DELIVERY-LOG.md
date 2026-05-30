@@ -80,6 +80,56 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: emisión de facturas desde el folio
+
+**Scope:** `apps/api/src/verifactu`, `apps/web-fo/src/lib/api.ts`,
+`apps/web-fo/src/app/api/verifactu/invoices/by-folio/[folioId]`,
+`apps/web-fo/src/app/reservations/[id]/page.tsx`
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+- **`InvoiceService.findByFolio()`** — devuelve la factura activa de un
+  folio (cualquier estado != VOIDED) o `null`. La UI lo usa para decidir
+  si renderiza el formulario de emisión o el visor de factura existente.
+- **`GET /verifactu/invoices/by-folio/:folioId`** — endpoint nuevo.
+  Roles: `tenant_admin`, `front_desk`. 404 si no hay factura.
+- **Proxy back-office** `app/api/verifactu/invoices/by-folio/[folioId]`
+  con `GET` (traduce 404 → null vía el helper de lib/api).
+- **`InvoicePanel`** en `/reservations/[id]`:
+  - Si hay factura: badge de estado (draft/issued/submitted/accepted/
+    rejected/voided), número, total, ID.
+  - Si folio OPEN: aviso ámbar "Cierra el folio antes de emitir factura".
+  - Si folio CLOSED/SETTLED y sin factura: formulario con
+    `customerName` (pre-rellenado con el primary guest), `customerNif`,
+    `series`, `customerAddress`, botón "Emitir factura".
+  - Server action `issueInvoiceAction` que valida y llama al proxy.
+
+**Por qué.**
+
+Sin este panel, la única forma de invocar `POST /verifactu/invoices/issue`
+era curl. Esto cierra el bucle desde el lado FO: el recepcionista cierra
+el folio y emite la factura desde la misma pantalla de reserva.
+
+El helper `findByFolio` también es una primitiva natural que reaprovecharán
+otras vistas (export contable, búsqueda por factura, etc.).
+
+**Tests.**
+
+- Verifactu suite: **42/42** verde (+4 nuevos)
+  - `InvoiceService.findByFolio` 2 tests (null path + invoice path con
+    `alreadyExisted=true` y formato `invoiceNumber=A-99`).
+  - `VerifactuController` 2 tests para el nuevo endpoint (200 + 404).
+- Typecheck + lint `@pms/api` y `@pms/web-fo` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+- Signer XAdES-BES (bloqueante para producción real).
+- SubmitWorker JetStream + DLQ.
+- PreprodAeatClient HTTP real.
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: UI back-office del certificado
 
 **Scope:** `apps/web-fo/src/app/admin/billing/certificate`,

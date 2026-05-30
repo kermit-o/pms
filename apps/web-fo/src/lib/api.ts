@@ -1521,6 +1521,18 @@ export async function issueInvoice(
   });
 }
 
+export async function getInvoiceByFolio(
+  accessToken: string | undefined,
+  folioId: string,
+): Promise<IssuedInvoice | null> {
+  try {
+    return await apiFetch(`/verifactu/invoices/by-folio/${folioId}`, { accessToken });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
 export interface CertificateMetadata {
   id: string;
   subjectCn: string;

@@ -6,6 +6,8 @@ import {
   Get,
   HttpCode,
   NotFoundException,
+  Param,
+  ParseUUIDPipe,
   Post,
   Req,
 } from '@nestjs/common';
@@ -35,6 +37,18 @@ export class VerifactuController {
       throw new BadRequestException(parsed.error.issues.map((i) => i.message).join('; '));
     }
     return this.invoices.issue(user, correlationIdOf(req), parsed.data);
+  }
+
+  @Get('invoices/by-folio/:folioId')
+  @Roles('tenant_admin', 'front_desk')
+  async getInvoiceByFolio(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('folioId', new ParseUUIDPipe()) folioId: string,
+  ) {
+    const invoice = await this.invoices.findByFolio(user, correlationIdOf(req), folioId);
+    if (!invoice) throw new NotFoundException(`No active invoice for folio ${folioId}`);
+    return invoice;
   }
 
   @Post('certificate')

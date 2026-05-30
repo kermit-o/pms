@@ -196,4 +196,39 @@ export class InvoiceService {
     const { published: _published, ...issued } = result;
     return issued;
   }
+
+  /**
+   * Busca la factura activa de un folio (cualquier estado excepto VOIDED).
+   * Devuelve `null` si no existe. Usado por la UI para mostrar la factura
+   * ya emitida en lugar del formulario de emisión.
+   */
+  async findByFolio(
+    user: AuthUser,
+    correlationId: string,
+    folioId: string,
+  ): Promise<IssuedInvoice | null> {
+    const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId };
+    const row = await this.prisma.withTenant(ctx, async (tx) => {
+      return tx.invoice.findFirst({
+        where: { folioId, status: { not: InvoiceStatus.VOIDED } },
+        select: {
+          id: true,
+          series: true,
+          number: true,
+          totalAmount: true,
+          status: true,
+        },
+      });
+    });
+    if (!row) return null;
+    return {
+      id: row.id,
+      series: row.series,
+      number: row.number,
+      invoiceNumber: `${row.series}-${row.number}`,
+      totalAmount: row.totalAmount.toString(),
+      status: row.status,
+      alreadyExisted: true,
+    };
+  }
 }

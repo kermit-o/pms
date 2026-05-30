@@ -11,13 +11,15 @@ import {
   checkOutReservation,
   closeFolio,
   getFolio,
+  getInvoiceByFolio,
+  issueInvoice,
   listRooms,
   updateGuarantee,
 } from '@/lib/api';
 import { FolioVoiceButton } from '@/components/FolioVoiceButton';
 import { NoShowChargeButton } from '@/components/NoShowChargeButton';
 import { StripeCaptureButton } from '@/components/StripeCaptureButton';
-import type { FolioDetail } from '@/lib/api';
+import type { FolioDetail, IssuedInvoice } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,9 +81,11 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
 
   let folio: FolioDetail | null = null;
   let folioError: string | null = null;
+  let invoice: IssuedInvoice | null = null;
   if (detail.folio) {
     try {
       folio = await getFolio(session?.accessToken, detail.folio.id);
+      invoice = await getInvoiceByFolio(session?.accessToken, detail.folio.id);
     } catch (err) {
       folioError =
         err instanceof ApiError ? `API ${err.status}: ${err.body}` : (err as Error).message;
@@ -138,6 +142,32 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
     const session = await auth();
     if (!folio) throw new Error('No folio');
     await closeFolio(session?.accessToken, folio.id);
+    revalidatePath(`/reservations/${reservationId}`);
+  }
+
+  async function issueInvoiceAction(formData: FormData) {
+    'use server';
+    const session = await auth();
+    if (!folio) throw new Error('No folio');
+    const customerName = formData.get('customerName')?.toString().trim();
+    const customerNif = formData.get('customerNif')?.toString().trim() || undefined;
+    const customerAddress = formData.get('customerAddress')?.toString().trim() || undefined;
+    const series = formData.get('series')?.toString().trim() || undefined;
+    if (!customerName) throw new Error('El nombre del cliente es obligatorio');
+    try {
+      await issueInvoice(session?.accessToken, {
+        folioId: folio.id,
+        customerName,
+        customerNif,
+        customerAddress,
+        series,
+      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw new Error(`API ${err.status}: ${err.body || err.message}`);
+      }
+      throw err;
+    }
     revalidatePath(`/reservations/${reservationId}`);
   }
 
@@ -285,6 +315,15 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
           addCharge={addCharge}
           addPayment={addPayment}
           settleFolio={settleFolio}
+        />
+      )}
+
+      {folio && (
+        <InvoicePanel
+          folio={folio}
+          invoice={invoice}
+          defaultCustomerName={primaryGuestName(detail)}
+          issueInvoice={issueInvoiceAction}
         />
       )}
     </main>
@@ -598,6 +637,139 @@ function GuaranteeCard({
           >
             Marcar garantía OK
           </button>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function primaryGuestName(detail: ReservationDetail): string {
+  const primary = detail.guests.find((g) => g.isPrimary) ?? detail.guests[0];
+  if (!primary) return '';
+  return `${primary.guest.firstName} ${primary.guest.lastName}`.trim();
+}
+
+const INVOICE_STATUS_STYLES: Record<string, string> = {
+  DRAFT: 'bg-slate-100 text-slate-700',
+  ISSUED: 'bg-amber-100 text-amber-800',
+  SUBMITTED: 'bg-sky-100 text-sky-800',
+  ACCEPTED: 'bg-emerald-100 text-emerald-800',
+  REJECTED: 'bg-rose-100 text-rose-800',
+  VOIDED: 'bg-slate-800 text-white',
+};
+
+function InvoicePanel({
+  folio,
+  invoice,
+  defaultCustomerName,
+  issueInvoice,
+}: {
+  folio: FolioDetail;
+  invoice: IssuedInvoice | null;
+  defaultCustomerName: string;
+  issueInvoice: (fd: FormData) => Promise<void>;
+}) {
+  const canIssue = folio.status === 'CLOSED' || folio.status === 'SETTLED';
+
+  return (
+    <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-aubergine-100">
+      <div className="flex items-end justify-between">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-aubergine-500">
+            Factura Verifactu
+          </h2>
+          <p className="text-xs text-aubergine-700/60">
+            Inmutable. Una vez emitida se envía a la AEAT por VeriFactu.
+          </p>
+        </div>
+        {invoice && (
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+              INVOICE_STATUS_STYLES[invoice.status] ?? 'bg-slate-100 text-slate-700'
+            }`}
+          >
+            {invoice.status.toLowerCase()}
+          </span>
+        )}
+      </div>
+
+      {invoice ? (
+        <div className="mt-4 grid gap-3 rounded-xl bg-aubergine-50/40 p-4 sm:grid-cols-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-aubergine-500">Número</p>
+            <p className="mt-0.5 font-mono text-lg font-semibold text-aubergine-700">
+              {invoice.invoiceNumber}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-aubergine-500">Total</p>
+            <p className="mt-0.5 font-semibold text-aubergine-700">
+              {invoice.totalAmount} {folio.currency}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-aubergine-500">ID</p>
+            <p className="mt-0.5 break-all font-mono text-[11px] text-aubergine-700/70">
+              {invoice.id}
+            </p>
+          </div>
+        </div>
+      ) : !canIssue ? (
+        <div className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800 ring-1 ring-amber-100">
+          Cierra el folio (balance = 0 + botón &laquo;Cerrar folio&raquo;) antes de emitir la
+          factura.
+        </div>
+      ) : (
+        <form action={issueInvoice} className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm sm:col-span-2">
+            <span className="text-xs uppercase tracking-wide text-aubergine-500">
+              Nombre / razón social *
+            </span>
+            <input
+              name="customerName"
+              type="text"
+              required
+              defaultValue={defaultCustomerName}
+              className="mt-1 block w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-xs uppercase tracking-wide text-aubergine-500">NIF / CIF</span>
+            <input
+              name="customerNif"
+              type="text"
+              maxLength={20}
+              className="mt-1 block w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-xs uppercase tracking-wide text-aubergine-500">Serie</span>
+            <input
+              name="series"
+              type="text"
+              placeholder="A"
+              pattern="[A-Z][A-Z0-9-]{0,7}"
+              title="Una letra mayúscula, opcionalmente seguida de letras/dígitos/guiones (máx. 8)"
+              className="mt-1 block w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
+            />
+          </label>
+          <label className="block text-sm sm:col-span-2">
+            <span className="text-xs uppercase tracking-wide text-aubergine-500">Dirección</span>
+            <input
+              name="customerAddress"
+              type="text"
+              maxLength={500}
+              className="mt-1 block w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-sm focus:border-aubergine-500 focus:outline-none"
+            />
+          </label>
+          <div className="sm:col-span-2 flex justify-end">
+            <button
+              type="submit"
+              className="rounded-lg bg-aubergine-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-aubergine-900"
+            >
+              Emitir factura
+            </button>
+          </div>
         </form>
       )}
     </section>
