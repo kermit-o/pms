@@ -1,145 +1,124 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import * as forge from 'node-forge';
+import * as xadesjs from 'xadesjs';
+import * as xpath from 'xpath';
 import { CertificateVaultService } from './certificate-vault.service';
 
 /**
- * SignerService — firma digital de XML.
+ * SignerService — firma digital XAdES-BES enveloped (ADR-031 opción 1).
  *
- * ALCANCE de este commit (W2 Sprint 14): emite una firma **XMLDSig estándar**
- * enveloped (RSA-SHA256 + C14N 1.0 implícito) sobre el XML recibido. Genera
- * `<ds:SignedInfo>`, `<ds:SignatureValue>`, `<ds:KeyInfo>` con el certificado
- * en X509Certificate. Producible y verificable con cualquier verificador
- * XMLDSig estándar.
+ * Pipeline:
+ *  1. Carga el `.p12` desencriptado del vault.
+ *  2. Extrae cert + clave privada con node-forge.
+ *  3. Convierte la clave a CryptoKey vía WebCrypto (PKCS#8 DER → importKey).
+ *  4. Parsea el XML de entrada a Document con @xmldom/xmldom.
+ *  5. Llama a `xadesjs.SignedXml.Sign()` con:
+ *     - Algoritmo RSASSA-PKCS1-v1_5 + SHA-256.
+ *     - Reference URI="" con transforms enveloped + C14N 1.0.
+ *     - `signingCertificate` (base64 DER) → genera `<xades:SigningCertificate>`.
+ *     - `signingTime` → genera `<xades:SigningTime>`.
+ *  6. Inyecta `<ds:Signature>` como último hijo del raíz.
+ *  7. Serializa el documento firmado y lo devuelve.
  *
- * **NO incluye** (todavía) las propiedades cualificadas XAdES-BES
- * (`<xades:QualifyingProperties>`, `<xades:SigningCertificate>`,
- * `<xades:SigningTime>`, etc.). El envío real a AEAT requiere XAdES completo
- * — pendiente de ADR sobre librería (xadesjs vs. xml-crypto vs. propio).
- * Mientras tanto, este signer es suficiente para que el SubmitWorker y el
- * StubAeatClient funcionen end-to-end en dev/test.
+ * El resultado es XAdES-BES completo: `<ds:Signature>` con dos `<ds:Reference>`
+ * (raíz + SignedProperties) y `<xades:QualifyingProperties>` con
+ * `SigningTime` + `SigningCertificate`.
  *
- * Asunciones de entrada:
- * - El XML ya viene canonicalizado (C14N 1.0) por el generador del payload.
- *   El digest se calcula sobre los bytes literales recibidos.
- * - El XML tiene un único elemento raíz con etiqueta de cierre `</Tag>`.
- *   La firma se inserta como último hijo del raíz (enveloped).
+ * NOTA — bootstrap WebCrypto:
+ * xml-core/xadesjs requieren que se les inyecte (a) un Crypto engine y
+ * (b) implementaciones DOM/XPath de Node. Esto se hace una sola vez en
+ * `onModuleInit` y es idempotente.
  */
 @Injectable()
-export class SignerService {
+export class SignerService implements OnModuleInit {
   private readonly log = new Logger(SignerService.name);
 
   constructor(private readonly vault: CertificateVaultService) {}
 
+  onModuleInit(): void {
+    // Engine criptográfico: globalThis.crypto (Node 20+ tiene WebCrypto nativo).
+    xadesjs.Application.setEngine('nodejs', globalThis.crypto as Crypto);
+    // DOM + XPath para xml-core. Idempotente — sobrescribir es OK.
+    xadesjs.setNodeDependencies({ DOMParser, XMLSerializer, xpath });
+    this.log.log('SignerService: WebCrypto engine + xmldom deps configured');
+  }
+
   async sign(tenantId: string, xml: string): Promise<SignResult> {
     const p12 = await this.vault.loadDecryptedP12(tenantId);
-    const { privateKey, certificate } = extractKeyAndCert(p12);
+    const { privateKey, certificate, certDerB64 } = extractKeyAndCert(p12);
 
-    // Reference: digest del XML original (en el envelope la transformación
-    // enveloped-signature quita la firma → como aún no la hay, equivale a
-    // hashear los bytes literales).
-    const refDigest = sha256Base64(Buffer.from(xml, 'utf-8'));
+    // PKCS#8 DER bytes para WebCrypto.importKey.
+    const pkcs8Der = privateKeyToPkcs8Der(privateKey);
 
-    const signedInfo = buildSignedInfo(refDigest);
-    const sigBytes = rsaSha256Sign(privateKey, signedInfo);
-    const sigValue = forge.util.encode64(sigBytes);
-    const certB64 = forge.util.encode64(
-      forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes(),
+    const cryptoKey = await globalThis.crypto.subtle.importKey(
+      'pkcs8',
+      pkcs8Der.buffer as ArrayBuffer,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['sign'],
     );
 
-    const signature = wrapSignature(signedInfo, sigValue, certB64);
-    const signedXml = insertEnvelopedSignature(xml, signature);
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    if (!doc.documentElement) {
+      throw new Error('Input XML has no root element');
+    }
 
-    this.log.log(`Signed XML tenant=${tenantId} bytes=${xml.length} sigBytes=${sigBytes.length}`);
+    const signedXml = new xadesjs.SignedXml();
+    const signature = await signedXml.Sign(
+      // xadesjs declara `Algorithm` (sin `hash`), pero acepta y propaga
+      // RsaHashedKeyAlgorithm con `hash` en runtime.
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' } as unknown as Algorithm,
+      cryptoKey,
+      doc as unknown as Document,
+      {
+        references: [
+          {
+            hash: 'SHA-256',
+            transforms: ['enveloped', 'c14n'],
+            uri: '',
+          },
+        ],
+        // signingCertificate va a <xades:SigningCertificate> (CertDigest +
+        // IssuerSerial). x509 añade el certificado completo en
+        // <ds:KeyInfo><ds:X509Data><ds:X509Certificate>, que AEAT y la
+        // mayoría de validadores XMLDSig consumen como ruta primaria.
+        signingCertificate: certDerB64,
+        x509: [certDerB64],
+        signingTime: { value: new Date() },
+      },
+    );
+
+    // Inyectar la firma como último hijo del raíz (enveloped).
+    const sigEl = signature.GetXml();
+    if (!sigEl) throw new Error('xadesjs.Sign returned signature without GetXml()');
+    doc.documentElement.appendChild(sigEl);
+
+    const signedSerialized = new XMLSerializer().serializeToString(doc);
+
+    this.log.log(
+      `Signed XML tenant=${tenantId} bytes=${xml.length} signedBytes=${signedSerialized.length}`,
+    );
 
     return {
-      xml: signedXml,
-      digestValue: refDigest,
-      signatureValue: sigValue,
+      xml: signedSerialized,
       signingCertificate: certificate,
     };
   }
 }
 
 export interface SignResult {
-  /** XML resultante con `<ds:Signature>` insertado como último hijo del raíz. */
+  /** XML resultante con `<ds:Signature>` XAdES-BES enveloped. */
   xml: string;
-  /** Digest SHA-256 (base64) del XML de entrada. */
-  digestValue: string;
-  /** Valor de la firma RSA-SHA256 (base64). */
-  signatureValue: string;
   /** Certificado usado (útil para tests / depuración). */
   signingCertificate: forge.pki.Certificate;
-}
-
-const DS = 'http://www.w3.org/2000/09/xmldsig#';
-const C14N = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
-const ENVELOPED = 'http://www.w3.org/2000/09/xmldsig#enveloped-signature';
-const SHA256 = 'http://www.w3.org/2001/04/xmlenc#sha256';
-const RSA_SHA256 = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256';
-
-function buildSignedInfo(refDigest: string): string {
-  // Sin saltos de línea ni indentación: la cadena que firmamos debe ser
-  // exactamente la que se inserta en el XML final, para que un verificador
-  // re-extraiga bytes idénticos.
-  return (
-    `<ds:SignedInfo xmlns:ds="${DS}">` +
-    `<ds:CanonicalizationMethod Algorithm="${C14N}"/>` +
-    `<ds:SignatureMethod Algorithm="${RSA_SHA256}"/>` +
-    `<ds:Reference URI="">` +
-    `<ds:Transforms>` +
-    `<ds:Transform Algorithm="${ENVELOPED}"/>` +
-    `<ds:Transform Algorithm="${C14N}"/>` +
-    `</ds:Transforms>` +
-    `<ds:DigestMethod Algorithm="${SHA256}"/>` +
-    `<ds:DigestValue>${refDigest}</ds:DigestValue>` +
-    `</ds:Reference>` +
-    `</ds:SignedInfo>`
-  );
-}
-
-function wrapSignature(signedInfo: string, sigValue: string, certB64: string): string {
-  return (
-    `<ds:Signature xmlns:ds="${DS}">` +
-    signedInfo +
-    `<ds:SignatureValue>${sigValue}</ds:SignatureValue>` +
-    `<ds:KeyInfo>` +
-    `<ds:X509Data>` +
-    `<ds:X509Certificate>${certB64}</ds:X509Certificate>` +
-    `</ds:X509Data>` +
-    `</ds:KeyInfo>` +
-    `</ds:Signature>`
-  );
-}
-
-function insertEnvelopedSignature(xml: string, signature: string): string {
-  // Inserta antes de la última etiqueta de cierre `</X>` del documento, que
-  // — para un XML con un único elemento raíz bien formado — es el cierre
-  // del raíz. Restricción documentada en el JSDoc del servicio.
-  const lastClose = xml.lastIndexOf('</');
-  if (lastClose < 0) {
-    throw new Error('Input XML has no closing tag — cannot insert enveloped signature');
-  }
-  return xml.slice(0, lastClose) + signature + xml.slice(lastClose);
-}
-
-function sha256Base64(bytes: Buffer): string {
-  const md = forge.md.sha256.create();
-  md.update(bytes.toString('binary'));
-  return forge.util.encode64(md.digest().bytes());
-}
-
-function rsaSha256Sign(key: forge.pki.PrivateKey, data: string): string {
-  const md = forge.md.sha256.create();
-  md.update(data, 'utf8');
-  // forge.pki.PrivateKey es un union; los certificados PKCS#12 que aceptamos
-  // siempre son RSA en la práctica Verifactu. El método .sign() existe en
-  // rsa.PrivateKey.
-  return (key as forge.pki.rsa.PrivateKey).sign(md);
 }
 
 function extractKeyAndCert(p12Buffer: Buffer): {
   privateKey: forge.pki.PrivateKey;
   certificate: forge.pki.Certificate;
+  /** Cert serializado a DER y codificado en base64 (formato esperado por xadesjs). */
+  certDerB64: string;
 } {
   const asn1 = forge.asn1.fromDer(forge.util.createBuffer(p12Buffer.toString('binary')));
   // `null` indica a forge "sin passphrase" (los bags no están cifrados).
@@ -161,5 +140,23 @@ function extractKeyAndCert(p12Buffer: Buffer): {
     throw new Error('Stored PKCS#12 archive does not contain a private key');
   }
 
-  return { privateKey, certificate };
+  const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
+  const certDerB64 = forge.util.encode64(certDer);
+
+  return { privateKey, certificate, certDerB64 };
+}
+
+/** Convierte una RSA private key de forge a PKCS#8 DER (Uint8Array) para WebCrypto. */
+function privateKeyToPkcs8Der(key: forge.pki.PrivateKey): Uint8Array {
+  // forge.pki.wrapRsaPrivateKey envuelve un RSAPrivateKey (PKCS#1) en una
+  // estructura PrivateKeyInfo (PKCS#8), que es el formato que WebCrypto.importKey
+  // espera con `format: 'pkcs8'`.
+  const pkcs1 = forge.pki.privateKeyToAsn1(key);
+  const pkcs8 = forge.pki.wrapRsaPrivateKey(pkcs1);
+  const der = forge.asn1.toDer(pkcs8).getBytes();
+  const out = new Uint8Array(der.length);
+  for (let i = 0; i < der.length; i++) {
+    out[i] = der.charCodeAt(i);
+  }
+  return out;
 }

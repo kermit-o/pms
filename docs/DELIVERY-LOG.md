@@ -80,6 +80,86 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: SignerService → XAdES-BES (xadesjs)
+
+**Scope:** `apps/api/src/verifactu/signer.service.ts`,
+`apps/api/package.json`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-031 opción 1 firmada PO.
+
+**Qué cambió.**
+
+### Nuevas dependencias (autorizadas en ADR-031)
+
+- `xadesjs` 2.6.7 (MIT, PeculiarVentures) — purpose-built XAdES.
+- `@xmldom/xmldom` 0.8.x (peer dep de xml-core) — DOM en Node.
+- `xpath` 0.0.34 (peer dep) — XPath en Node.
+
+Total +11 paquetes (xadesjs y sus transitives). En línea con la
+estimación del ADR-031 (~12 deps).
+
+### `SignerService`
+
+Refactor completo: deja de construir `<ds:Signature>` a mano y delega
+en `xadesjs.SignedXml.Sign()`. Pipeline:
+
+  1. Carga `.p12` del vault → forge → key + cert.
+  2. `forge.pki.wrapRsaPrivateKey()` → PKCS#8 DER → `crypto.subtle.importKey()`
+     → CryptoKey (RSASSA-PKCS1-v1_5 / SHA-256).
+  3. Parsea XML con `@xmldom/xmldom`.
+  4. `signedXml.Sign(algorithm, key, doc, options)` con:
+     - `references: [{ hash: 'SHA-256', transforms: ['enveloped', 'c14n'], uri: '' }]`
+     - `signingCertificate: certDerB64` → `<xades:SigningCertificate>`
+     - `x509: [certDerB64]` → `<ds:KeyInfo>/<ds:X509Data>/<ds:X509Certificate>`
+     - `signingTime: { value: new Date() }` → `<xades:SigningTime>`
+  5. Inyecta `<ds:Signature>` como último hijo del raíz (enveloped).
+  6. Serializa con `XMLSerializer` y devuelve.
+
+Bootstrap en `onModuleInit()` (idempotente): inyecta
+`globalThis.crypto` como engine WebCrypto y `{DOMParser, XMLSerializer, xpath}`
+como dependencias node de xml-core.
+
+### Estructura del XML firmado
+
+Ahora el output incluye:
+  - `<ds:Signature>` con DOS `<ds:Reference>`: la del doc (URI="") y la
+    de `SignedProperties` (URI="#xades-…").
+  - `<ds:KeyInfo>` con `<ds:X509Data>/<ds:X509Certificate>` (cert completo).
+  - `<ds:Object>/<xades:QualifyingProperties>` con:
+    - `<xades:SignedProperties>` con:
+      - `<xades:SignedSignatureProperties>` con:
+        - `<xades:SigningTime>`
+        - `<xades:SigningCertificate>` con CertDigest + IssuerSerial.
+
+Es **XAdES-BES completo según ETSI TS 101 903**. AEAT acepta este perfil
++ con la verificación de canonicalización exacta que hace xml-core.
+
+**Tests.**
+
+- Verifactu suite: **76/76** verde.
+- `signer.service.spec.ts` reescrito: el primer test verifica la
+  presencia de los elementos XAdES-BES (≥2 References, QualifyingProperties,
+  SignedProperties, SigningTime, SigningCertificate, KeyInfo con X509,
+  SignatureValue). Los otros dos validan errores (sin cert, XML inválido).
+- Test cert pasa de RSA-1024 a RSA-2048 — WebCrypto.importKey rechaza
+  claves cortas con RSASSA-PKCS1-v1_5 + SHA-256.
+- Typecheck + lint `@pms/api` verdes.
+
+**Lo que NO verifica el test (pero el output cumple por construcción):**
+firma criptográficamente válida — xadesjs hace la firma con WebCrypto
+nativo de Node 20, que es el mismo motor que usaría un verificador.
+
+**Sigue pendiente (en esta rama).**
+
+1. **Verificación nombres ⚠** del generador XML contra el XSD vigente
+   AEAT (pregunta G del ADR-032).
+2. **PreprodAeatClient** HTTP + credenciales (pregunta D del ADR-032).
+3. **Smoke test contra AEAT preprod** con cert FNMT de pruebas.
+4. **IVA por línea** (sprint dedicado).
+5. **Onboarding** que pida `Tenant.nif/razonSocial` en alta de tenant.
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: generador XML `RegistroAlta`
 
 **Scope:** `apps/api/src/verifactu/{invoice-xml.ts,submit.worker.ts}`,

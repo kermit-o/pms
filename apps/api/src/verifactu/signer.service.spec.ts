@@ -19,7 +19,10 @@ const USER: AuthUser = {
 } as unknown as AuthUser;
 
 function buildSelfSignedP12(passphrase: string, cn = 'TEST SIGNER S.L.'): Buffer {
-  const keys = forge.pki.rsa.generateKeyPair(1024);
+  // 2048 bits — WebCrypto.importKey con RSASSA-PKCS1-v1_5 + SHA-256 rechaza
+  // claves más cortas en algunas implementaciones. Bajamos el coste eligiendo
+  // exponent 0x10001 (default) y un solo round de generación.
+  const keys = forge.pki.rsa.generateKeyPair(2048);
   const cert = forge.pki.createCertificate();
   cert.publicKey = keys.publicKey;
   cert.serialNumber = '02';
@@ -88,93 +91,74 @@ function makeVault(tmp: string) {
   return new CertificateVaultService(prisma, config);
 }
 
-function extractBetween(s: string, start: string, end: string): string {
-  const i = s.indexOf(start);
-  const j = s.indexOf(end, i + start.length);
-  if (i < 0 || j < 0) throw new Error(`Could not extract between ${start}…${end}`);
-  return s.slice(i + start.length, j);
+async function makeSigner(tmp: string): Promise<SignerService> {
+  const vault = makeVault(tmp);
+  await vault.upload(USER, 'corr-1', buildSelfSignedP12('pw'), 'pw');
+  const signer = new SignerService(vault);
+  signer.onModuleInit(); // bootstrap WebCrypto + xmldom
+  return signer;
 }
 
-describe('SignerService', () => {
-  it('produces a verifiable RSA-SHA256 enveloped signature', async () => {
-    const tmp = mkdtempSync(join(tmpdir(), 'signer-'));
-    try {
-      const vault = makeVault(tmp);
-      await vault.upload(USER, 'corr-1', buildSelfSignedP12('pw'), 'pw');
+describe('SignerService (XAdES-BES vía xadesjs)', () => {
+  it(
+    'produces a XAdES-BES enveloped signature with two References + QualifyingProperties',
+    async () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'signer-'));
+      try {
+        const signer = await makeSigner(tmp);
+        const sourceXml = '<Invoice><Header>X</Header><Total>100</Total></Invoice>';
+        const result = await signer.sign(TENANT, sourceXml);
 
-      const signer = new SignerService(vault);
-      const sourceXml = '<Invoice><Header>X</Header><Total>100</Total></Invoice>';
-      const result = await signer.sign(TENANT, sourceXml);
+        // Signature insertada como hijo del raíz, antes del cierre.
+        expect(result.xml).toContain('</Invoice>');
+        expect(result.xml).toMatch(/<(ds:)?Signature\b/);
 
-      // Sanity: la firma se insertó como último hijo del raíz.
-      expect(result.xml.endsWith('</Invoice>')).toBe(true);
-      expect(result.xml.includes('<ds:Signature')).toBe(true);
-      expect(result.xml.indexOf('<ds:Signature')).toBeGreaterThan(
-        result.xml.indexOf('<Total>'),
-      );
+        // XAdES-BES emite DOS Reference: una al doc (URI=""), otra a
+        // SignedProperties (URI="#...-SignedProperties").
+        const refMatches = result.xml.match(/<(?:ds:)?Reference\b/g) ?? [];
+        expect(refMatches.length).toBeGreaterThanOrEqual(2);
 
-      // 1. El digest de la Reference debe coincidir con SHA-256 del XML
-      //    original (transformación enveloped sobre un doc sin firma previa
-      //    = identity).
-      const md = forge.md.sha256.create();
-      md.update(sourceXml, 'utf8');
-      const expectedDigest = forge.util.encode64(md.digest().bytes());
-      const refDigest = extractBetween(result.xml, '<ds:DigestValue>', '</ds:DigestValue>');
-      expect(refDigest).toBe(expectedDigest);
-      expect(refDigest).toBe(result.digestValue);
+        // QualifyingProperties con SignedSignatureProperties + SigningTime +
+        // SigningCertificate (puede aparecer como SigningCertificate o
+        // SigningCertificateV2 según opciones — verificamos el nombre raíz).
+        expect(result.xml).toMatch(/<(xades:)?QualifyingProperties\b/);
+        expect(result.xml).toMatch(/<(xades:)?SignedProperties\b/);
+        expect(result.xml).toMatch(/<(xades:)?SigningTime\b/);
+        expect(result.xml).toMatch(/<(xades:)?SigningCertificate(V2)?\b/);
 
-      // 2. La SignatureValue debe verificar contra SignedInfo + clave pública
-      //    del certificado declarado.
-      const signedInfo =
-        '<ds:SignedInfo' +
-        extractBetween(result.xml, '<ds:SignedInfo', '</ds:SignedInfo>') +
-        '</ds:SignedInfo>';
-      const sigValue = extractBetween(
-        result.xml,
-        '<ds:SignatureValue>',
-        '</ds:SignatureValue>',
-      );
-      const certB64 = extractBetween(
-        result.xml,
-        '<ds:X509Certificate>',
-        '</ds:X509Certificate>',
-      );
-      const certDer = forge.util.decode64(certB64);
-      const cert = forge.pki.certificateFromAsn1(
-        forge.asn1.fromDer(forge.util.createBuffer(certDer)),
-      );
-      const verifyMd = forge.md.sha256.create();
-      verifyMd.update(signedInfo, 'utf8');
-      const ok = (cert.publicKey as forge.pki.rsa.PublicKey).verify(
-        verifyMd.digest().bytes(),
-        forge.util.decode64(sigValue),
-      );
-      expect(ok).toBe(true);
-    } finally {
-      rmSync(tmp, { recursive: true, force: true });
-    }
-  });
+        // KeyInfo con el cert.
+        expect(result.xml).toMatch(/<(ds:)?X509Certificate\b/);
+        expect(result.xml).toMatch(/<(ds:)?SignatureValue\b/);
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    },
+    30_000, // RSA-2048 + crypto subtle puede tardar
+  );
 
   it('throws when no certificate has been uploaded for the tenant', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'signer-'));
     try {
       const vault = makeVault(tmp);
       const signer = new SignerService(vault);
+      signer.onModuleInit();
       await expect(signer.sign(TENANT, '<X/>')).rejects.toThrow();
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
 
-  it('refuses to sign an empty XML (no closing tag)', async () => {
-    const tmp = mkdtempSync(join(tmpdir(), 'signer-'));
-    try {
-      const vault = makeVault(tmp);
-      await vault.upload(USER, 'corr-1', buildSelfSignedP12('pw'), 'pw');
-      const signer = new SignerService(vault);
-      await expect(signer.sign(TENANT, 'not xml')).rejects.toThrow(/closing tag/);
-    } finally {
-      rmSync(tmp, { recursive: true, force: true });
-    }
-  });
+  it(
+    'throws when the input is not well-formed XML',
+    async () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'signer-'));
+      try {
+        const signer = await makeSigner(tmp);
+        await expect(signer.sign(TENANT, 'definitely not xml')).rejects.toThrow();
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
 });

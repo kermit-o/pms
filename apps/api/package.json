@@ -38,6 +38,7 @@
     "@pms/eventbus": "workspace:*",
     "@pms/mcp-tools": "workspace:*",
     "@prisma/client": "^5.22.0",
+    "@xmldom/xmldom": "^0.8.13",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "fastify": "^4.28.1",
@@ -52,6 +53,8 @@
     "rxjs": "^7.8.1",
     "stripe": "^17.5.0",
     "uuid": "^10.0.0",
+    "xadesjs": "^2.6.7",
+    "xpath": "^0.0.34",
     "zod": "^3.23.8",
     "zod-to-json-schema": "^3.23.5"
   },
