@@ -6,7 +6,7 @@ import { PrismaService } from '../db';
 import type { Env } from '../config/env.schema';
 import { EventbusService } from '../eventbus';
 import { AEAT_CLIENT, type AeatClient, type AeatSubmitResult } from './aeat';
-import { buildInvoiceXml } from './invoice-xml';
+import { buildVerifactuRegistroAlta } from './invoice-xml';
 import { SignerService } from './signer.service';
 
 /**
@@ -47,9 +47,9 @@ export class SubmitWorker implements OnModuleInit {
     private readonly bus: EventbusService,
     private readonly signer: SignerService,
     @Inject(AEAT_CLIENT) private readonly aeat: AeatClient,
-    config: ConfigService<Env, true>,
+    private readonly config: ConfigService<Env, true>,
   ) {
-    this.enabled = config.get('NODE_ENV', { infer: true }) !== 'test';
+    this.enabled = this.config.get('NODE_ENV', { infer: true }) !== 'test';
     this.maxDeliver = 5;
   }
 
@@ -98,6 +98,10 @@ export class SubmitWorker implements OnModuleInit {
         customerName: true,
         customerNif: true,
         customerAddress: true,
+        tipoFactura: true,
+        huella: true,
+        huellaAnterior: true,
+        tenant: { select: { nif: true, razonSocial: true } },
       },
     });
     if (!invoice) {
@@ -111,28 +115,53 @@ export class SubmitWorker implements OnModuleInit {
       return 'ack';
     }
 
+    // Sanity: el tenant DEBE tener NIF/razón social aquí. issue() ya lo
+    // valida; si llegamos sin ellos es un bug aguas arriba (no transitorio).
     const attempt = await this.acquireAttempt(invoice.id, invoice.tenantId);
+    if (!invoice.tenant.nif || !invoice.tenant.razonSocial || !invoice.huella) {
+      const reason =
+        'Invariant violated: invoice missing emisor data or huella before signing';
+      this.log.error(`${reason} invoice=${payload.invoiceNumber}`);
+      return this.deadLetter(
+        invoice.id,
+        payload.invoiceNumber,
+        attempt.id,
+        attempt.attemptNumber,
+        reason,
+      );
+    }
 
     let signedXml: string;
     try {
-      const payloadXml = buildInvoiceXml({
+      const payloadXml = buildVerifactuRegistroAlta({
         invoiceId: invoice.id,
+        emisor: { nif: invoice.tenant.nif, nombreRazon: invoice.tenant.razonSocial },
         series: invoice.series,
         number: invoice.number,
         invoiceDate: invoice.invoiceDate,
         currency: invoice.currency,
+        tipoFactura: invoice.tipoFactura,
+        descripcionOperacion: 'Estancia hotelera',
         subtotal: invoice.subtotal,
         taxAmount: invoice.taxAmount,
         totalAmount: invoice.totalAmount,
         customerName: invoice.customerName,
         customerNif: invoice.customerNif,
         customerAddress: invoice.customerAddress,
+        huella: invoice.huella,
+        huellaAnterior: invoice.huellaAnterior,
+        sistema: {
+          nombreRazon: this.config.get('VERIFACTU_SISTEMA_NOMBRE_RAZON', { infer: true }),
+          nif: this.config.get('VERIFACTU_SISTEMA_NIF', { infer: true }),
+          nombreSistemaInformatico: this.config.get('VERIFACTU_SISTEMA_NOMBRE', { infer: true }),
+          idSistemaInformatico: this.config.get('VERIFACTU_SISTEMA_ID', { infer: true }),
+          version: this.config.get('VERIFACTU_SISTEMA_VERSION', { infer: true }),
+          numeroInstalacion: invoice.tenantId,
+        },
       });
       const signed = await this.signer.sign(invoice.tenantId, payloadXml);
       signedXml = signed.xml;
     } catch (err) {
-      // Fallo de firma (sin cert, cert revocado, etc.) — transitorio:
-      // el operador puede subir/desrevocar el cert y reintentar.
       const message = (err as Error).message.slice(0, 500);
       this.log.error(`Sign failed invoice=${payload.invoiceNumber}: ${message}`);
       await this.markAttemptFailed(attempt.id, message);

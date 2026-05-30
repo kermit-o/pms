@@ -123,6 +123,18 @@ export const envSchema = z.object({
   VERIFACTU_MASTER_KEY: z.string().min(32).optional(),
   VERIFACTU_CERT_DIR: z.string().default('/data/verifactu'),
 
+  // SistemaInformatico (ADR-032 §6) — identifica nuestro PMS en cada
+  // RegistroAlta enviado a AEAT. Defaults razonables para dev; en producción
+  // hay que rellenarlos con los valores reales (PO gestiona el alta del
+  // PMS ante AEAT antes de poder enviar a preprod/production).
+  VERIFACTU_SISTEMA_NOMBRE_RAZON: z.string().default('Aubergine PMS S.L.'),
+  VERIFACTU_SISTEMA_NIF: z.string().default('B00000000'),
+  VERIFACTU_SISTEMA_NOMBRE: z.string().default('Aubergine PMS'),
+  // IdSistemaInformatico lo asigna AEAT cuando se registra el PMS. Mientras
+  // no esté hecho ese trámite, se usa el placeholder "01" (preprod).
+  VERIFACTU_SISTEMA_ID: z.string().default('01'),
+  VERIFACTU_SISTEMA_VERSION: z.string().default('0.1.0'),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])

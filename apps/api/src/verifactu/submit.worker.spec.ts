@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ConfigService } from '@nestjs/config';
-import { InvoiceStatus, InvoiceSubmissionStatus, Prisma } from '@pms/db';
+import { InvoiceStatus, InvoiceSubmissionStatus, Prisma, VerifactuTipoFactura } from '@pms/db';
 import type { PrismaService } from '../db';
 import type { EventbusService } from '../eventbus';
 import type { Env } from '../config/env.schema';
@@ -25,6 +25,10 @@ interface InvoiceRow {
   customerName: string;
   customerNif: string | null;
   customerAddress: string | null;
+  tipoFactura: VerifactuTipoFactura;
+  huella: string | null;
+  huellaAnterior: string | null;
+  tenant: { nif: string | null; razonSocial: string | null };
 }
 
 const baseInvoice: InvoiceRow = {
@@ -41,6 +45,10 @@ const baseInvoice: InvoiceRow = {
   customerName: 'Ana Pérez',
   customerNif: '12345678Z',
   customerAddress: 'Calle Mayor 1',
+  tipoFactura: VerifactuTipoFactura.F1,
+  huella: 'a'.repeat(64),
+  huellaAnterior: null,
+  tenant: { nif: 'B12345678', razonSocial: 'Hotel Test S.L.' },
 };
 
 function makeWorker(opts: {
@@ -104,7 +112,24 @@ function makeWorker(opts: {
   const aeat = { mode: 'stub' as const, ...opts.aeat } as AeatClient;
 
   const config = {
-    get: (key: keyof Env) => (key === 'NODE_ENV' ? 'test' : undefined),
+    get: (key: keyof Env) => {
+      switch (key) {
+        case 'NODE_ENV':
+          return 'test';
+        case 'VERIFACTU_SISTEMA_NOMBRE_RAZON':
+          return 'Aubergine PMS S.L.';
+        case 'VERIFACTU_SISTEMA_NIF':
+          return 'B00000000';
+        case 'VERIFACTU_SISTEMA_NOMBRE':
+          return 'Aubergine PMS';
+        case 'VERIFACTU_SISTEMA_ID':
+          return '01';
+        case 'VERIFACTU_SISTEMA_VERSION':
+          return '0.1.0';
+        default:
+          return undefined;
+      }
+    },
   } as unknown as ConfigService<Env, true>;
 
   return {

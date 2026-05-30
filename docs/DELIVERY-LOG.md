@@ -80,6 +80,95 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: generador XML `RegistroAlta`
+
+**Scope:** `apps/api/src/verifactu/{invoice-xml.ts,submit.worker.ts}`,
+`apps/api/src/config/env.schema.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-032 §2 (estructura), §3 (F1/F2), §4 (encadenamiento),
+§6 (SistemaInformatico).
+
+**Qué cambió.**
+
+### `buildVerifactuRegistroAlta()` (reemplaza el stub `buildInvoiceXml`)
+
+Generador del XML conforme al `RegistroAlta` Verifactu. Estructura:
+
+  - `<RegFactuSistemaFacturacion xmlns="…SuministroLR.xsd">` (root)
+  - `<RegistroAlta>` con:
+    - `<IDVersion>1.0</IDVersion>`
+    - `<IDFactura>` (`IDEmisorFactura` con NIF+NombreRazon, `NumSerieFactura`
+      `A-42`, `FechaExpedicionFactura` `DD-MM-YYYY`).
+    - `<NombreRazonEmisor>`, `<TipoFactura>` (F1/F2), `<DescripcionOperacion>`.
+    - `<Destinatarios>` solo si hay NIF cliente (F1); omitido en F2.
+    - `<Desglose>` con un `DetalleDesglose` único al 10 % de alojamiento
+      (ADR-032 pregunta F pendiente — IVA por línea queda para sprint
+      dedicado).
+    - `<CuotaTotal>`, `<ImporteTotal>` con 2 decimales.
+    - `<Encadenamiento>` con `<PrimerRegistro>S</PrimerRegistro>` o
+      `<RegistroAnterior>` (con NIF emisor + huella anterior).
+    - `<SistemaInformatico>` con 6 campos desde env vars.
+    - `<FechaHoraHusoGenRegistro>` ISO 8601.
+    - `<TipoHuella>01</TipoHuella>` (SHA-256) + `<Huella>`.
+
+**Honestidad sobre nombres XSD (CLAUDE.md §9):** cada elemento lleva
+marcador inline:
+  - ✅ confirmado por texto regulatorio del RD/Orden.
+  - ⚠ por verificar contra el XSD vigente. Coincide con la guía
+    técnica pública pero el nombre exacto puede variar entre
+    versiones — **antes de envío real a preprod/producción hay que
+    validar contra el XSD activo**.
+
+### Env vars `SistemaInformatico`
+
+Cinco vars nuevas en `env.schema.ts` con defaults razonables para dev:
+
+  - `VERIFACTU_SISTEMA_NOMBRE_RAZON` (default "Aubergine PMS S.L.")
+  - `VERIFACTU_SISTEMA_NIF` (default "B00000000" placeholder)
+  - `VERIFACTU_SISTEMA_NOMBRE` (default "Aubergine PMS")
+  - `VERIFACTU_SISTEMA_ID` (default "01" — placeholder hasta el alta
+    AEAT del PMS, pregunta D del ADR-032)
+  - `VERIFACTU_SISTEMA_VERSION` (default "0.1.0")
+
+`NumeroInstalacion` = `tenantId` (decisión E del ADR-032).
+
+### `SubmitWorker`
+
+- `findUnique` ahora trae también `tipoFactura`, `huella`, `huellaAnterior`
+  y el `tenant.{nif,razonSocial}`.
+- Guard "invariant violated" si el invoice llega sin emisor o huella
+  (no debería pasar — `issue()` lo valida —, pero si pasa va directo a
+  DEAD_LETTER en lugar de reintentar indefinidamente).
+- Llamada al nuevo generador con todos los campos.
+
+**Tests.**
+
+- Verifactu suite: **76/76** verde (+8 nuevos en `invoice-xml.spec.ts`).
+  - Root + estructura básica.
+  - IDFactura con NIF + serie-número + DD-MM-YYYY.
+  - Destinatarios presente solo con NIF cliente.
+  - PrimerRegistro vs RegistroAnterior según `huellaAnterior`.
+  - SistemaInformatico con los 6 campos.
+  - TipoHuella=01 + Huella.
+  - CuotaTotal + ImporteTotal con 2 decimales.
+  - FechaHoraHusoGenRegistro ISO.
+  - Escape XML de caracteres especiales.
+- `submit.worker.spec.ts` adaptado (invoice ahora trae tenant + huella).
+- Typecheck + lint `@pms/api` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+1. **xadesjs** + refactor `SignerService` a XAdES-BES.
+2. **Verificación nombres XSD ⚠** marcados en el generador contra el
+   schema vigente (input PO: pregunta G del ADR-032).
+3. **IVA por línea** (decisión F del ADR-032 — sprint dedicado).
+4. **PreprodAeatClient** HTTP + credenciales (decisión D del ADR-032).
+5. **Onboarding wizard**: que pida `Tenant.nif/razonSocial` para
+   nuevos tenants (UI ya existe en `/admin/billing/emisor`; falta
+   integrar en el flow inicial).
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: UI emisor (NIF + razón social)
 
 **Scope:** `apps/api/src/verifactu/{dto.ts,emisor.service.ts,verifactu.controller.ts,verifactu.module.ts}`,
