@@ -10,6 +10,7 @@ import {
 import { CertificateVaultService } from './certificate-vault.service';
 import { InvoiceService } from './invoice.service';
 import { SignerService } from './signer.service';
+import { SubmitWorker } from './submit.worker';
 import { VerifactuController } from './verifactu.controller';
 
 /**
@@ -41,6 +42,7 @@ import { VerifactuController } from './verifactu.controller';
     InvoiceService,
     CertificateVaultService,
     SignerService,
+    SubmitWorker,
   ],
   exports: [AEAT_CLIENT, InvoiceService, CertificateVaultService, SignerService],
 })

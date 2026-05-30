@@ -40,7 +40,11 @@ import {
   reservationRoomAssignedV1,
   reservationUpdatedV1,
 } from './reservation';
-import { verifactuInvoiceSubmitRequestedV1 } from './verifactu';
+import {
+  verifactuInvoiceRejectedV1,
+  verifactuInvoiceSubmitRequestedV1,
+  verifactuInvoiceSubmittedV1,
+} from './verifactu';
 
 /**
  * Catalogo central de eventos del PMS.
@@ -155,6 +159,14 @@ export const catalog = {
   },
   'verifactu.invoice.submit_requested': {
     schema: verifactuInvoiceSubmitRequestedV1,
+    schemaVersion: 1,
+  },
+  'verifactu.invoice.submitted': {
+    schema: verifactuInvoiceSubmittedV1,
+    schemaVersion: 1,
+  },
+  'verifactu.invoice.rejected': {
+    schema: verifactuInvoiceRejectedV1,
     schemaVersion: 1,
   },
 } as const;
@@ -276,5 +288,13 @@ export type {
   ChannelSyncCompletedV1Payload,
 } from './channel-manager';
 
-export { verifactuInvoiceSubmitRequestedV1 } from './verifactu';
-export type { VerifactuInvoiceSubmitRequestedV1Payload } from './verifactu';
+export {
+  verifactuInvoiceRejectedV1,
+  verifactuInvoiceSubmitRequestedV1,
+  verifactuInvoiceSubmittedV1,
+} from './verifactu';
+export type {
+  VerifactuInvoiceRejectedV1Payload,
+  VerifactuInvoiceSubmitRequestedV1Payload,
+  VerifactuInvoiceSubmittedV1Payload,
+} from './verifactu';

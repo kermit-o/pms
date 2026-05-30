@@ -80,6 +80,92 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: SubmitWorker + eventos submitted/rejected
+
+**Scope:** `apps/api/src/verifactu/{submit.worker.ts,invoice-xml.ts}`,
+`packages/eventbus/src/catalog/verifactu.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 §4 (submit + retries)
+
+**Qué cambió.**
+
+### Catálogo de eventos
+
+Añadidos al catálogo de eventos:
+- `verifactu.invoice.submitted` — `{invoiceId, invoiceNumber, csv, attemptNumber}`.
+- `verifactu.invoice.rejected` — `{..., errorMessage, attemptNumber, isDeadLetter}`.
+
+### `buildInvoiceXml`
+
+Generador de payload XML mínimo y bien formado. **STUB explícito** —
+documentado en JSDoc: cuando exista el XSD Verifactu real (W3+) este
+helper se reemplaza por el generador conforme al schema oficial. Por
+ahora suficiente para alimentar al signer + StubAeatClient.
+
+### `SubmitWorker`
+
+Consumer durable de `verifactu.invoice.submit_requested`. Por evento:
+
+1. Carga la factura. Si ya `ACCEPTED` → ack idempotente.
+2. Adquiere la attempt (promociona PENDING/IN_PROGRESS, o crea una
+   nueva con `attemptNumber++`).
+3. Genera XML, lo firma con `SignerService`, persiste `request_payload`.
+4. Llama `AeatClient.submit()`.
+5. Decide:
+   - **ACCEPTED**: marca submission + invoice como ACCEPTED, guarda
+     `aeat_csv`, publica `verifactu.invoice.submitted`. ack.
+   - **REJECTED**: marca submission + invoice como REJECTED, publica
+     `verifactu.invoice.rejected` con `isDeadLetter=true`. term (no
+     reintentamos validaciones AEAT).
+   - **Excepción transitoria** (signer falla, AEAT 5xx/red): submission
+     vuelve a PENDING con `next_attempt_at`, nak; si era el último
+     intento (`deliveryCount == maxDeliver=5`), DEAD_LETTER + publica
+     rejected + term.
+
+`deliveryCount` se extrae de `msg.info.deliveryCount` del JsMsg.
+
+`maxDeliver=5`, `ackWaitMs=60_000`, `batchSize=4`. Desactivado en
+`NODE_ENV=test` (los tests llaman `handle()` directamente).
+
+**Por qué.**
+
+Sin worker, el evento `submit_requested` que `InvoiceService.issue()`
+publica desde W1 quedaba huérfano. Ahora el bucle end-to-end queda
+cerrado en modo `stub`: el operador emite factura → worker la firma y
+"envía" al StubAeatClient → la factura queda ACCEPTED + se publica el
+evento downstream.
+
+Para envío real a AEAT preprod faltan dos piezas, ambas documentadas:
+1. **XAdES-BES qualifying properties** (pendiente ADR sobre librería).
+2. **`PreprodAeatClient` HTTP real** (próximo commit, ya es viable
+   porque el contrato `AeatClient` está fijo).
+
+**Tests.**
+
+- Verifactu suite: **55/55** verde (+10 nuevos).
+  - `submit.worker.spec.ts` (7 tests):
+    * invoice no existe → term.
+    * invoice ya ACCEPTED → ack idempotente.
+    * AEAT ACCEPTED → invoice ACCEPTED + submission ACCEPTED + publish.
+    * AEAT REJECTED → REJECTED + publish (isDeadLetter=true) + term.
+    * signer throw + intentos restantes → nak.
+    * signer throw en último intento → DEAD_LETTER + publish + term.
+    * AEAT throw transitorio → nak.
+  - `invoice-xml.spec.ts` (3 tests): canonical XML estable, omisión de
+    Nif/Address opcionales, escape XML de caracteres especiales.
+- Typecheck + lint `@pms/api` verdes.
+- `@pms/eventbus` rebuilt para que los nuevos eventos del catálogo se
+  vean en typecheck del consumer.
+
+**Sigue pendiente (en esta rama).**
+
+- ADR + signer XAdES-BES completo.
+- PreprodAeatClient HTTP real.
+- UI "histórico de envíos" / reintento manual desde back-office (nice
+  to have, no bloqueante).
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: signer XMLDSig + repackage del vault
 
 **Scope:** `apps/api/src/verifactu/{signer.service.ts,certificate-vault.service.ts}`
