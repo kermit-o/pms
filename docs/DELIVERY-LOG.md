@@ -80,6 +80,60 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [DOC] · Sprint 14 W2 — ADR-032 payload XML Verifactu
+
+**Scope:** `docs/adr/032-verifactu-xml-payload.md`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030, ADR-031. RD 1007/2023, Orden HAC/1177/2024.
+
+**Qué cambió.**
+
+Nuevo ADR (status: **Proposed**) que cierra el gap real más profundo
+para envío AEAT: el payload XML conforme al schema oficial. El generador
+actual (`buildInvoiceXml()` en `invoice-xml.ts`) produce
+`<AubergineVerifactuInvoiceStub>` — etiqueta inventada. Sin esta ADR,
+ninguna firma (por buena que sea) pasará el validador AEAT.
+
+**Contenido del ADR:**
+
+- §1 Contexto + las 4 cosas que AEAT valida (estructura, firma,
+  encadenamiento, SistemaInformatico).
+- §2 Estructura del `RegistroAlta` con marcadores explícitos
+  ✅ confirmado / ⚠ por verificar contra XSD vigente. **No alucino
+  nombres exactos** — los marco para review antes de codificar.
+- §3 Tipos de factura (F1 / F2 / R) + heurística MVP propuesta.
+- §4 Encadenamiento de huellas (SHA-256 + cálculo + concurrencia).
+- §5 Tres modelos para IDEmisor (por tenant / por property / mixto).
+  Recomendación MVP: por tenant.
+- §6 SistemaInformatico (NombreRazon, NIF, IdSistemaInformatico,
+  Version, NumeroInstalacion) — incluye trámite AEAT a hacer por PO.
+- §7 Schema gaps Prisma que hay que cerrar: `Tenant.nif/razonSocial`,
+  `Invoice.huella/huellaAnterior`, líneas con desglose IVA.
+- §8 Plan de implementación (1.5-2 días + 0.5d XAdES en paralelo).
+- §9 Tabla resumen de decisiones pendientes para el PO (A-G).
+
+**7 decisiones pendientes del PO** (resumen §9):
+A. Heurística F1/F2.
+B. IDEmisor: por tenant vs property.
+C. NIF de Aubergine PMS S.L.
+D. Estado registro PMS ante AEAT.
+E. `NumeroInstalacion = tenantId`?
+F. IVA por línea: ¿W2 o sprint dedicado?
+G. URL/versión XSD vigente confirmada.
+
+**Tests.**
+
+Ninguno — es documentación. Typecheck + lint sin cambios.
+
+**Sigue pendiente (en esta rama).**
+
+- Firma PO ADR-031 (librería XAdES) y ADR-032 (este).
+- Implementación payload real + huellas + (posiblemente) IVA por
+  línea + (posiblemente) split de `nif/razonSocial` en Tenant.
+- PreprodAeatClient HTTP + credenciales AEAT preprod.
+
+---
+
 ## 2026-05-30 · [DOC] · Sprint 14 W2 — ADR-031 librería XAdES-BES
 
 **Scope:** `docs/adr/031-verifactu-xades-library.md`
