@@ -7,6 +7,7 @@ import {
   StubAeatClient,
   type AeatClient,
 } from './aeat';
+import { CertificateVaultService } from './certificate-vault.service';
 import { InvoiceService } from './invoice.service';
 import { VerifactuController } from './verifactu.controller';
 
@@ -37,8 +38,9 @@ import { VerifactuController } from './verifactu.controller';
       inject: [AeatClientFactory],
     },
     InvoiceService,
+    CertificateVaultService,
   ],
-  exports: [AEAT_CLIENT, InvoiceService],
+  exports: [AEAT_CLIENT, InvoiceService, CertificateVaultService],
 })
 export class VerifactuModule implements OnModuleInit {
   private readonly log = new Logger(VerifactuModule.name);

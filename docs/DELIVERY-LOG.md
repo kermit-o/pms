@@ -80,6 +80,72 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: certificate vault (AES-256-GCM + PKCS#12)
+
+**Scope:** `apps/api/src/verifactu`, `apps/api/package.json`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 §3 (cert vault)
+
+**Qué cambió.**
+
+- **Dependencia nueva** `node-forge` (MIT, dep aprobada por PO el 2026-05-30
+  para parseo PKCS#12). + `@types/node-forge` en dev.
+- **`certificate-crypto.ts`** — helpers puros AES-256-GCM:
+  - Clave derivada con PBKDF2-HMAC-SHA256 (100k iters, OWASP 2024 baseline)
+    a partir de `VERIFACTU_MASTER_KEY` con `tenantId` como salt.
+  - Layout del blob: `[12B IV][16B authTag][N B ciphertext]`. Round-trip
+    cubierto por 5 tests (incluye fallo en wrong key / wrong tenant /
+    truncated blob).
+- **`CertificateVaultService`**:
+  - `upload(user, corr, p12Buffer, passphrase)` — parsea con node-forge
+    (rechaza p12 inválido o passphrase incorrecta como `BadRequest`),
+    extrae subject CN, serial, fingerprint SHA-256, validez. Cifra el
+    .p12 y escribe a `${VERIFACTU_CERT_DIR}/${tenantId}.p12.enc` con
+    `mode=0o600`. Upsert en `verifactu_certificates` (1 row por tenant).
+  - `getMetadata(user, corr)` — devuelve metadata pública (sin payload).
+  - `revoke(user, corr, reason)` — soft revoke (`revoked_at`/`revoked_reason`).
+    Idempotente.
+  - `loadDecryptedP12(tenantId)` — lectura interna **NO expuesta vía
+    HTTP** para el futuro signer. Rechaza si cert revocado.
+- **Guards de configuración**: cualquier método que use crypto exige
+  `VERIFACTU_MASTER_KEY`; ausente → `ServiceUnavailableException` claro.
+
+**Por qué.**
+
+Sin vault, no hay forma legal de firmar facturas: el `.p12` AEAT no puede
+sentarse en disco sin cifrar (auditoría) ni en variable de entorno
+(rotación impracticable). Este servicio cierra el invariante "el .p12 sólo
+existe en claro en memoria durante la firma".
+
+**Archivos clave.**
+
+- `apps/api/src/verifactu/certificate-crypto.ts` (helpers puros + tests)
+- `apps/api/src/verifactu/certificate-vault.service.ts` (servicio)
+- `apps/api/src/verifactu/certificate-vault.service.spec.ts`
+  (round-trip con .p12 auto-firmado generado en test)
+
+**Tests.**
+
+- Verifactu suite: **29/29** verde
+  - certificate-crypto       5 tests (round-trip, IV aleatorio, fallo wrong key/tenant)
+  - certificate-vault        6 tests (upload, revoke, load, fallos config)
+  - invoice-totals           4 tests
+  - invoice.service          6 tests
+  - stub-aeat-client         3 tests
+  - verifactu.module guards  5 tests
+- Typecheck + lint `@pms/api` verdes.
+
+**Sigue pendiente (commits sucesivos en esta misma rama).**
+
+- Controller HTTP del vault: `POST /verifactu/certificate` (multipart),
+  `GET /verifactu/certificate`, `DELETE /verifactu/certificate`.
+- Signer XAdES-BES consumiendo `loadDecryptedP12()`.
+- `SubmitWorker` consumer JetStream + retries + DLQ.
+- `PreprodAeatClient` HTTP real.
+- UI back-office `/admin/billing/certificate`.
+
+---
+
 ## 2026-05-29 · [FEAT] · Sprint 14 W2 — Verifactu: HTTP API + proxy back-office
 
 **Scope:** `apps/api/src/verifactu`, `apps/web-fo/src/lib/api.ts`,
