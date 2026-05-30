@@ -80,6 +80,53 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [DOC] · Sprint 14 W2 — ADR-031 librería XAdES-BES
+
+**Scope:** `docs/adr/031-verifactu-xades-library.md`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 §3, §5; CLAUDE.md §8 (nuevas deps requieren aprobación PO).
+
+**Qué cambió.**
+
+Nuevo ADR (status: **Proposed**) que cierra el último blocker para envío
+real a AEAT: cómo emitir XAdES-BES en lugar del XMLDSig actual.
+
+Tres opciones comparadas con datos npm reales (tamaño, deps, mantenedores,
+estimación de LOC y tiempo a preprod verde):
+
+1. **`xadesjs`** (PeculiarVentures, MIT, ~12 deps transitivas, ~50 LOC
+   propio, time-to-green ~0.5d).
+2. **`xml-crypto` + wrapper XAdES manual** (node-saml org, 3 deps, ~200
+   LOC propio, time-to-green ~2d).
+3. **Implementación propia con node-forge** (0 deps nuevas, ~400 LOC
+   propio, time-to-green 3-5d).
+
+**Recomendación:** opción 1 (`xadesjs`). Razonamiento detallado en §4:
+el blocker real frente al validador AEAT es C14N exacta + estructura
+XAdES exacta — problema resuelto por xadesjs, abierto por las otras.
+
+**Decisiones pendientes para el PO** (§6):
+1. ¿Apruebas `xadesjs`?
+2. Cuándo facilitas credenciales AEAT preprod + cert FNMT-RCM de
+   pruebas.
+3. ¿Vendor lock-in tolerable? (opción 2 minimiza riesgo de salida).
+
+Cuando el PO firme, el commit siguiente implementa el plan §5 (~0.5d
+de código + tests).
+
+**Tests.**
+
+Ninguno — es documentación. Typecheck + lint no se ven afectados; no
+he tocado código.
+
+**Sigue pendiente (en esta rama).**
+
+- Firma del PO en ADR-031 → implementación XAdES-BES.
+- PreprodAeatClient HTTP real (sin lo anterior, no tiene payload válido).
+- UI histórico de envíos (nice-to-have, no bloqueante para producción).
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: SubmitWorker + eventos submitted/rejected
 
 **Scope:** `apps/api/src/verifactu/{submit.worker.ts,invoice-xml.ts}`,
