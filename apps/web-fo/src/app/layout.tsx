@@ -57,13 +57,22 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 ))}
               </ul>
               {session.roles?.includes('tenant_admin') && (
-                <Link
-                  href="/admin/copilot/sessions"
-                  className="rounded-md bg-aubergine-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-100"
-                  title="Vista admin del Copilot — historial de sesiones del equipo"
-                >
-                  Admin · Copilot
-                </Link>
+                <>
+                  <Link
+                    href="/admin/copilot/sessions"
+                    className="rounded-md bg-aubergine-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-100"
+                    title="Vista admin del Copilot — historial de sesiones del equipo"
+                  >
+                    Admin · Copilot
+                  </Link>
+                  <Link
+                    href="/admin/billing/certificate"
+                    className="rounded-md bg-aubergine-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-100"
+                    title="Certificado digital usado para firmar facturas Verifactu"
+                  >
+                    Admin · Certificado
+                  </Link>
+                </>
               )}
               <PropertyPicker />
               <form

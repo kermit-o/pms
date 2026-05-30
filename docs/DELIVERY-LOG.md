@@ -80,6 +80,57 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: UI back-office del certificado
+
+**Scope:** `apps/web-fo/src/app/admin/billing/certificate`,
+`apps/web-fo/src/app/layout.tsx`
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+- **Página** `/admin/billing/certificate` (RSC + server actions, patrón
+  idéntico a `/compliance/ses`):
+  - Visor metadata: sujeto, número de serie, validez, huella SHA-256,
+    fecha de subida.
+  - Badge de estado con código de color:
+    - revocado → slate (banner superior)
+    - caducado → rojo (banner superior)
+    - <30 días para caducar → badge rojo
+    - <90 días → badge ámbar
+    - resto → badge verde
+  - Form de subida: file picker (`.p12,.pfx,application/x-pkcs12`) +
+    passphrase. Server action lee el `File` con `arrayBuffer()`, codifica
+    a base64 y llama al proxy. Límite client-side de 1.5 MB (el server
+    aplica su propio límite de 2 MiB).
+  - Form de revocación: input motivo (≥3 chars) + botón rojo.
+  - Estado vacío con CTA cuando no hay cert.
+- **Navegación**: nuevo enlace `Admin · Certificado` en el header (sólo
+  visible para `tenant_admin`), junto al de Admin · Copilot.
+
+**Por qué.**
+
+Sin UI, el vault y los endpoints HTTP del commit anterior obligan al
+operador (o al PO) a usar curl + base64 a mano para subir el certificado.
+Esta pantalla cierra la experiencia end-to-end del lado humano. Los
+operadores boutique no son técnicos.
+
+**Tests.**
+
+- Typecheck + lint `@pms/web-fo` verdes. No hay tests automatizados nuevos
+  para esta página — es un RSC fino que sólo coordina helpers de
+  `lib/api.ts` (cubiertos en el commit anterior) y server actions con
+  validación trivial. La verificación funcional debe hacerse manualmente
+  en `pnpm --filter @pms/web-fo dev` (queda pendiente smoke con PO).
+
+**Sigue pendiente (en esta rama).**
+
+- Signer XAdES-BES.
+- SubmitWorker JetStream + DLQ.
+- PreprodAeatClient HTTP real.
+- UI botón "Emitir factura" en `/folios/[id]`.
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: certificate HTTP API + back-office proxy
 
 **Scope:** `apps/api/src/verifactu`, `apps/web-fo/src/app/api/verifactu`,
