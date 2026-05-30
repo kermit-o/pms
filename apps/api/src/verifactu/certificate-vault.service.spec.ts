@@ -121,7 +121,7 @@ describe('CertificateVaultService', () => {
     }
   });
 
-  it('uploads, persists metadata, and round-trips decrypt', async () => {
+  it('uploads, persists metadata, and round-trips a passphrase-less p12', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'vault-'));
     try {
       const { service, getRow } = makeService({ certDir: tmp, masterKey: 'm'.repeat(40) });
@@ -134,14 +134,21 @@ describe('CertificateVaultService', () => {
 
       const row = getRow();
       expect(row).not.toBeNull();
-      // Blob file exists on disk and is non-empty (encrypted).
       const onDisk = readFileSync(row!.encryptedBlobPath);
       expect(onDisk.length).toBeGreaterThan(12 + 16); // IV + tag + 1
       expect(onDisk.equals(p12)).toBe(false); // not plaintext
 
-      // Decrypt via the service exposes the original .p12 bytes.
+      // El blob descifrado ya NO está protegido por la passphrase original
+      // (ADR-030 §3 — el vault es el único límite de confidencialidad).
       const back = await service.loadDecryptedP12(TENANT);
-      expect(back.equals(p12)).toBe(true);
+      const asn1 = forge.asn1.fromDer(forge.util.createBuffer(back.toString('binary')));
+      const pfx = forge.pkcs12.pkcs12FromAsn1(asn1, false, null as unknown as string);
+      const certBagOid = forge.pki.oids.certBag as string;
+      const cert = pfx.getBags({ bagType: certBagOid })[certBagOid]?.[0]?.cert;
+      expect(cert).toBeDefined();
+      const cn = (cert!.subject.attributes as Array<{ shortName?: string; value?: unknown }>)
+        .find((a) => a.shortName === 'CN')?.value?.toString();
+      expect(cn).toBe('AUBERGINE HOTEL S.L.');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

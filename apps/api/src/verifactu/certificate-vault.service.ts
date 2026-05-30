@@ -58,9 +58,9 @@ export class CertificateVaultService {
     passphrase: string,
   ): Promise<CertificateMetadata> {
     const masterKey = this.requireMasterKey();
-    const parsed = parseP12(p12Buffer, passphrase);
+    const { metadata, repacked } = parseAndRepackP12(p12Buffer, passphrase);
 
-    const blob = encryptCertificate(masterKey, user.tenantId, p12Buffer);
+    const blob = encryptCertificate(masterKey, user.tenantId, repacked);
     const path = await this.writeBlob(user.tenantId, blob);
 
     const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId };
@@ -69,20 +69,20 @@ export class CertificateVaultService {
         where: { tenantId: user.tenantId },
         create: {
           tenantId: user.tenantId,
-          subjectCn: parsed.subjectCn,
-          serialNumber: parsed.serialNumber,
-          fingerprintSha256: parsed.fingerprintSha256,
-          notBefore: parsed.notBefore,
-          notAfter: parsed.notAfter,
+          subjectCn: metadata.subjectCn,
+          serialNumber: metadata.serialNumber,
+          fingerprintSha256: metadata.fingerprintSha256,
+          notBefore: metadata.notBefore,
+          notAfter: metadata.notAfter,
           encryptedBlobPath: path,
           uploadedBy: user.sub,
         },
         update: {
-          subjectCn: parsed.subjectCn,
-          serialNumber: parsed.serialNumber,
-          fingerprintSha256: parsed.fingerprintSha256,
-          notBefore: parsed.notBefore,
-          notAfter: parsed.notAfter,
+          subjectCn: metadata.subjectCn,
+          serialNumber: metadata.serialNumber,
+          fingerprintSha256: metadata.fingerprintSha256,
+          notBefore: metadata.notBefore,
+          notAfter: metadata.notAfter,
           encryptedBlobPath: path,
           uploadedBy: user.sub,
           uploadedAt: new Date(),
@@ -94,14 +94,14 @@ export class CertificateVaultService {
     });
 
     this.log.log(
-      `Certificate uploaded tenant=${user.tenantId} subject="${parsed.subjectCn}" serial=${parsed.serialNumber} notAfter=${parsed.notAfter.toISOString()}`,
+      `Certificate uploaded tenant=${user.tenantId} subject="${metadata.subjectCn}" serial=${metadata.serialNumber} notAfter=${metadata.notAfter.toISOString()}`,
     );
 
     return {
       id: row.id,
       uploadedAt: row.uploadedAt,
       revokedAt: row.revokedAt,
-      ...parsed,
+      ...metadata,
     };
   }
 
@@ -189,10 +189,22 @@ export class CertificateVaultService {
 }
 
 /**
- * Parse + valida el .p12. Lanza BadRequest si el formato es inválido o la
- * passphrase no abre el archivo. Devuelve los campos que necesitamos en DB.
+ * Parse + valida el .p12 con la passphrase original, extrae la metadata y
+ * re-empaqueta el archivo SIN passphrase para almacenamiento.
+ *
+ * Decisión clave (ADR-030 §3): el vault es el ÚNICO límite de
+ * confidencialidad. Una vez subido, el .p12 ya no está protegido por su
+ * passphrase PKCS#12 original — sólo por el envoltorio AES-GCM derivado de
+ * `VERIFACTU_MASTER_KEY` + `tenantId`. Esto permite al signer extraer la
+ * clave sin pedir al usuario la passphrase en cada firma.
+ *
+ * Lanza BadRequest si el formato es inválido o la passphrase no abre el
+ * archivo o no se encuentran cert + clave privada.
  */
-function parseP12(p12Buffer: Buffer, passphrase: string): ParsedCertificate {
+function parseAndRepackP12(
+  p12Buffer: Buffer,
+  passphrase: string,
+): { metadata: ParsedCertificate; repacked: Buffer } {
   let p12: forge.pkcs12.Pkcs12Pfx;
   try {
     const asn1 = forge.asn1.fromDer(forge.util.createBuffer(p12Buffer.toString('binary')));
@@ -209,6 +221,16 @@ function parseP12(p12Buffer: Buffer, passphrase: string): ParsedCertificate {
     throw new BadRequestException('PKCS#12 archive does not contain a certificate');
   }
 
+  const keyBagOid = forge.pki.oids.pkcs8ShroudedKeyBag as string;
+  const keyBagAltOid = forge.pki.oids.keyBag as string;
+  const keyBags = p12.getBags({ bagType: keyBagOid });
+  const altKeyBags = p12.getBags({ bagType: keyBagAltOid });
+  const privateKey =
+    keyBags[keyBagOid]?.[0]?.key ?? altKeyBags[keyBagAltOid]?.[0]?.key;
+  if (!privateKey) {
+    throw new BadRequestException('PKCS#12 archive does not contain a private key');
+  }
+
   const attrs: Array<{ shortName?: string; value?: unknown }> = cert.subject.attributes;
   const subjectCn =
     attrs.find((a) => a.shortName === 'CN')?.value?.toString() ??
@@ -217,11 +239,20 @@ function parseP12(p12Buffer: Buffer, passphrase: string): ParsedCertificate {
   const der = forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes();
   const fingerprintSha256 = createHash('sha256').update(Buffer.from(der, 'binary')).digest('hex');
 
+  // Re-empaquetar SIN passphrase. forge acepta null → bags sin cifrar.
+  const repackedAsn1 = forge.pkcs12.toPkcs12Asn1(privateKey, [cert], null, {
+    algorithm: 'aes256',
+  });
+  const repacked = Buffer.from(forge.asn1.toDer(repackedAsn1).getBytes(), 'binary');
+
   return {
-    subjectCn,
-    serialNumber: cert.serialNumber,
-    fingerprintSha256,
-    notBefore: cert.validity.notBefore,
-    notAfter: cert.validity.notAfter,
+    metadata: {
+      subjectCn,
+      serialNumber: cert.serialNumber,
+      fingerprintSha256,
+      notBefore: cert.validity.notBefore,
+      notAfter: cert.validity.notAfter,
+    },
+    repacked,
   };
 }

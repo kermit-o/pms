@@ -9,6 +9,7 @@ import {
 } from './aeat';
 import { CertificateVaultService } from './certificate-vault.service';
 import { InvoiceService } from './invoice.service';
+import { SignerService } from './signer.service';
 import { VerifactuController } from './verifactu.controller';
 
 /**
@@ -39,8 +40,9 @@ import { VerifactuController } from './verifactu.controller';
     },
     InvoiceService,
     CertificateVaultService,
+    SignerService,
   ],
-  exports: [AEAT_CLIENT, InvoiceService, CertificateVaultService],
+  exports: [AEAT_CLIENT, InvoiceService, CertificateVaultService, SignerService],
 })
 export class VerifactuModule implements OnModuleInit {
   private readonly log = new Logger(VerifactuModule.name);

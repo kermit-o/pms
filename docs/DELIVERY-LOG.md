@@ -80,6 +80,84 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: signer XMLDSig + repackage del vault
+
+**Scope:** `apps/api/src/verifactu/{signer.service.ts,certificate-vault.service.ts}`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 §3 (vault), §5 (firma)
+
+**Qué cambió.**
+
+### Refactor del vault (consistencia con la intención documentada)
+
+El comentario del `upload()` previo decía "la passphrase nunca se persiste —
+el wrapper AES es el único secreto necesario", pero el código almacenaba
+el `.p12` con su passphrase PKCS#12 original todavía dentro: el signer no
+podía extraer la clave sin pedírsela al usuario en cada firma.
+
+**Fix:** `upload()` ahora valida con la passphrase del usuario, extrae la
+clave + cert, y re-empaqueta como un **nuevo** `.p12` SIN passphrase
+antes de cifrar con AES-GCM. El vault pasa a ser el único límite de
+confidencialidad — el modelo de seguridad pretendido desde el principio.
+
+### `SignerService` (XMLDSig enveloped, RSA-SHA256)
+
+- Carga el `.p12` desencriptado desde el vault, parsea con node-forge,
+  extrae clave privada + cert.
+- Calcula SHA-256 del XML de entrada → `<ds:Reference DigestValue>`.
+- Construye `<ds:SignedInfo>` con CanonicalizationMethod=C14N,
+  SignatureMethod=RSA-SHA256, transformaciones enveloped + C14N.
+- Firma SignedInfo con RSA-SHA256.
+- Empaqueta `<ds:Signature>` con `<ds:SignatureValue>` y `<ds:KeyInfo>`
+  (X509Certificate base64).
+- Inserta la firma como último hijo del raíz del XML (enveloped).
+
+### **Alcance acotado — leer con atención**
+
+Este signer emite **XMLDSig estándar válido y verificable**, pero **NO**
+es XAdES-BES completo. Falta:
+
+- `<xades:QualifyingProperties>` con `<xades:SignedProperties>`.
+- Una segunda `<ds:Reference>` a SignedProperties.
+- `<xades:SigningCertificate>` con CertDigest + IssuerSerial.
+- `<xades:SigningTime>`.
+
+El envío real a AEAT requiere XAdES-BES completo. La elección de librería
+para la capa XAdES (xadesjs / xml-crypto + wrapper / propio) merece su
+propio ADR — pendiente. Documentado en el JSDoc de `SignerService` con
+"PENDIENTE".
+
+Con este alcance, el signer es **suficiente para que el SubmitWorker y el
+StubAeatClient funcionen end-to-end en dev/test**, y para escribir el
+PreprodAeatClient HTTP con un payload firmado plausible.
+
+**Por qué.**
+
+Sin signer, el SubmitWorker no tiene XML que enviar. El refactor del vault
+era prerrequisito: sin re-empaquetado, cada firma exigiría pedir la
+passphrase de nuevo, lo que rompe el flujo automático del worker.
+
+**Tests.**
+
+- Verifactu suite: **45/45** verde (+3 nuevos en `signer.service.spec.ts`)
+  - Round-trip criptográfico real: se firma un XML de prueba, se extrae
+    `<ds:SignedInfo>`, se recomputa SHA-256, se verifica la
+    SignatureValue con la clave pública del cert declarado. Si la firma
+    falla, el test falla.
+  - Throws cuando no hay cert subido.
+  - Rechaza XML sin etiqueta de cierre (insertEnvelopedSignature).
+- Test del vault adaptado: el blob descifrado ya no es idéntico al
+  original, pero parsea como PKCS#12 sin passphrase con el mismo CN.
+- Typecheck + lint `@pms/api` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+- **ADR sobre librería XAdES-BES** + implementación completa.
+- SubmitWorker JetStream + DLQ (puede empezar ya contra este signer).
+- PreprodAeatClient HTTP real.
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: emisión de facturas desde el folio
 
 **Scope:** `apps/api/src/verifactu`, `apps/web-fo/src/lib/api.ts`,
