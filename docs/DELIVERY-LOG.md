@@ -80,6 +80,56 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: certificate HTTP API + back-office proxy
+
+**Scope:** `apps/api/src/verifactu`, `apps/web-fo/src/app/api/verifactu`,
+`apps/web-fo/src/lib/api.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 §3
+
+**Qué cambió.**
+
+- **DTOs Zod** `UploadCertificateDto`, `RevokeCertificateDto` (apps/api/src/verifactu/dto.ts).
+- **Endpoints API** (`tenant_admin` only):
+  - `POST /verifactu/certificate` — body `{p12Base64, passphrase}` → 201 +
+    metadata. Decodifica base64, valida tamaño mínimo del payload, delega
+    al vault.
+  - `GET /verifactu/certificate` — metadata pública o 404.
+  - `DELETE /verifactu/certificate` — body `{reason}` (≥3 chars), soft revoke.
+- **Decisión: base64+JSON en lugar de multipart.** Justificación: endpoint
+  invocado ~1 vez/año por tenant, .p12 típico <10 KB → ~13 KB en base64,
+  holgadamente bajo el bodyLimit Fastify por defecto (1 MB). Evita
+  registrar `@fastify/multipart` globalmente. Documentado en el JSDoc del
+  DTO.
+- **Proxy back-office** `apps/web-fo/src/app/api/verifactu/certificate/route.ts`
+  con `GET` / `POST` / `DELETE`. Helpers tipados en `lib/api.ts`:
+  `getCertificate`, `uploadCertificate`, `revokeCertificate`. El 404 del
+  API se traduce a `null` en `getCertificate` para simplificar consumo.
+
+**Por qué.**
+
+Sin endpoints, el vault del commit anterior está inerte: ningún operador
+puede subir un .p12 desde la UI. Con esto, ya queda toda la base — la
+única pieza que falta antes de poder firmar end-to-end es el signer XAdES.
+
+**Tests.**
+
+- Verifactu suite: **38/38** verde (+9 nuevos en
+  `verifactu.controller.spec.ts`): validación de body (3 casos rechazo),
+  forwarding al servicio (3 casos), `GET` con/sin certificado, `DELETE`
+  rechaza reason corta y forwardea correctamente.
+- Typecheck + lint `@pms/api` verdes. Typecheck `@pms/web-fo` verde.
+
+**Sigue pendiente (en esta rama).**
+
+- Signer XAdES-BES (consume `loadDecryptedP12()` del vault).
+- `SubmitWorker` JetStream consumer + backoff + DLQ.
+- `PreprodAeatClient` HTTP real.
+- UI back-office `/admin/billing/certificate` (form + visor metadata).
+- UI botón "Emitir factura" en `/folios/[id]`.
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: certificate vault (AES-256-GCM + PKCS#12)
 
 **Scope:** `apps/api/src/verifactu`, `apps/api/package.json`

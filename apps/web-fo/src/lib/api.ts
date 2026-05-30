@@ -1520,3 +1520,47 @@ export async function issueInvoice(
     body: JSON.stringify(input),
   });
 }
+
+export interface CertificateMetadata {
+  id: string;
+  subjectCn: string;
+  serialNumber: string;
+  fingerprintSha256: string;
+  notBefore: string;
+  notAfter: string;
+  uploadedAt: string;
+  revokedAt: string | null;
+}
+
+export async function uploadCertificate(
+  accessToken: string | undefined,
+  input: { p12Base64: string; passphrase: string },
+): Promise<CertificateMetadata> {
+  return apiFetch(`/verifactu/certificate`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getCertificate(
+  accessToken: string | undefined,
+): Promise<CertificateMetadata | null> {
+  try {
+    return await apiFetch(`/verifactu/certificate`, { accessToken });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function revokeCertificate(
+  accessToken: string | undefined,
+  reason: string,
+): Promise<{ id: string; revokedAt: string }> {
+  return apiFetch(`/verifactu/certificate`, {
+    method: 'DELETE',
+    accessToken,
+    body: JSON.stringify({ reason }),
+  });
+}
