@@ -8,6 +8,7 @@ import {
   type AeatClient,
 } from './aeat';
 import { CertificateVaultService } from './certificate-vault.service';
+import { EmisorService } from './emisor.service';
 import { InvoiceService } from './invoice.service';
 import { SignerService } from './signer.service';
 import { SubmitWorker } from './submit.worker';
@@ -41,10 +42,17 @@ import { VerifactuController } from './verifactu.controller';
     },
     InvoiceService,
     CertificateVaultService,
+    EmisorService,
     SignerService,
     SubmitWorker,
   ],
-  exports: [AEAT_CLIENT, InvoiceService, CertificateVaultService, SignerService],
+  exports: [
+    AEAT_CLIENT,
+    InvoiceService,
+    CertificateVaultService,
+    EmisorService,
+    SignerService,
+  ],
 })
 export class VerifactuModule implements OnModuleInit {
   private readonly log = new Logger(VerifactuModule.name);

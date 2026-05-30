@@ -9,13 +9,20 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Req,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
 import { CertificateVaultService } from './certificate-vault.service';
-import { IssueInvoiceDto, RevokeCertificateDto, UploadCertificateDto } from './dto';
+import {
+  IssueInvoiceDto,
+  RevokeCertificateDto,
+  UpdateEmisorDto,
+  UploadCertificateDto,
+} from './dto';
+import { EmisorService } from './emisor.service';
 import { InvoiceService } from './invoice.service';
 
 @Controller('verifactu')
@@ -23,7 +30,28 @@ export class VerifactuController {
   constructor(
     private readonly invoices: InvoiceService,
     private readonly certs: CertificateVaultService,
+    private readonly emisor: EmisorService,
   ) {}
+
+  @Get('emisor')
+  @Roles('tenant_admin')
+  async getEmisor(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest) {
+    return this.emisor.get(user, correlationIdOf(req));
+  }
+
+  @Put('emisor')
+  @Roles('tenant_admin')
+  async updateEmisor(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Body() body: unknown,
+  ) {
+    const parsed = UpdateEmisorDto.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues.map((i) => i.message).join('; '));
+    }
+    return this.emisor.update(user, correlationIdOf(req), parsed.data);
+  }
 
   @Post('invoices/issue')
   @Roles('tenant_admin', 'front_desk')

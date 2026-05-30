@@ -66,6 +66,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                     Admin · Copilot
                   </Link>
                   <Link
+                    href="/admin/billing/emisor"
+                    className="rounded-md bg-aubergine-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-100"
+                    title="NIF y razón social del emisor de facturas Verifactu"
+                  >
+                    Admin · Emisor
+                  </Link>
+                  <Link
                     href="/admin/billing/certificate"
                     className="rounded-md bg-aubergine-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-100"
                     title="Certificado digital usado para firmar facturas Verifactu"

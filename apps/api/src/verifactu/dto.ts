@@ -36,3 +36,23 @@ export const RevokeCertificateDto = z.object({
 });
 
 export type RevokeCertificateDto = z.infer<typeof RevokeCertificateDto>;
+
+/**
+ * Datos del emisor (ADR-032 §5.a): NIF + razón social del Tenant.
+ *
+ * Validación NIF MVP: 9 caracteres alfanuméricos en mayúsculas. Cubre NIF
+ * (8 dígitos + letra), CIF (letra + 7 + dígito/letra) y NIE (X/Y/Z + 7 +
+ * letra) sin meterse en check-digits — la verificación estricta de
+ * letra-control la dejamos para cuando AEAT preprod rechace por NIF
+ * inválido y tengamos un test contra spec real.
+ */
+export const UpdateEmisorDto = z.object({
+  nif: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{9}$/, 'NIF must be 9 alphanumeric characters (uppercase)'),
+  razonSocial: z.string().trim().min(1).max(200),
+});
+
+export type UpdateEmisorDto = z.infer<typeof UpdateEmisorDto>;

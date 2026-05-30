@@ -1576,3 +1576,23 @@ export async function revokeCertificate(
     body: JSON.stringify({ reason }),
   });
 }
+
+export interface EmisorData {
+  nif: string | null;
+  razonSocial: string | null;
+}
+
+export async function getEmisor(accessToken: string | undefined): Promise<EmisorData> {
+  return apiFetch(`/verifactu/emisor`, { accessToken });
+}
+
+export async function updateEmisor(
+  accessToken: string | undefined,
+  input: { nif: string; razonSocial: string },
+): Promise<EmisorData> {
+  return apiFetch(`/verifactu/emisor`, {
+    method: 'PUT',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}

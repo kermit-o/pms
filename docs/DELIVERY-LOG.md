@@ -80,6 +80,71 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: UI emisor (NIF + razón social)
+
+**Scope:** `apps/api/src/verifactu/{dto.ts,emisor.service.ts,verifactu.controller.ts,verifactu.module.ts}`,
+`apps/web-fo/src/{lib/api.ts,app/api/verifactu/emisor/route.ts,app/admin/billing/emisor/page.tsx,app/layout.tsx}`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-032 §5.a (un IDEmisor por tenant).
+
+**Por qué (importante).**
+
+El commit anterior añadió `BadRequest` en `InvoiceService.issue()` cuando
+el tenant no tiene NIF/razón social — efecto secundario: rompe el botón
+"Emitir factura" para todos los tenants existentes (todos en estado
+post-migración: campos `NULL`). Esta pieza restaura el flow stub
+end-to-end y construye una pantalla que el operador iba a necesitar
+sí o sí. Reordenado con autorización del PO frente a la lista original.
+
+**Qué cambió.**
+
+### Backend
+
+- `UpdateEmisorDto` (Zod): NIF 9 chars alfanuméricos (uppercase via
+  `.toUpperCase()`), razón social trim + min 1.
+  Validación NIF MVP intencionalmente lasa (cubre NIF/CIF/NIE sin
+  comprobar dígito de control — pendiente cuando AEAT preprod rechace
+  con test contra spec real). Documentado en JSDoc.
+- `EmisorService` con `get()` y `update()` — operaciones tenant-scope
+  vía `withTenant`.
+- Endpoints `tenant_admin`:
+  - `GET /verifactu/emisor` → `{nif, razonSocial}` (puede ser nulls).
+  - `PUT /verifactu/emisor` body `{nif, razonSocial}` → datos guardados.
+
+### Web-fo
+
+- Helpers `getEmisor`, `updateEmisor` en `lib/api.ts`.
+- Proxy `/api/verifactu/emisor` GET/PUT.
+- Página `/admin/billing/emisor` (RSC + server action):
+  - Aviso ámbar "Emisor sin configurar" si vacío.
+  - Form con pattern HTML5 `[A-Za-z0-9]{9}` (validación cliente),
+    server action repite validación.
+  - Cross-link a `/admin/billing/certificate` y viceversa (pendiente
+    de añadir el cross-link en cert; por ahora la nav del header
+    cubre ambos).
+- Nav header: nuevo enlace "Admin · Emisor" antes de "Admin · Certificado",
+  ambos visibles sólo para `tenant_admin`.
+
+**Tests.**
+
+- Verifactu suite: **68/68** verde (+5 nuevos en
+  `verifactu.controller.spec.ts`):
+  - GET emisor delega al service.
+  - PUT rechaza NIF longitud incorrecta.
+  - PUT rechaza NIF con espacios / no alfanumérico.
+  - PUT rechaza razón social vacía.
+  - PUT trim + uppercase + forward correcto al service.
+- Typecheck + lint `@pms/api` y `@pms/web-fo` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+1. **`buildVerifactuRegistroAlta()`** sustituyendo el stub.
+2. **xadesjs** + refactor `SignerService` a XAdES-BES.
+3. **Env config** `SistemaInformatico`.
+4. **PreprodAeatClient** HTTP + credenciales.
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: huella SHA-256 + heurística F1/F2
 
 **Scope:** `apps/api/src/verifactu/{huella.ts,invoice.service.ts}`,

@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import type { AuthUser } from '../auth';
 import type { CertificateVaultService, CertificateMetadata } from './certificate-vault.service';
+import type { EmisorService } from './emisor.service';
 import type { InvoiceService } from './invoice.service';
 import { VerifactuController } from './verifactu.controller';
 
@@ -18,10 +19,12 @@ const REQ = { id: 'corr-1' } as unknown as FastifyRequest;
 function makeController(
   certs: Partial<CertificateVaultService> = {},
   invoices: Partial<InvoiceService> = {},
+  emisor: Partial<EmisorService> = {},
 ) {
   const certService = certs as CertificateVaultService;
   const invoiceService = invoices as InvoiceService;
-  return new VerifactuController(invoiceService, certService);
+  const emisorService = emisor as EmisorService;
+  return new VerifactuController(invoiceService, certService, emisorService);
 }
 
 const validMeta: CertificateMetadata = {
@@ -137,6 +140,57 @@ describe('VerifactuController · certificate endpoints', () => {
       const ctrl = makeController({ revoke });
       await ctrl.revokeCertificate(USER, REQ, { reason: 'compromised' });
       expect(revoke).toHaveBeenCalledWith(USER, 'corr-1', 'compromised');
+    });
+  });
+
+  describe('GET /verifactu/emisor', () => {
+    it('returns the tenant emisor (NIF + razón social)', async () => {
+      const get = vi.fn().mockResolvedValue({ nif: 'B12345678', razonSocial: 'Test S.L.' });
+      const ctrl = makeController({}, {}, { get });
+      await expect(ctrl.getEmisor(USER, REQ)).resolves.toEqual({
+        nif: 'B12345678',
+        razonSocial: 'Test S.L.',
+      });
+      expect(get).toHaveBeenCalledWith(USER, 'corr-1');
+    });
+  });
+
+  describe('PUT /verifactu/emisor', () => {
+    it('rejects NIF with wrong length', async () => {
+      const ctrl = makeController({}, {}, { update: vi.fn() });
+      await expect(
+        ctrl.updateEmisor(USER, REQ, { nif: 'SHORT', razonSocial: 'X' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects NIF with non-alphanumeric chars', async () => {
+      const ctrl = makeController({}, {}, { update: vi.fn() });
+      await expect(
+        ctrl.updateEmisor(USER, REQ, { nif: 'B12 45678', razonSocial: 'X' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects empty razón social', async () => {
+      const ctrl = makeController({}, {}, { update: vi.fn() });
+      await expect(
+        ctrl.updateEmisor(USER, REQ, { nif: 'B12345678', razonSocial: '   ' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('forwards a valid payload to the emisor service', async () => {
+      const update = vi.fn().mockResolvedValue({
+        nif: 'B12345678',
+        razonSocial: 'Aubergine Test S.L.',
+      });
+      const ctrl = makeController({}, {}, { update });
+      await ctrl.updateEmisor(USER, REQ, {
+        nif: 'b12345678', // será uppercased por el DTO
+        razonSocial: '  Aubergine Test S.L.  ',
+      });
+      expect(update).toHaveBeenCalledWith(USER, 'corr-1', {
+        nif: 'B12345678',
+        razonSocial: 'Aubergine Test S.L.',
+      });
     });
   });
 });
