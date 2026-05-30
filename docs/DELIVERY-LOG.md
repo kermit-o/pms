@@ -80,6 +80,92 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: PreprodAeatClient (HTTP, mTLS pendiente)
+
+**Scope:** `apps/api/src/verifactu/aeat/{preprod-aeat-client.ts,aeat-client.factory.ts,index.ts}`,
+`apps/api/src/verifactu/verifactu.module.ts`,
+`apps/api/src/config/env.schema.ts`
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+### Env vars
+
+- `VERIFACTU_AEAT_ENDPOINT` — URL del endpoint AEAT (preprod o production).
+  Optional en `stub`; obligatorio en cualquier otro modo (guard en
+  `VerifactuModule.onModuleInit`).
+- `VERIFACTU_AEAT_TIMEOUT_MS` — timeout por intento, default 15s.
+
+### `PreprodAeatClient`
+
+Implementa `AeatClient` (modo `preprod`). Sustituye el `throw` que había
+en el factory para el modo.
+
+Pipeline:
+  1. POST al endpoint con `Content-Type: application/xml; charset=utf-8`
+     y body = `signedXml`.
+  2. `AbortController` para timeout configurable.
+  3. Parsing de respuesta:
+     - HTTP 5xx → throw → SubmitWorker reintenta.
+     - HTTP 4xx → `REJECTED` con `errorMessage` extraído.
+     - HTTP 2xx + `<CSV>` (o `<*:Csv>` namespaced) → `ACCEPTED`.
+     - HTTP 2xx sin CSV (con `<CodigoErrorRegistro>` típicamente) →
+       `REJECTED`.
+     - Network error → throw → SubmitWorker reintenta.
+
+### Estado de autenticación: **mTLS pendiente**
+
+Documentado explícitamente en el JSDoc del cliente. AEAT exige mutual
+TLS con el cert del emisor (`.p12` del vault). Habilitarlo cuando el
+PO facilite el cert FNMT-RCM de pruebas + URL preprod (preguntas D y
+G del ADR-032): cargar el cert via `CertificateVaultService` por
+request, configurar `undici.Agent({ connect: { key, cert } })` y
+pasar como dispatcher al `fetch`. Resto del cliente (parsing, timeouts,
+worker integration) ya está listo.
+
+### Factory + module guards
+
+- `AeatClientFactory`: en `mode === 'preprod'` construye `PreprodAeatClient`
+  on-demand (ctor del cliente lanza si falta endpoint).
+- `VerifactuModule.onModuleInit`: nuevo guard — en modo no-stub, exige
+  `VERIFACTU_AEAT_ENDPOINT` poblado.
+
+### Extracción de campos de la respuesta
+
+- `extractCsv()` busca `<CSV>` o `<*:Csv>` (case-sensitive, según
+  convención AEAT en spec pública). Aproximación a verificar contra
+  el XSD de respuesta vigente.
+- `extractErrorMessage()` busca `<CodigoErrorRegistro>` +
+  `<DescripcionErrorRegistro>`.
+
+Estas regex son aproximaciones — cuando AEAT preprod responda, el
+mapping exacto se cierra con un golden test del XML real.
+
+**Tests.**
+
+- Verifactu suite: **86/86** verde (+10 nuevos: 9 cliente + 1 guard module).
+- `preprod-aeat-client.spec.ts`:
+  - Ctor throw sin endpoint.
+  - ACCEPTED con `<CSV>` y con `<ns:Csv>` namespaced.
+  - REJECTED en 422 con `CodigoErrorRegistro + DescripcionErrorRegistro`.
+  - REJECTED en 200 sin CSV (rechazo de negocio).
+  - Throw en 5xx (transitorio → worker reintenta).
+  - Throw en network error.
+  - Timeout vía AbortController.
+  - `mode === 'preprod'`.
+- `verifactu.module.spec.ts`: nuevo test guard endpoint + el de prod
+  añade `VERIFACTU_AEAT_ENDPOINT` al payload.
+- Typecheck + lint `@pms/api` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+1. **Habilitar mTLS** en `PreprodAeatClient` cuando lleguen credenciales.
+2. **Verificación nombres XSD ⚠** (generador + cliente — pregunta G ADR-032).
+3. **Smoke test contra AEAT preprod** con cert FNMT pruebas.
+4. **IVA por línea** (sprint dedicado).
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: SignerService → XAdES-BES (xadesjs)
 
 **Scope:** `apps/api/src/verifactu/signer.service.ts`,

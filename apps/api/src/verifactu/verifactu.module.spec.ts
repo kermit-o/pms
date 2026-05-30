@@ -42,11 +42,21 @@ describe('VerifactuModule.onModuleInit (guards)', () => {
     expect(() => m.onModuleInit()).toThrow(/VERIFACTU_MASTER_KEY/);
   });
 
-  it('boots in production + production mode with master key', () => {
+  it('refuses non-stub mode without VERIFACTU_AEAT_ENDPOINT', () => {
+    const m = makeModule({
+      VERIFACTU_MODE: 'preprod',
+      NODE_ENV: 'development',
+      VERIFACTU_MASTER_KEY: 'x'.repeat(40),
+    });
+    expect(() => m.onModuleInit()).toThrow(/VERIFACTU_AEAT_ENDPOINT/);
+  });
+
+  it('boots in production + production mode with master key + endpoint', () => {
     const m = makeModule({
       VERIFACTU_MODE: 'production',
       NODE_ENV: 'production',
       VERIFACTU_MASTER_KEY: 'x'.repeat(40),
+      VERIFACTU_AEAT_ENDPOINT: 'https://aeat.example.test/verifactu',
     });
     expect(() => m.onModuleInit()).not.toThrow();
   });

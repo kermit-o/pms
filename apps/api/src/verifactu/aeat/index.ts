@@ -5,4 +5,5 @@ export type {
   AeatSubmitResult,
 } from './aeat-client.interface';
 export { StubAeatClient } from './stub-aeat-client';
+export { PreprodAeatClient } from './preprod-aeat-client';
 export { AeatClientFactory } from './aeat-client.factory';

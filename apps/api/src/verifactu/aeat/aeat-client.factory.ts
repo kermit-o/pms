@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.schema';
 import type { AeatClient } from './aeat-client.interface';
+import { PreprodAeatClient } from './preprod-aeat-client';
 import { StubAeatClient } from './stub-aeat-client';
 
 /**
@@ -32,9 +33,16 @@ export class AeatClientFactory {
       return this.stub;
     }
 
+    if (mode === 'preprod') {
+      // Construye on-demand: el ctor del cliente exige que
+      // VERIFACTU_AEAT_ENDPOINT esté presente y lanza si no.
+      this.log.log('AEAT client: preprod (HTTP, mTLS pendiente)');
+      return new PreprodAeatClient(this.config);
+    }
+
     throw new Error(
       `VERIFACTU_MODE=${mode} no implementado todavía. ` +
-        `Solo 'stub' está disponible en este esqueleto (ver ADR-030).`,
+        `'production' llegará tras certificación AEAT (ver ADR-030).`,
     );
   }
 }

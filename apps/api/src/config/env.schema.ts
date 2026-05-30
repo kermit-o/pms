@@ -122,6 +122,13 @@ export const envSchema = z.object({
   VERIFACTU_MODE: z.enum(['stub', 'preprod', 'production']).default('stub'),
   VERIFACTU_MASTER_KEY: z.string().min(32).optional(),
   VERIFACTU_CERT_DIR: z.string().default('/data/verifactu'),
+  // Endpoint REST/SOAP AEAT (preprod o production). Optional porque en modo
+  // `stub` no se usa; en `preprod`/`production` el VerifactuModule rechaza el
+  // bootstrap si está vacío.
+  VERIFACTU_AEAT_ENDPOINT: z.string().url().optional(),
+  // Timeout por intento (ms). Default 15s — el SubmitWorker maneja el retry
+  // sobre fallos transitorios.
+  VERIFACTU_AEAT_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
 
   // SistemaInformatico (ADR-032 §6) — identifica nuestro PMS en cada
   // RegistroAlta enviado a AEAT. Defaults razonables para dev; en producción

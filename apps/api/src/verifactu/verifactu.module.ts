@@ -82,6 +82,15 @@ export class VerifactuModule implements OnModuleInit {
           `Sin ella no se pueden descifrar los certificados de tenant.`,
       );
     }
+    if (mode !== 'stub') {
+      const endpoint = this.config.get('VERIFACTU_AEAT_ENDPOINT', { infer: true });
+      if (!endpoint) {
+        throw new Error(
+          `VerifactuModule: VERIFACTU_MODE=${mode} requiere VERIFACTU_AEAT_ENDPOINT. ` +
+            `Rellena la URL facilitada por AEAT (ver ADR-032 §G).`,
+        );
+      }
+    }
 
     this.log.log(`Verifactu boot OK — mode=${mode} nodeEnv=${nodeEnv}`);
   }
