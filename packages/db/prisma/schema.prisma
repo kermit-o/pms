@@ -25,6 +25,12 @@ model Tenant {
   slug             String       @unique
   name             String
   status           TenantStatus @default(TRIAL)
+  // Verifactu (ADR-030, ADR-032 §5.a): NIF + razón social del emisor de
+  // facturas. Modelo "un IDEmisor por tenant" — un único NIF emisor para
+  // toda la organización. Nullable porque hay tenants pre-Verifactu; el
+  // onboarding debe bloquear la emisión hasta que estén poblados.
+  nif              String?      @map("nif")
+  razonSocial      String?      @map("razon_social")
   // Onboarding wizard (Sprint 9 W3): rastrea el estado del self-service.
   // NULL en tenants creados manualmente / seeded. Para hoteles activos en
   // producción, esto se ignora — solo describe el origen.
@@ -1259,31 +1265,42 @@ enum NotificationOutboxStatus {
 // ----------------------------------------------------------------------------
 
 model Invoice {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId        String        @map("tenant_id") @db.Uuid
-  propertyId      String        @map("property_id") @db.Uuid
-  folioId         String?       @map("folio_id") @db.Uuid
-  series          String        @default("A")
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  propertyId      String           @map("property_id") @db.Uuid
+  folioId         String?          @map("folio_id") @db.Uuid
+  series          String           @default("A")
   number          Int
-  invoiceDate     DateTime      @map("invoice_date") @db.Date
-  currency        String        @default("EUR") @db.Char(3)
-  subtotal        Decimal       @db.Decimal(12, 2)
-  taxAmount       Decimal       @map("tax_amount") @db.Decimal(12, 2)
-  totalAmount     Decimal       @map("total_amount") @db.Decimal(12, 2)
-  status          InvoiceStatus @default(DRAFT)
-  customerName    String        @map("customer_name")
-  customerNif     String?       @map("customer_nif")
-  customerAddress String?       @map("customer_address")
+  invoiceDate     DateTime         @map("invoice_date") @db.Date
+  currency        String           @default("EUR") @db.Char(3)
+  subtotal        Decimal          @db.Decimal(12, 2)
+  taxAmount       Decimal          @map("tax_amount") @db.Decimal(12, 2)
+  totalAmount     Decimal          @map("total_amount") @db.Decimal(12, 2)
+  status          InvoiceStatus    @default(DRAFT)
+  // Verifactu (ADR-032 §3): tipo de factura. F1 = completa (cliente con
+  // NIF), F2 = simplificada (sin NIF, total ≤ 3.000 € hostelería).
+  // R1-R5 rectificativas no se emiten en MVP (BadRequest en service).
+  tipoFactura     VerifactuTipoFactura @default(F1) @map("tipo_factura")
+  customerName    String           @map("customer_name")
+  customerNif     String?          @map("customer_nif")
+  customerAddress String?          @map("customer_address")
   lines           Json
-  xmlPayload      String?       @map("xml_payload")
-  xmlHash         String?       @map("xml_hash")
-  aeatCsv         String?       @map("aeat_csv")
-  pdfStorageKey   String?       @map("pdf_storage_key")
-  voidedAt        DateTime?     @map("voided_at")
-  voidedReason    String?       @map("voided_reason")
-  issuedAt        DateTime?     @map("issued_at")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  xmlPayload      String?          @map("xml_payload")
+  xmlHash         String?          @map("xml_hash")
+  aeatCsv         String?          @map("aeat_csv")
+  pdfStorageKey   String?          @map("pdf_storage_key")
+  // Verifactu (ADR-032 §4): encadenamiento de huellas SHA-256.
+  // `huella` = SHA-256 hex de (huella_anterior || campos identificativos
+  // del registro actual). `huellaAnterior` = NULL para el primer registro
+  // del emisor (PrimerRegistro). Llenas durante issue(), serializado por
+  // emisor (tenantId) bajo lock para garantizar cadena estable.
+  huella          String?          @map("huella") @db.Char(64)
+  huellaAnterior  String?          @map("huella_anterior") @db.Char(64)
+  voidedAt        DateTime?        @map("voided_at")
+  voidedReason    String?          @map("voided_reason")
+  issuedAt        DateTime?        @map("issued_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
 
   tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property    Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -1305,6 +1322,15 @@ enum InvoiceStatus {
   VOIDED
 
   @@map("invoice_status")
+}
+
+/// Verifactu — tipo de factura según RD 1007/2023. F1 / F2 cubren MVP;
+/// rectificativas (R1-R5) se añadirán en Sprint posterior.
+enum VerifactuTipoFactura {
+  F1
+  F2
+
+  @@map("verifactu_tipo_factura")
 }
 
 model InvoiceSubmission {

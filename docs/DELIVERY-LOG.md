@@ -80,6 +80,62 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: schema emisor + huellas
+
+**Scope:** `packages/db/prisma/schema.prisma`,
+`packages/db/prisma/migrations/20260630000000_verifactu_tenant_emisor_huellas`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-032 firmada PO (§5.a modelo emisor, §4 encadenamiento, §3 tipo factura).
+
+**Qué cambió.**
+
+Migración Prisma forward-only que abre el modelo de datos para el
+payload Verifactu real. Tres cambios:
+
+1. **`tenants.nif` + `tenants.razon_social`** (nullable). Modelo
+   §5.a: un IDEmisor por tenant. Nullable porque hay tenants
+   pre-Verifactu; el `InvoiceService.issue()` los validará no-null
+   antes de emitir (en commit siguiente).
+2. **`invoices.tipo_factura`** (enum `VerifactuTipoFactura` = F1/F2,
+   default F1). Rectificativas R1-R5 no van en MVP — bloqueadas en
+   service.
+3. **`invoices.huella`** + **`invoices.huella_anterior`** (CHAR(64)
+   hex SHA-256). El encadenamiento se llena durante `issue()`
+   serializado por emisor.
+
+Más un índice secundario filtrado
+`invoices(tenant_id, issued_at DESC) WHERE huella IS NOT NULL` para
+localizar la última factura encadenada del emisor bajo lock en el
+siguiente commit. El `WHERE` excluye los registros pre-Verifactu
+que nunca participan en la cadena.
+
+**Por qué.**
+
+Sin estas columnas, el siguiente commit (generador real +
+encadenamiento) no tiene dónde escribir. Cambio aislado y reversible
+en términos de aplicación: ninguna lógica nueva todavía depende de
+los campos.
+
+**Tests.**
+
+- Verifactu suite: **55/55** verde (sin tests nuevos — pura
+  migración de schema).
+- Typecheck `@pms/api` verde tras `prisma generate`.
+
+**Sigue pendiente (en esta rama).**
+
+1. **`computeHuella()`** + lock secuencial + integración en
+   `InvoiceService.issue()`.
+2. **`buildVerifactuRegistroAlta()`** sustituyendo el stub
+   `buildInvoiceXml()`.
+3. **xadesjs** + refactor `SignerService` a XAdES-BES.
+4. **Env config** `SistemaInformatico` (NIF Aubergine PMS S.L. + Id
+   AEAT + Version) — input PO para los valores reales.
+5. **UI onboarding** para `Tenant.nif/razonSocial`.
+6. **PreprodAeatClient** HTTP + credenciales.
+
+---
+
 ## 2026-05-30 · [DOC] · Sprint 14 W2 — ADR-032 payload XML Verifactu
 
 **Scope:** `docs/adr/032-verifactu-xml-payload.md`
