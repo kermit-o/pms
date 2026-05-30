@@ -80,6 +80,74 @@ Una o dos frases.
 
 ---
 
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: huella SHA-256 + heurística F1/F2
+
+**Scope:** `apps/api/src/verifactu/{huella.ts,invoice.service.ts}`,
+`packages/db/src/index.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-032 §3 (F1/F2) y §4 (encadenamiento).
+
+**Qué cambió.**
+
+### `huella.ts` (helper puro)
+
+- `computeHuella(input, previousHuella)` — SHA-256 hex sobre la
+  concatenación canónica de campos identificativos + huella anterior.
+  Formato `clave=valor` separado por `&` (aproximación a la fórmula
+  AEAT publicada; nombres exactos pendientes de verificación contra
+  guía técnica vigente — documentado en JSDoc).
+- `formatFechaExpedicion(date)` — DD-MM-YYYY en UTC, formato AEAT.
+- 4 tests pure: determinismo, dependencia de huella anterior,
+  sensibilidad a cambios de cualquier campo identificativo.
+
+### `InvoiceService.issue()`
+
+- **Validación tenant**: `BadRequest` si `Tenant.nif` o `razonSocial`
+  están vacíos. Mensaje guía al operador hacia `/admin/billing`
+  (la UI de configuración se construye en commit siguiente).
+- **Heurística F1/F2 (ADR-032 §3)**:
+  - F1 (default) si el cliente tiene NIF, **o** si el total supera
+    3.000 € (umbral hostelería simplificada).
+  - F2 si no hay NIF y total ≤ 3.000 €.
+- **Lock secuencial doble** (`pg_advisory_xact_lock`):
+  - Namespace `verifactu-invoice` por `(tenant, series)` —
+    asignación del número (ya existía).
+  - Namespace `verifactu-chain` por tenant — serializa la lectura
+    de `huellaAnterior` para garantizar cadena estable bajo
+    emisiones concurrentes en series distintas.
+- **Encadenamiento**: lee la última factura del emisor con
+  `huella IS NOT NULL` ordenada por `issuedAt DESC` (usa el índice
+  filtrado de la migración previa). Calcula `huella` con
+  `computeHuella()` y persiste `huella + huellaAnterior` en el
+  registro.
+
+### `packages/db`
+
+- Re-export del enum `VerifactuTipoFactura` desde `@pms/db`.
+
+**Tests.**
+
+- Verifactu suite: **63/63** verde (+8 nuevos).
+  - `huella.spec.ts` (4): determinismo + chain dependency + cambio
+    de campos + formato fecha.
+  - `invoice.service.spec.ts · Verifactu wiring` (4): rechaza tenant
+    sin NIF, persiste F1 + huella, clasifica F2 cuando no hay NIF,
+    encadena correctamente cuando hay huella anterior.
+- Typecheck + lint `@pms/api` verdes. `@pms/db` rebuilt.
+
+**Sigue pendiente (en esta rama).**
+
+1. **`buildVerifactuRegistroAlta()`** sustituyendo el stub
+   `buildInvoiceXml()`.
+2. **xadesjs** + refactor `SignerService` a XAdES-BES.
+3. **Env config** `SistemaInformatico` (NIF Aubergine PMS + Id AEAT +
+   Version) — input PO para los valores reales.
+4. **UI onboarding** para `Tenant.nif/razonSocial` (necesaria — sin
+   ella, ningún tenant nuevo puede emitir facturas).
+5. **PreprodAeatClient** HTTP + credenciales.
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: schema emisor + huellas
 
 **Scope:** `packages/db/prisma/schema.prisma`,

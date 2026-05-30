@@ -29,6 +29,7 @@ export {
   NotificationOutboxStatus,
   InvoiceStatus,
   InvoiceSubmissionStatus,
+  VerifactuTipoFactura,
 } from '@prisma/client';
 
 export type {

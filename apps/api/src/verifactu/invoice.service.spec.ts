@@ -33,6 +33,10 @@ function makeService(opts: {
   folio?: FakeFolio | null;
   existingInvoice?: FakeInvoice | null;
   lastInvoiceNumber?: number;
+  /** Default tenant: NIF + razón social poblados (Verifactu-ready). */
+  tenant?: { nif: string | null; razonSocial: string | null } | null;
+  /** Última huella del emisor (null si esta es la primera factura). */
+  lastChainedHuella?: string | null;
 }): {
   service: InvoiceService;
   events: { publish: ReturnType<typeof vi.fn> };
@@ -42,16 +46,36 @@ function makeService(opts: {
   const createdInvoices: unknown[] = [];
   const createdSubmissions: unknown[] = [];
 
+  const tenantRow =
+    opts.tenant === undefined
+      ? { nif: 'B12345678', razonSocial: 'Aubergine Test S.L.' }
+      : opts.tenant;
+
   const tx = {
     $executeRaw: vi.fn(async () => 1),
     folio: { findFirst: vi.fn(async () => opts.folio ?? null) },
+    tenant: { findUnique: vi.fn(async () => tenantRow) },
     invoice: {
-      findFirst: vi.fn(async (args: { orderBy?: unknown }) =>
-        args.orderBy
-          ? opts.lastInvoiceNumber !== undefined
-            ? { number: opts.lastInvoiceNumber }
-            : null
-          : (opts.existingInvoice ?? null),
+      findFirst: vi.fn(
+        async (args: {
+          where?: { folioId?: unknown; series?: unknown; huella?: unknown };
+          orderBy?: unknown;
+        }) => {
+          // (c) Chain huella lookup: where.huella = { not: null }.
+          if (args.where?.huella !== undefined) {
+            return opts.lastChainedHuella !== undefined && opts.lastChainedHuella !== null
+              ? { huella: opts.lastChainedHuella }
+              : null;
+          }
+          // (b) Last number in series: where.series + orderBy.
+          if (args.where?.series !== undefined) {
+            return opts.lastInvoiceNumber !== undefined
+              ? { number: opts.lastInvoiceNumber }
+              : null;
+          }
+          // (a) Idempotency lookup: where.folioId.
+          return opts.existingInvoice ?? null;
+        },
       ),
       create: vi.fn(async ({ data }: { data: { lines: unknown } }) => {
         createdInvoices.push(data);
@@ -200,5 +224,65 @@ describe('InvoiceService.findByFolio', () => {
     expect(r!.invoiceNumber).toBe('A-99');
     expect(r!.totalAmount).toBe('250');
     expect(r!.alreadyExisted).toBe(true);
+  });
+});
+
+describe('InvoiceService.issue · Verifactu wiring', () => {
+  const folio: FakeFolio = {
+    id: 'f1',
+    status: FolioStatus.CLOSED,
+    currency: 'EUR',
+    reservation: { propertyId: 'p1' },
+    entries: [
+      { type: 'CHARGE', description: 'Room', amount: new Prisma.Decimal('100.00') },
+    ],
+  };
+
+  it('rejects when the tenant has no NIF or razón social configured', async () => {
+    const { service } = makeService({ folio, tenant: { nif: null, razonSocial: null } });
+    await expect(
+      service.issue(user, 'corr-1', { folioId: 'f1', customerName: 'Ana' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('persists tipo=F1 + a non-empty huella for a customer with NIF', async () => {
+    const { service, createdInvoices } = makeService({ folio });
+    await service.issue(user, 'corr-1', {
+      folioId: 'f1',
+      customerName: 'Ana Pérez',
+      customerNif: '12345678Z',
+    });
+    const inv = createdInvoices[0] as {
+      tipoFactura: string;
+      huella: string;
+      huellaAnterior: string | null;
+    };
+    expect(inv.tipoFactura).toBe('F1');
+    expect(inv.huella).toMatch(/^[0-9a-f]{64}$/);
+    expect(inv.huellaAnterior).toBeNull();
+  });
+
+  it('classifies as F2 when there is no NIF and total ≤ 3.000 €', async () => {
+    const { service, createdInvoices } = makeService({ folio });
+    await service.issue(user, 'corr-1', {
+      folioId: 'f1',
+      customerName: 'Walk-in cash guest',
+    });
+    const inv = createdInvoices[0] as { tipoFactura: string };
+    expect(inv.tipoFactura).toBe('F2');
+  });
+
+  it('chains the new huella against the previous one (huellaAnterior set)', async () => {
+    const prev = 'a'.repeat(64);
+    const { service, createdInvoices } = makeService({ folio, lastChainedHuella: prev });
+    await service.issue(user, 'corr-1', {
+      folioId: 'f1',
+      customerName: 'Ana Pérez',
+      customerNif: '12345678Z',
+    });
+    const inv = createdInvoices[0] as { huella: string; huellaAnterior: string | null };
+    expect(inv.huellaAnterior).toBe(prev);
+    // Distinta de la primera (cadena distinta).
+    expect(inv.huella).not.toBe(prev);
   });
 });

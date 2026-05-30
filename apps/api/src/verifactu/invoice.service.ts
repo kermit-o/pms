@@ -5,11 +5,15 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { FolioStatus, InvoiceStatus, Prisma } from '@pms/db';
+import { FolioStatus, InvoiceStatus, Prisma, VerifactuTipoFactura } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
+import { computeHuella, formatFechaExpedicion } from './huella';
 import { computeInvoiceTotals, type FolioEntrySnapshot } from './invoice-totals';
+
+/** ADR-032 §3 — factura simplificada permitida hasta 3.000€ en hostelería. */
+const F2_MAX_TOTAL_EUR = 3_000;
 
 export interface IssueInvoiceInput {
   folioId: string;
@@ -73,9 +77,27 @@ export class InvoiceService {
     };
 
     const result = await this.prisma.withTenant(ctx, async (tx) => {
-      // 1. Lock for the (tenant, series) sequence.
-      const lockKey = `${user.tenantId}:${series}`;
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('verifactu-invoice'), hashtext(${lockKey}))`;
+      // 1a. Lock for the (tenant, series) sequence (assigns next `number`).
+      const seriesLockKey = `${user.tenantId}:${series}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('verifactu-invoice'), hashtext(${seriesLockKey}))`;
+
+      // 1b. Lock for the per-tenant huella chain (serializes huella_anterior
+      //     reads). Distinct namespace so it doesn't conflict with 1a if
+      //     two emissions in different series race.
+      const chainLockKey = user.tenantId;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('verifactu-chain'), hashtext(${chainLockKey}))`;
+
+      // 1c. Verify the emisor's NIF + razón social are set on the tenant.
+      //     Sin esto, el RegistroAlta no se puede serializar (IDEmisorFactura).
+      const tenant = await tx.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: { nif: true, razonSocial: true },
+      });
+      if (!tenant?.nif || !tenant.razonSocial) {
+        throw new BadRequestException(
+          'Tenant missing NIF or razón social — configure them under /admin/billing before issuing invoices',
+        );
+      }
 
       // 2. Load the folio and its entries.
       const folio = await tx.folio.findFirst({
@@ -138,6 +160,37 @@ export class InvoiceService {
       });
       const nextNumber = (last?.number ?? 0) + 1;
 
+      // 5b. Heuristic F1/F2 (ADR-032 §3): F2 if no NIF AND total ≤ 3.000 €,
+      //     F1 otherwise (default for cases with NIF or high-value invoices).
+      const customerNif = input.customerNif?.trim() || null;
+      const tipoFactura =
+        !customerNif && totals.totalAmount.lessThanOrEqualTo(F2_MAX_TOTAL_EUR)
+          ? VerifactuTipoFactura.F2
+          : VerifactuTipoFactura.F1;
+
+      // 5c. Compute the huella by finding the last chained invoice of this
+      //     emisor (any series — the chain is per-emisor, ADR-032 §4). The
+      //     advisory lock in 1b serializes this read across emissions.
+      const lastChained = await tx.invoice.findFirst({
+        where: { tenantId: user.tenantId, huella: { not: null } },
+        orderBy: { issuedAt: 'desc' },
+        select: { huella: true },
+      });
+      const huellaAnterior = lastChained?.huella ?? null;
+
+      const issuedAt = new Date();
+      const huella = computeHuella(
+        {
+          emisorNif: tenant.nif,
+          numSerieFactura: `${series}-${nextNumber}`,
+          fechaExpedicionFactura: formatFechaExpedicion(issuedAt),
+          tipoFactura,
+          cuotaTotal: totals.taxAmount.toFixed(2),
+          importeTotal: totals.totalAmount.toFixed(2),
+        },
+        huellaAnterior,
+      );
+
       // 6. Insert the invoice.
       const created = await tx.invoice.create({
         data: {
@@ -146,17 +199,20 @@ export class InvoiceService {
           folioId: folio.id,
           series,
           number: nextNumber,
-          invoiceDate: new Date(),
+          invoiceDate: issuedAt,
           currency: folio.currency,
           subtotal: totals.subtotal,
           taxAmount: totals.taxAmount,
           totalAmount: totals.totalAmount,
           status: InvoiceStatus.ISSUED,
+          tipoFactura,
           customerName: input.customerName.trim(),
-          customerNif: input.customerNif?.trim() || null,
+          customerNif,
           customerAddress: input.customerAddress?.trim() || null,
           lines: totals.lines as unknown as Prisma.InputJsonValue,
-          issuedAt: new Date(),
+          huella,
+          huellaAnterior,
+          issuedAt,
         },
         select: { id: true },
       });
