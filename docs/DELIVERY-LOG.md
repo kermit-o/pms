@@ -80,6 +80,57 @@ Una o dos frases.
 
 ---
 
+## 2026-05-31 · [TEST] · Sprint 14 W2 — Verifactu: test de integración issue → submit
+
+**Scope:** `apps/api/src/verifactu/integration.spec.ts` (nuevo).
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+Test de integración que cierra la brecha de cobertura entre el
+publisher (`InvoiceService.issue`) y el consumer (`SubmitWorker.handle`).
+Hasta ahora cada uno tenía su unit test con mocks distintos — esto
+verifica que el evento publicado por uno encaja con la firma esperada
+por el otro **y** que el estado compartido (huella encadenada) se
+mantiene consistente entre dos facturas sucesivas.
+
+Setup:
+- `InMemoryStore` con tenants, folios, invoices, submissions y
+  generador determinista de UUIDs.
+- `prisma` mock que opera contra el store y respeta los `where`/
+  `orderBy` que cada servicio espera (filter folioId/tenantId/series,
+  status not, huella not null, orderBy number/issuedAt desc).
+- `EventbusService.publish` captura eventos en memoria — el test los
+  alimenta manualmente al `worker.handle()` (no NATS).
+- `SignerService.sign` devuelve `${xml}<signed/>` (el signing real ya
+  está cubierto en `signer.service.spec.ts`).
+- `AeatClient` = `StubAeatClient` real (determinista).
+- `InvoiceService` + `SubmitWorker` son los **reales** sin mockear.
+
+**Tests (ambos verdes a la primera).**
+
+1. **Happy path**: `issue()` publica `submit_requested` con payload
+   `{invoiceId, invoiceNumber}` → `worker.handle()` lo procesa →
+   invoice queda `ACCEPTED`, huella set, huellaAnterior=null,
+   evento `verifactu.invoice.submitted` publicado.
+
+2. **Cadena de huellas**: dos facturas sucesivas → la segunda lleva
+   `huellaAnterior = primera.huella`; las dos huellas son distintas;
+   ambas terminan `ACCEPTED`.
+
+Verifactu suite: **94/94** verde (+2 nuevos). Typecheck + lint
+`@pms/api` verdes.
+
+**Por qué.**
+
+Las piezas individuales tenían cobertura, pero el contrato entre ellas
+no se testeaba. Ahora cualquier cambio en el schema del evento, en
+los campos que el worker lee del invoice (tenant join, huella, etc.),
+o en el orden de las operaciones del issue, se detecta antes del
+runtime real.
+
+---
+
 ## 2026-05-31 · [FEAT] · Sprint 14 W2 — Verifactu: script health-check operativo
 
 **Scope:** `scripts/verifactu-health-check.ts` (nuevo).
