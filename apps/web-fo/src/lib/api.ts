@@ -1533,6 +1533,36 @@ export async function getInvoiceByFolio(
   }
 }
 
+export interface InvoiceSubmissionView {
+  id: string;
+  attemptNumber: number;
+  status: 'PENDING' | 'IN_PROGRESS' | 'ACCEPTED' | 'REJECTED' | 'DEAD_LETTER';
+  responseCode: number | null;
+  aeatCsv: string | null;
+  errorMessage: string | null;
+  queuedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  nextAttemptAt: string | null;
+}
+
+export async function listInvoiceSubmissions(
+  accessToken: string | undefined,
+  invoiceId: string,
+): Promise<InvoiceSubmissionView[]> {
+  return apiFetch(`/verifactu/invoices/${invoiceId}/submissions`, { accessToken });
+}
+
+export async function requeueInvoiceSubmission(
+  accessToken: string | undefined,
+  invoiceId: string,
+): Promise<{ invoiceId: string; invoiceNumber: string }> {
+  return apiFetch(`/verifactu/invoices/${invoiceId}/submissions`, {
+    method: 'POST',
+    accessToken,
+  });
+}
+
 export interface CertificateMetadata {
   id: string;
   subjectCn: string;

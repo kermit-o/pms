@@ -79,6 +79,27 @@ export class VerifactuController {
     return invoice;
   }
 
+  @Get('invoices/:invoiceId/submissions')
+  @Roles('tenant_admin', 'front_desk')
+  async listSubmissions(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+  ) {
+    return this.invoices.listSubmissions(user, correlationIdOf(req), invoiceId);
+  }
+
+  @Post('invoices/:invoiceId/submissions')
+  @HttpCode(202)
+  @Roles('tenant_admin')
+  async requeueSubmission(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+  ) {
+    return this.invoices.requeueSubmission(user, correlationIdOf(req), invoiceId);
+  }
+
   @Post('certificate')
   @HttpCode(201)
   @Roles('tenant_admin')

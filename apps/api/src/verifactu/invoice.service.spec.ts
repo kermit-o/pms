@@ -286,3 +286,65 @@ describe('InvoiceService.issue · Verifactu wiring', () => {
     expect(inv.huella).not.toBe(prev);
   });
 });
+
+describe('InvoiceService.requeueSubmission', () => {
+  function makeRequeueService(opts: {
+    invoice?: { id: string; status: InvoiceStatus; series: string; number: number } | null;
+    pendingAttempt?: { id: string } | null;
+  }) {
+    const tx = {
+      invoice: {
+        findFirst: vi.fn(async () => opts.invoice ?? null),
+      },
+      invoiceSubmission: {
+        findFirst: vi.fn(async () => opts.pendingAttempt ?? null),
+      },
+    };
+    const prisma = {
+      withTenant: vi.fn(async <T,>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
+    } as unknown as PrismaService;
+    const events = { publish: vi.fn(async () => ({ id: 'e1', sequence: 1, type: 'x' })) };
+    const service = new InvoiceService(prisma, events as unknown as EventbusService);
+    return { service, events };
+  }
+
+  it('throws NotFound when the invoice does not exist', async () => {
+    const { service } = makeRequeueService({ invoice: null });
+    await expect(
+      service.requeueSubmission(user, 'corr-1', '00000000-0000-0000-0000-000000000001'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('throws Conflict when the invoice is already ACCEPTED', async () => {
+    const { service } = makeRequeueService({
+      invoice: { id: 'i1', status: InvoiceStatus.ACCEPTED, series: 'A', number: 5 },
+    });
+    await expect(
+      service.requeueSubmission(user, 'corr-1', 'i1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('throws Conflict when a PENDING attempt is already in flight', async () => {
+    const { service } = makeRequeueService({
+      invoice: { id: 'i1', status: InvoiceStatus.REJECTED, series: 'A', number: 5 },
+      pendingAttempt: { id: 'sub-pending' },
+    });
+    await expect(
+      service.requeueSubmission(user, 'corr-1', 'i1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('republishes submit_requested when the invoice is requeue-able', async () => {
+    const { service, events } = makeRequeueService({
+      invoice: { id: 'i1', status: InvoiceStatus.REJECTED, series: 'A', number: 5 },
+      pendingAttempt: null,
+    });
+    const r = await service.requeueSubmission(user, 'corr-1', 'i1');
+    expect(r.invoiceNumber).toBe('A-5');
+    expect(events.publish).toHaveBeenCalledWith(
+      'verifactu.invoice.submit_requested',
+      expect.objectContaining({ tenantId: 'tenant-1' }),
+      { invoiceId: 'i1', invoiceNumber: 'A-5' },
+    );
+  });
+});
