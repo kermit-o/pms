@@ -18,13 +18,17 @@ const USER: AuthUser = {
   roles: ['tenant_admin'],
 } as unknown as AuthUser;
 
-function buildSelfSignedP12(passphrase: string, cn = 'TEST HOTEL S.L.'): Buffer {
+function buildSelfSignedP12(
+  passphrase: string,
+  cn = 'TEST HOTEL S.L.',
+  opts: { notBefore?: Date; notAfter?: Date } = {},
+): Buffer {
   const keys = forge.pki.rsa.generateKeyPair(1024); // fast for tests
   const cert = forge.pki.createCertificate();
   cert.publicKey = keys.publicKey;
   cert.serialNumber = '01';
-  cert.validity.notBefore = new Date();
-  cert.validity.notAfter = new Date(Date.now() + 365 * 24 * 3600 * 1000);
+  cert.validity.notBefore = opts.notBefore ?? new Date();
+  cert.validity.notAfter = opts.notAfter ?? new Date(Date.now() + 365 * 24 * 3600 * 1000);
   const attrs = [
     { name: 'commonName', value: cn },
     { name: 'countryName', value: 'ES' },
@@ -197,6 +201,38 @@ describe('CertificateVaultService', () => {
       const r = await service.revoke(USER, 'corr-2', 'compromised');
       expect(r.revokedAt).toBeInstanceOf(Date);
       expect(getRow()?.revokedReason).toBe('compromised');
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an already-expired certificate', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'vault-'));
+    try {
+      const { service } = makeService({ certDir: tmp, masterKey: 'm'.repeat(40) });
+      const expired = buildSelfSignedP12('pw', 'EXPIRED HOTEL S.L.', {
+        notBefore: new Date(Date.now() - 365 * 24 * 3600 * 1000),
+        notAfter: new Date(Date.now() - 24 * 3600 * 1000), // hace 1 día
+      });
+      await expect(service.upload(USER, 'corr-1', expired, 'pw')).rejects.toThrow(
+        /already expired/,
+      );
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a not-yet-valid certificate', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'vault-'));
+    try {
+      const { service } = makeService({ certDir: tmp, masterKey: 'm'.repeat(40) });
+      const future = buildSelfSignedP12('pw', 'FUTURE HOTEL S.L.', {
+        notBefore: new Date(Date.now() + 7 * 24 * 3600 * 1000), // dentro de 1 semana
+        notAfter: new Date(Date.now() + 365 * 24 * 3600 * 1000),
+      });
+      await expect(service.upload(USER, 'corr-1', future, 'pw')).rejects.toThrow(
+        /not yet valid/,
+      );
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

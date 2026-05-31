@@ -221,6 +221,21 @@ function parseAndRepackP12(
     throw new BadRequestException('PKCS#12 archive does not contain a certificate');
   }
 
+  // Validez temporal — rechazar certs caducados o aún no válidos.
+  // Los certs cercanos a caducar se aceptan; la UI ya muestra badge
+  // ámbar/rojo y RUNBOOK §5.8 cubre la renovación.
+  const now = Date.now();
+  if (cert.validity.notBefore.getTime() > now) {
+    throw new BadRequestException(
+      `Certificate not yet valid (notBefore=${cert.validity.notBefore.toISOString()})`,
+    );
+  }
+  if (cert.validity.notAfter.getTime() <= now) {
+    throw new BadRequestException(
+      `Certificate already expired (notAfter=${cert.validity.notAfter.toISOString()})`,
+    );
+  }
+
   const keyBagOid = forge.pki.oids.pkcs8ShroudedKeyBag as string;
   const keyBagAltOid = forge.pki.oids.keyBag as string;
   const keyBags = p12.getBags({ bagType: keyBagOid });
