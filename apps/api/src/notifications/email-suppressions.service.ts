@@ -34,7 +34,9 @@ export class EmailSuppressionsService {
     });
   }
 
-  async isSuppressed(email: string): Promise<{ suppressed: boolean; reason?: EmailSuppressionReason }> {
+  async isSuppressed(
+    email: string,
+  ): Promise<{ suppressed: boolean; reason?: EmailSuppressionReason }> {
     const row = await this.prisma.emailSuppression.findUnique({
       where: { email: normalize(email) },
       select: { reason: true },

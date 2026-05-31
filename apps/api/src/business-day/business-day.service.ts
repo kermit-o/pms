@@ -98,9 +98,7 @@ export class BusinessDayService {
       // efectiva la marca closedAt.
       const today = new Date(new Date().toISOString().slice(0, 10));
       if (businessDate.getTime() > today.getTime()) {
-        throw new ConflictException(
-          `Cannot close future business day ${input.businessDate}`,
-        );
+        throw new ConflictException(`Cannot close future business day ${input.businessDate}`);
       }
 
       // No permitir cerrar dia N si hay algun N-X aun OPEN. Esto preserva

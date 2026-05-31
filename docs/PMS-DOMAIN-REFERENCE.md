@@ -14,20 +14,20 @@ operativa, contable, comercial y de compliance.
 
 Las grandes familias funcionales:
 
-| Familia | Qué resuelve | Estado Aubergine |
-|---|---|---|
-| **Reservas (CRS)** | Captar, modificar, cancelar reservas | ✅ Phase 1+2 + grupos |
-| **Front Office** | Check-in/out, walk-ins, asignación habitación, llaves | ✅ Básico + arrivals/departures/in-house |
-| **Rates & Inventory** | Tarifas, restricciones, disponibilidad, channel mgr | 🟡 Básico (rate plans, sin restricciones) |
-| **Folio & Cashier** | Cargos, pagos, cuenta del huésped, splits | 🟡 Cargos manuales, sin folios maestros |
-| **Housekeeping** | Estado habitación (clean/dirty/inspected), partes | 🟡 Cambio de estado manual |
-| **Night Audit** | Cierre del día, posting automático, reporting | ✅ Implementado |
-| **Reporting** | Ocupación, ADR, RevPAR, pickup, source mix | 🟡 Reportes básicos |
-| **Guest Profiles (Cardex)** | Histórico, preferencias, membership, GDPR | ✅ Básico |
-| **Compliance Spain** | SES.HOSPEDAJES, IVA, factura, libro registros | 🟡 Stub SES, falta productivo |
-| **Garantías & Pagos** | Card-on-file, depósitos, no-show, refund | ✅ Stripe SetupIntent (Fase 1) |
-| **Comercial (B2B)** | Agencias, empresas, contratos, comisión, allotment | 🟡 Falta agencia/empresa real |
-| **AI Layer (Aubergine)** | Copilot, smart search, voice HSK, anomalías | ✅ Copilot, smart search |
+| Familia                     | Qué resuelve                                          | Estado Aubergine                          |
+| --------------------------- | ----------------------------------------------------- | ----------------------------------------- |
+| **Reservas (CRS)**          | Captar, modificar, cancelar reservas                  | ✅ Phase 1+2 + grupos                     |
+| **Front Office**            | Check-in/out, walk-ins, asignación habitación, llaves | ✅ Básico + arrivals/departures/in-house  |
+| **Rates & Inventory**       | Tarifas, restricciones, disponibilidad, channel mgr   | 🟡 Básico (rate plans, sin restricciones) |
+| **Folio & Cashier**         | Cargos, pagos, cuenta del huésped, splits             | 🟡 Cargos manuales, sin folios maestros   |
+| **Housekeeping**            | Estado habitación (clean/dirty/inspected), partes     | 🟡 Cambio de estado manual                |
+| **Night Audit**             | Cierre del día, posting automático, reporting         | ✅ Implementado                           |
+| **Reporting**               | Ocupación, ADR, RevPAR, pickup, source mix            | 🟡 Reportes básicos                       |
+| **Guest Profiles (Cardex)** | Histórico, preferencias, membership, GDPR             | ✅ Básico                                 |
+| **Compliance Spain**        | SES.HOSPEDAJES, IVA, factura, libro registros         | 🟡 Stub SES, falta productivo             |
+| **Garantías & Pagos**       | Card-on-file, depósitos, no-show, refund              | ✅ Stripe SetupIntent (Fase 1)            |
+| **Comercial (B2B)**         | Agencias, empresas, contratos, comisión, allotment    | 🟡 Falta agencia/empresa real             |
+| **AI Layer (Aubergine)**    | Copilot, smart search, voice HSK, anomalías           | ✅ Copilot, smart search                  |
 
 ---
 
@@ -214,35 +214,35 @@ A las 03:00 (configurable):
 
 ## 4. Conceptos comerciales avanzados (B2B)
 
-| Concepto | Significado |
-|---|---|
-| **BAR (Best Available Rate)** | Tarifa pública del día, base para todo |
-| **NR (Non-Refundable)** | BAR con descuento a cambio de no cancelar |
-| **PKG (Package)** | BAR + extras (desayuno, parking, late checkout) |
-| **CORP/NEG** | Tarifa negociada para empresa (descuento fijo o LRA) |
-| **Allotment** | Bloque de habitaciones reservadas para agencia/empresa |
-| **Cut-off date** | Día en que se libera el allotment no usado |
-| **Commission** | % que se paga al agente/OTA por la reserva |
-| **MinStay / CTA / CTD** | Restricciones por fecha (mínimo 2 noches, no llegadas, no salidas) |
-| **LRA (Last Room Availability)** | Empresa puede reservar siempre, aún con hotel lleno |
-| **Yield management** | Subir/bajar BAR según demanda predicha |
-| **GDS (Global Distribution System)** | Amadeus, Sabre — distribución corporate |
-| **Channel Manager** | Sincroniza inventario+precio con OTAs (SiteMinder, etc.) |
-| **Booking engine** | Motor de reservas directas del hotel (website) |
+| Concepto                             | Significado                                                        |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| **BAR (Best Available Rate)**        | Tarifa pública del día, base para todo                             |
+| **NR (Non-Refundable)**              | BAR con descuento a cambio de no cancelar                          |
+| **PKG (Package)**                    | BAR + extras (desayuno, parking, late checkout)                    |
+| **CORP/NEG**                         | Tarifa negociada para empresa (descuento fijo o LRA)               |
+| **Allotment**                        | Bloque de habitaciones reservadas para agencia/empresa             |
+| **Cut-off date**                     | Día en que se libera el allotment no usado                         |
+| **Commission**                       | % que se paga al agente/OTA por la reserva                         |
+| **MinStay / CTA / CTD**              | Restricciones por fecha (mínimo 2 noches, no llegadas, no salidas) |
+| **LRA (Last Room Availability)**     | Empresa puede reservar siempre, aún con hotel lleno                |
+| **Yield management**                 | Subir/bajar BAR según demanda predicha                             |
+| **GDS (Global Distribution System)** | Amadeus, Sabre — distribución corporate                            |
+| **Channel Manager**                  | Sincroniza inventario+precio con OTAs (SiteMinder, etc.)           |
+| **Booking engine**                   | Motor de reservas directas del hotel (website)                     |
 
 ---
 
 ## 5. Compliance España (must-have legal)
 
-| Obligación | Qué exige | Estado Aubergine |
-|---|---|---|
-| **SES.HOSPEDAJES** | Envío diario de partes de viajero al MIR vía API | 🟡 Stub, falta productivo |
-| **Libro registro de viajeros** | Conservar datos 3 años | ✅ En BD |
-| **Factura simplificada/completa** | Numeración correlativa por serie, IVA desglosado | 🟡 Falta numerado oficial |
-| **Veri\*factu / TicketBAI** | Facturación electrónica obligatoria (depende de comunidad) | ❌ Pendiente |
-| **GDPR/RGPD** | Borrado a petición, datos mínimos, auditoría | 🟡 Tenemos audit, falta self-service |
-| **Tasa turística (PIET, etc.)** | Cobro de tasa por noche y persona en algunas ciudades | ❌ No modelado |
-| **IVA** | 10% alojamiento, 21% extras, exenciones | 🟡 Tipos básicos |
+| Obligación                        | Qué exige                                                  | Estado Aubergine                     |
+| --------------------------------- | ---------------------------------------------------------- | ------------------------------------ |
+| **SES.HOSPEDAJES**                | Envío diario de partes de viajero al MIR vía API           | 🟡 Stub, falta productivo            |
+| **Libro registro de viajeros**    | Conservar datos 3 años                                     | ✅ En BD                             |
+| **Factura simplificada/completa** | Numeración correlativa por serie, IVA desglosado           | 🟡 Falta numerado oficial            |
+| **Veri\*factu / TicketBAI**       | Facturación electrónica obligatoria (depende de comunidad) | ❌ Pendiente                         |
+| **GDPR/RGPD**                     | Borrado a petición, datos mínimos, auditoría               | 🟡 Tenemos audit, falta self-service |
+| **Tasa turística (PIET, etc.)**   | Cobro de tasa por noche y persona en algunas ciudades      | ❌ No modelado                       |
+| **IVA**                           | 10% alojamiento, 21% extras, exenciones                    | 🟡 Tipos básicos                     |
 
 ---
 
@@ -330,13 +330,13 @@ El path crítico inmediato es:
 
 ## 8. Decisiones pendientes para próximos sprints
 
-| Decisión | Opciones | Comentario |
-|---|---|---|
-| Channel manager | Construir propio vs integrar SiteMinder/Cubilis | Build = control + diferenciación AI; integrate = time-to-market |
-| Booking engine | Construir vs integrar (TheBookingButton, etc.) | Mismo trade-off |
-| TicketBAI | Hacer ahora vs esperar a expansión a Euskadi/Navarra | Solo obligatorio en esas CCAA |
-| Voice HSK | Build con Whisper local vs API | Latencia vs cost |
-| Mobile guest app | Native vs PWA | PWA = un solo codebase |
+| Decisión         | Opciones                                             | Comentario                                                      |
+| ---------------- | ---------------------------------------------------- | --------------------------------------------------------------- |
+| Channel manager  | Construir propio vs integrar SiteMinder/Cubilis      | Build = control + diferenciación AI; integrate = time-to-market |
+| Booking engine   | Construir vs integrar (TheBookingButton, etc.)       | Mismo trade-off                                                 |
+| TicketBAI        | Hacer ahora vs esperar a expansión a Euskadi/Navarra | Solo obligatorio en esas CCAA                                   |
+| Voice HSK        | Build con Whisper local vs API                       | Latencia vs cost                                                |
+| Mobile guest app | Native vs PWA                                        | PWA = un solo codebase                                          |
 
 ---
 

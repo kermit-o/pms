@@ -61,17 +61,11 @@ export function CopilotReservationWidget({ widget }: { widget: CopilotReservatio
         <Field
           label="Tipo"
           value={
-            roomNumber
-              ? `${roomTypeCode} · hab. ${roomNumber}`
-              : `${roomTypeCode} · sin asignar`
+            roomNumber ? `${roomTypeCode} · hab. ${roomNumber}` : `${roomTypeCode} · sin asignar`
           }
           title={roomTypeName}
         />
-        <Field
-          label="Total"
-          value={`${Number(totalAmount).toFixed(2)} ${currency}`}
-          highlight
-        />
+        <Field label="Total" value={`${Number(totalAmount).toFixed(2)} ${currency}`} highlight />
         <Field
           label="Garantía"
           value={
@@ -157,9 +151,7 @@ const STATUS_STYLES: Record<string, string> = {
 function StatusChip({ status }: { status: string }) {
   const cls = STATUS_STYLES[status] ?? 'bg-aubergine-50 text-aubergine-700';
   return (
-    <span
-      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold normal-case ${cls}`}
-    >
+    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold normal-case ${cls}`}>
       {status}
     </span>
   );

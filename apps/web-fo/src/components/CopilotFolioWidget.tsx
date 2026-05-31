@@ -18,9 +18,7 @@ export function CopilotFolioWidget({ widget }: { widget: CopilotFolioWidget }) {
           Folio · datos en vivo
           <span
             className={`rounded-full px-1.5 py-0.5 text-[10px] normal-case ${
-              isOpen
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-aubergine-50 text-aubergine-700/70'
+              isOpen ? 'bg-emerald-50 text-emerald-700' : 'bg-aubergine-50 text-aubergine-700/70'
             }`}
           >
             {status}

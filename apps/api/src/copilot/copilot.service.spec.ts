@@ -480,8 +480,16 @@ describe('CopilotService', () => {
   it('listSessionUsers join distinct userIds con users + fullName', async () => {
     const { service, groupByMock, userFindManyMock } = buildService();
     groupByMock.mockResolvedValueOnce([
-      { userId: 'u-1', _count: { sessionId: 12 }, _max: { createdAt: new Date('2026-05-22T11:00:00Z') } },
-      { userId: 'u-2', _count: { sessionId: 3 }, _max: { createdAt: new Date('2026-05-21T09:00:00Z') } },
+      {
+        userId: 'u-1',
+        _count: { sessionId: 12 },
+        _max: { createdAt: new Date('2026-05-22T11:00:00Z') },
+      },
+      {
+        userId: 'u-2',
+        _count: { sessionId: 3 },
+        _max: { createdAt: new Date('2026-05-21T09:00:00Z') },
+      },
     ]);
     userFindManyMock.mockResolvedValueOnce([
       { id: 'u-1', fullName: 'María Recepción', email: 'maria@hotel.test' },

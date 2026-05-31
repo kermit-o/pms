@@ -37,9 +37,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
       "description": "Requests rechazadas por IP en Property.attributes.blockedIps.",
-      "targets": [
-        { "expr": "sum(increase(public_ibe_blocklist_hits_total{job=\"pms-api\"}[5m]))" }
-      ]
+      "targets": [{ "expr": "sum(increase(public_ibe_blocklist_hits_total{job=\"pms-api\"}[5m]))" }]
     },
     {
       "id": 3,

@@ -65,8 +65,7 @@ export default async function PropertySettingsPage({ params, searchParams }: Pro
     if (!session?.accessToken) redirect('/login');
     const providerRaw = String(formData.get('provider') ?? '');
     const provider = providerRaw === 'siteminder' ? ('siteminder' as const) : null;
-    const channelManagerPropertyId =
-      String(formData.get('cmPropertyId') ?? '').trim() || null;
+    const channelManagerPropertyId = String(formData.get('cmPropertyId') ?? '').trim() || null;
     const credentialsRef = String(formData.get('credentialsRef') ?? '').trim() || null;
     try {
       await setPropertyChannelManager(session.accessToken, id, {
@@ -105,9 +104,7 @@ export default async function PropertySettingsPage({ params, searchParams }: Pro
   return (
     <main className="mx-auto max-w-3xl space-y-8 px-6 py-10">
       <header>
-        <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
-          Property settings
-        </p>
+        <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">Property settings</p>
         <h1 className="text-2xl font-semibold text-aubergine-700">{settings.name}</h1>
         <p className="text-sm text-aubergine-700/70">
           Código <span className="font-mono">{settings.code}</span> · ID{' '}
@@ -125,7 +122,10 @@ export default async function PropertySettingsPage({ params, searchParams }: Pro
 
       <Status section="ibe" sp={sp} />
 
-      <section id="ibe" className="space-y-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100">
+      <section
+        id="ibe"
+        className="space-y-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100"
+      >
         <h2 className="text-lg font-semibold text-aubergine-700">Booking Engine (IBE)</h2>
         <p className="text-xs text-aubergine-700/70">
           {published ? (
@@ -168,7 +168,10 @@ export default async function PropertySettingsPage({ params, searchParams }: Pro
 
       <Status section="cm" sp={sp} />
 
-      <section id="cm" className="space-y-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100">
+      <section
+        id="cm"
+        className="space-y-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100"
+      >
         <h2 className="text-lg font-semibold text-aubergine-700">Channel Manager</h2>
         <p className="text-xs text-aubergine-700/70">
           Sincroniza disponibilidad y tarifas con tu CM. Deja en blanco para desactivar.
@@ -214,7 +217,10 @@ export default async function PropertySettingsPage({ params, searchParams }: Pro
 
       <Status section="ips" sp={sp} />
 
-      <section id="ips" className="space-y-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100">
+      <section
+        id="ips"
+        className="space-y-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100"
+      >
         <h2 className="text-lg font-semibold text-aubergine-700">IPs bloqueadas</h2>
         <p className="text-xs text-aubergine-700/70">
           Una IP por línea (IPv4 o IPv6). Las requests al IBE desde estas IPs reciben 403.

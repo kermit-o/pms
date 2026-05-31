@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { Public } from '../auth';
 import {
   AvailabilityQuery,
@@ -70,11 +62,7 @@ export class PublicIbeController {
   @Post('properties/:slug/reservations/:code/cancel')
   @RateLimit({ max: 5, windowMs: 60 * 60_000 })
   @RequireTurnstile()
-  async cancel(
-    @Param('slug') slug: string,
-    @Param('code') code: string,
-    @Body() body: unknown,
-  ) {
+  async cancel(@Param('slug') slug: string, @Param('code') code: string, @Body() body: unknown) {
     const input = CancelPublicReservationDto.parse(body);
     return this.service.cancelReservation(slug, code, input);
   }

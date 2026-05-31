@@ -36,11 +36,11 @@ embeddings reales) sigue bloqueada hasta que el PO apruebe la dep
    manager open-API (preferencia: SiteMinder Hotel API o
    RoomCloud). Push de disponibilidad + tarifas + restricciones desde
    Aubergine al CM. Pull de reservas OTA → Aubergine. ARI sync nightly
-   + en cambio. Sin SDK externa (REST directo).
+   - en cambio. Sin SDK externa (REST directo).
 3. **Onboarding wizard self-service**: páginas de "crea tu hotel" sin
    auth de cliente Aubergine — el hotel se registra solo. Crea tenant
-   + property + admin user + Keycloak realm bootstrap. Documentación
-   guiada.
+   - property + admin user + Keycloak realm bootstrap. Documentación
+     guiada.
 4. **Anti-abuso**: Cloudflare Turnstile (gratis, sin dep npm) en
    `/book` y `/manage` del IBE. Sliding-window rate limit en API por
    tenant + IP+. Bloqueo manual de IPs en `properties.attributes` para
@@ -109,6 +109,7 @@ embeddings reales) sigue bloqueada hasta que el PO apruebe la dep
 ### 2.1 Catálogo de eventos en eventbus
 
 Añadir a `packages/eventbus`:
+
 - `email.send_requested v1` con `{ template, recipient, params }`.
 - `reservation.confirmation_resend_requested v1` (ya logueado en S8
   W4, ahora con consumer real).
@@ -118,8 +119,9 @@ Añadir a `packages/eventbus`:
 ### 2.2 Notifications module
 
 `apps/api/src/notifications`:
+
 - `NotificationsService` con método `sendEmail({ template, to, params,
-  locale })`.
+locale })`.
 - Provider interface (`PostmarkProvider` V1, `SmtpProvider` V1.1
   cuando alguien lo pida).
 - Plantillas Handlebars-like con `params` interpolados — sin lib
@@ -166,6 +168,7 @@ started_at, completed_at, error, totals)`.
 ### 3.2 Provider abstracto
 
 `apps/api/src/channel-manager`:
+
 - `ChannelManagerProvider` interface: `pushAvailability`,
   `pushRates`, `pullReservations`.
 - `SiteMinderProvider` V1 con REST. (Otros providers: Cloudbeds
@@ -202,6 +205,7 @@ Decisión V1: dentro de `apps/web-fo` con prefijo `/onboarding` y
 dedicada `web-onboarding` es scope deviation para V1.
 
 Páginas:
+
 - `/onboarding` — landing + email del solicitante.
 - `/onboarding/verify?token=` — verificación email.
 - `/onboarding/setup/:tenantId?token=` — datos hotel: nombre, ciudad,
@@ -213,6 +217,7 @@ Páginas:
 ### 4.3 API endpoints
 
 `apps/api/src/public-onboarding`:
+
 - `POST /public/onboarding/start` body `{ email }` → manda email con
   token y crea registro `tenants(status='TRIAL', onboarding_status='EMAIL_VERIFY')`.
 - `POST /public/onboarding/verify` body `{ token }` → marca email
@@ -224,6 +229,7 @@ Páginas:
 ### 4.4 Keycloak realm seed
 
 Reusar `scripts/keycloak-bootstrap.ts` adaptado a entrada parametrizada:
+
 - crea realm `pms-{slug}`,
 - crea client `pms-api`, `pms-fo`, `pms-ibe` con redirect URIs default,
 - crea user admin con password temporal,
@@ -239,12 +245,14 @@ el seed manual y el wizard solo provisiona DB. Documentar en RUNBOOK.
 ### 5.1 Turnstile en web-ibe
 
 Cloudflare Turnstile widget script (gratis, sin dep npm):
+
 - `/book` y `/manage`: token oculto en el form.
 - Server action incluye `cf-turnstile-response` en el POST a la API.
 - API verifica token con
   `POST https://challenges.cloudflare.com/turnstile/v0/siteverify`.
 
 Env vars:
+
 - `TURNSTILE_SITE_KEY` (público, en web-ibe)
 - `TURNSTILE_SECRET_KEY` (privado, en api)
 
@@ -273,11 +281,11 @@ Alerta si `rate_limit_hits` > 100 en 5min (abuse activo).
 
 ## 6. Datos y migraciones nuevas
 
-| Migración | Contenido |
-|-----------|-----------|
-| `properties.channel_manager_*` | W2 |
-| `channel_sync_runs` | W2 |
-| `tenants.onboarding_status` | W3 (mínimo) |
+| Migración                      | Contenido   |
+| ------------------------------ | ----------- |
+| `properties.channel_manager_*` | W2          |
+| `channel_sync_runs`            | W2          |
+| `tenants.onboarding_status`    | W3 (mínimo) |
 
 ---
 

@@ -12,9 +12,11 @@ function buildConfig(env: Record<string, string | undefined>) {
 
 function suppressionsStub(suppressed = false) {
   return {
-    isSuppressed: vi.fn().mockResolvedValue(
-      suppressed ? { suppressed: true, reason: 'HARD_BOUNCE' } : { suppressed: false },
-    ),
+    isSuppressed: vi
+      .fn()
+      .mockResolvedValue(
+        suppressed ? { suppressed: true, reason: 'HARD_BOUNCE' } : { suppressed: false },
+      ),
     upsert: vi.fn(),
     remove: vi.fn(),
   };
@@ -40,7 +42,17 @@ describe('NotificationsService', () => {
       template: 'reservation_confirmation',
       to: 'bounced@test',
       locale: 'es',
-      params: { code: 'X', hotelName: 'H', guestFirstName: 'A', arrival: '1', departure: '2', roomTypeName: 'DBL', totalAmount: '1', currency: 'EUR', manageUrl: '' },
+      params: {
+        code: 'X',
+        hotelName: 'H',
+        guestFirstName: 'A',
+        arrival: '1',
+        departure: '2',
+        roomTypeName: 'DBL',
+        totalAmount: '1',
+        currency: 'EUR',
+        manageUrl: '',
+      },
     });
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.error).toBe('suppressed:HARD_BOUNCE');
@@ -54,7 +66,17 @@ describe('NotificationsService', () => {
       template: 'reservation_confirmation',
       to: 'a@b.test',
       locale: 'es',
-      params: { code: 'X', hotelName: 'H', guestFirstName: 'A', arrival: '1', departure: '2', roomTypeName: 'DBL', totalAmount: '1', currency: 'EUR', manageUrl: '' },
+      params: {
+        code: 'X',
+        hotelName: 'H',
+        guestFirstName: 'A',
+        arrival: '1',
+        departure: '2',
+        roomTypeName: 'DBL',
+        totalAmount: '1',
+        currency: 'EUR',
+        manageUrl: '',
+      },
     });
     expect(out.ok).toBe(true);
     if (out.ok) expect(out.messageId).toMatch(/^dryrun-/);
@@ -105,7 +127,17 @@ describe('NotificationsService', () => {
       template: 'reservation_confirmation',
       to: 'g@t',
       locale: 'en',
-      params: { code: 'X', hotelName: 'H', guestFirstName: 'A', arrival: '1', departure: '2', roomTypeName: 'DBL', totalAmount: '1', currency: 'EUR', manageUrl: '' },
+      params: {
+        code: 'X',
+        hotelName: 'H',
+        guestFirstName: 'A',
+        arrival: '1',
+        departure: '2',
+        roomTypeName: 'DBL',
+        totalAmount: '1',
+        currency: 'EUR',
+        manageUrl: '',
+      },
     });
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.error).toBe('Bad From');
@@ -160,7 +192,9 @@ describe('NotificationsService.enqueueEmail (S11 W2)', () => {
   it('publishes to NATS when eventbus is healthy', async () => {
     const events = {
       isHealthy: vi.fn(() => true),
-      publish: vi.fn().mockResolvedValue({ id: 'evt-1', sequence: 1, type: 'email.send_requested' }),
+      publish: vi
+        .fn()
+        .mockResolvedValue({ id: 'evt-1', sequence: 1, type: 'email.send_requested' }),
     };
     const service = new NotificationsService(
       buildConfig({ POSTMARK_SERVER_TOKEN: 'tk', NOTIFICATIONS_FROM: 'no-reply@a.test' }) as never,
@@ -171,7 +205,17 @@ describe('NotificationsService.enqueueEmail (S11 W2)', () => {
       template: 'reservation_confirmation',
       to: 'a@b.test',
       locale: 'es',
-      params: { code: 'X', hotelName: 'H', guestFirstName: 'A', arrival: '1', departure: '2', roomTypeName: 'DBL', totalAmount: '1', currency: 'EUR', manageUrl: '' },
+      params: {
+        code: 'X',
+        hotelName: 'H',
+        guestFirstName: 'A',
+        arrival: '1',
+        departure: '2',
+        roomTypeName: 'DBL',
+        totalAmount: '1',
+        currency: 'EUR',
+        manageUrl: '',
+      },
       tenantId: '00000000-0000-0000-0000-000000000001',
       dedupKey: 'ibe-confirmation-X',
     });
@@ -179,7 +223,10 @@ describe('NotificationsService.enqueueEmail (S11 W2)', () => {
     expect(events.publish).toHaveBeenCalledWith(
       'email.send_requested',
       expect.objectContaining({ tenantId: '00000000-0000-0000-0000-000000000001' }),
-      expect.objectContaining({ template: 'reservation_confirmation', dedupKey: 'ibe-confirmation-X' }),
+      expect.objectContaining({
+        template: 'reservation_confirmation',
+        dedupKey: 'ibe-confirmation-X',
+      }),
     );
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
@@ -229,7 +276,17 @@ describe('NotificationsService.enqueueEmail (S11 W2)', () => {
       template: 'reservation_confirmation',
       to: 'a@b.test',
       locale: 'es',
-      params: { code: 'X', hotelName: 'H', guestFirstName: 'A', arrival: '1', departure: '2', roomTypeName: 'DBL', totalAmount: '1', currency: 'EUR', manageUrl: '' },
+      params: {
+        code: 'X',
+        hotelName: 'H',
+        guestFirstName: 'A',
+        arrival: '1',
+        departure: '2',
+        roomTypeName: 'DBL',
+        totalAmount: '1',
+        currency: 'EUR',
+        manageUrl: '',
+      },
       tenantId: '00000000-0000-0000-0000-000000000001',
     });
     expect(out.inlineFallback).toBe(true);

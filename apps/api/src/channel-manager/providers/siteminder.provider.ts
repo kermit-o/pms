@@ -76,20 +76,23 @@ export class SiteMinderProvider implements ChannelManagerProvider {
     items: PushAvailabilityItem[];
   }): Promise<{ pushed: number; skipped: number }> {
     if (input.items.length === 0) return { pushed: 0, skipped: 0 };
-    const res = await fetch(`${input.apiBase.replace(/\/$/, '')}/properties/${input.cmPropertyId}/availability`, {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${input.apiKey}`,
+    const res = await fetch(
+      `${input.apiBase.replace(/\/$/, '')}/properties/${input.cmPropertyId}/availability`,
+      {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${input.apiKey}`,
+        },
+        body: JSON.stringify({
+          availability: input.items.map((i) => ({
+            roomTypeCode: i.roomTypeCode,
+            date: i.date,
+            available: i.available,
+          })),
+        }),
       },
-      body: JSON.stringify({
-        availability: input.items.map((i) => ({
-          roomTypeCode: i.roomTypeCode,
-          date: i.date,
-          available: i.available,
-        })),
-      }),
-    });
+    );
     if (!res.ok) {
       const text = await safeText(res);
       this.log.warn(`SiteMinder availability push HTTP ${res.status}: ${text}`);
@@ -105,22 +108,25 @@ export class SiteMinderProvider implements ChannelManagerProvider {
     items: PushRateItem[];
   }): Promise<{ pushed: number; skipped: number }> {
     if (input.items.length === 0) return { pushed: 0, skipped: 0 };
-    const res = await fetch(`${input.apiBase.replace(/\/$/, '')}/properties/${input.cmPropertyId}/rates`, {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${input.apiKey}`,
+    const res = await fetch(
+      `${input.apiBase.replace(/\/$/, '')}/properties/${input.cmPropertyId}/rates`,
+      {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${input.apiKey}`,
+        },
+        body: JSON.stringify({
+          rates: input.items.map((i) => ({
+            roomTypeCode: i.roomTypeCode,
+            ratePlanCode: i.ratePlanCode,
+            date: i.date,
+            amount: i.amount,
+            currency: i.currency,
+          })),
+        }),
       },
-      body: JSON.stringify({
-        rates: input.items.map((i) => ({
-          roomTypeCode: i.roomTypeCode,
-          ratePlanCode: i.ratePlanCode,
-          date: i.date,
-          amount: i.amount,
-          currency: i.currency,
-        })),
-      }),
-    });
+    );
     if (!res.ok) {
       const text = await safeText(res);
       this.log.warn(`SiteMinder rates push HTTP ${res.status}: ${text}`);

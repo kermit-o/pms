@@ -173,12 +173,7 @@ export class FoToolRouter {
       }
       case 'get_reservation': {
         const i = input as GetReservationInput;
-        return this.reservations.findByCode(
-          user,
-          correlationId,
-          i.propertyId,
-          i.reservationCode,
-        );
+        return this.reservations.findByCode(user, correlationId, i.propertyId, i.reservationCode);
       }
       case 'list_movements': {
         const i = input as ListMovementsInput;

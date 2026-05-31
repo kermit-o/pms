@@ -70,9 +70,8 @@ export function InspectionPanel({ taskId }: { taskId: string }) {
         </span>
       </div>
       <p className="text-xs text-aubergine-700/60">
-        Sube una foto de la habitación lista. El sistema decide si está
-        limpia, sucia o necesita mantenimiento. Si detecta daño, la habitación
-        pasa a OOO automáticamente.
+        Sube una foto de la habitación lista. El sistema decide si está limpia, sucia o necesita
+        mantenimiento. Si detecta daño, la habitación pasa a OOO automáticamente.
       </p>
 
       <input

@@ -16,34 +16,35 @@ function stubMetrics(): ChannelManagerMetrics {
   } as unknown as ChannelManagerMetrics;
 }
 
-function buildService(opts: {
-  property?: {
-    id?: string;
-    tenantId?: string;
-    code?: string;
-    channelManagerProvider?: string | null;
-    channelManagerCredentialsRef?: string | null;
-  } | null;
-  existingReservation?: { id: string; code: string; status: string } | null;
-  roomType?: { id: string } | null;
-} = {}) {
-  const property = opts.property === undefined
-    ? {
-        id: 'p-1',
-        tenantId: 't-1',
-        code: 'BBM',
-        channelManagerProvider: 'siteminder',
-        channelManagerCredentialsRef: 'CM_SITEMINDER_HMAC_SECRET',
-      }
-    : opts.property;
+function buildService(
+  opts: {
+    property?: {
+      id?: string;
+      tenantId?: string;
+      code?: string;
+      channelManagerProvider?: string | null;
+      channelManagerCredentialsRef?: string | null;
+    } | null;
+    existingReservation?: { id: string; code: string; status: string } | null;
+    roomType?: { id: string } | null;
+  } = {},
+) {
+  const property =
+    opts.property === undefined
+      ? {
+          id: 'p-1',
+          tenantId: 't-1',
+          code: 'BBM',
+          channelManagerProvider: 'siteminder',
+          channelManagerCredentialsRef: 'CM_SITEMINDER_HMAC_SECRET',
+        }
+      : opts.property;
   const txStub = {
     roomType: {
       findFirst: vi
         .fn()
         .mockResolvedValue(
-          opts.roomType === null
-            ? null
-            : (opts.roomType ?? { id: 'rt-1', defaultCurrency: 'EUR' }),
+          opts.roomType === null ? null : (opts.roomType ?? { id: 'rt-1', defaultCurrency: 'EUR' }),
         ),
     },
     reservation: {

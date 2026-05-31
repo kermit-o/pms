@@ -31,8 +31,11 @@ export default async function OnboardingVerifyPage({ searchParams }: Props) {
     );
   } catch (err) {
     if (err instanceof ApiError) {
-      const reason =
-        err.body.includes('expired') ? 'expired' : err.body.includes('signature') ? 'invalid' : 'failed';
+      const reason = err.body.includes('expired')
+        ? 'expired'
+        : err.body.includes('signature')
+          ? 'invalid'
+          : 'failed';
 
       // Sprint 13 W3 — recuperación tras 24h: si el link caducó, parseamos
       // el email del payload (es un JWT no firmado por nosotros una vez
@@ -42,7 +45,9 @@ export default async function OnboardingVerifyPage({ searchParams }: Props) {
 
       async function resendAction(formData: FormData) {
         'use server';
-        const email = String(formData.get('email') ?? '').trim().toLowerCase();
+        const email = String(formData.get('email') ?? '')
+          .trim()
+          .toLowerCase();
         if (!email || !email.includes('@')) {
           redirect('/onboarding?status=email_missing');
         }

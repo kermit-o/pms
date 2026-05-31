@@ -43,7 +43,11 @@ export default async function ConfirmationPage({ params, searchParams }: Props) 
     },
     checkinTime: view.arrival,
     checkoutTime: view.departure,
-    totalPrice: { '@type': 'PriceSpecification', price: view.totalAmount, priceCurrency: view.currency },
+    totalPrice: {
+      '@type': 'PriceSpecification',
+      price: view.totalAmount,
+      priceCurrency: view.currency,
+    },
   };
 
   return (
@@ -55,7 +59,10 @@ export default async function ConfirmationPage({ params, searchParams }: Props) 
 
       <header className="border-b border-aubergine-100 bg-white">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <Link href={`/h/${slug}?lang=${lang}`} className="text-sm text-aubergine-700 hover:underline">
+          <Link
+            href={`/h/${slug}?lang=${lang}`}
+            className="text-sm text-aubergine-700 hover:underline"
+          >
             ← Aubergine
           </Link>
         </div>
@@ -76,8 +83,14 @@ export default async function ConfirmationPage({ params, searchParams }: Props) 
         <section className="mt-5 grid gap-4 sm:grid-cols-2">
           <Stat label={lang === 'es' ? 'Llegada' : 'Check-in'} value={view.arrival} />
           <Stat label={lang === 'es' ? 'Salida' : 'Check-out'} value={view.departure} />
-          <Stat label={lang === 'es' ? 'Tipo' : 'Room type'} value={`${view.roomType.code} · ${view.roomType.name}`} />
-          <Stat label={lang === 'es' ? 'Total' : 'Total'} value={`${view.totalAmount} ${view.currency}`} />
+          <Stat
+            label={lang === 'es' ? 'Tipo' : 'Room type'}
+            value={`${view.roomType.code} · ${view.roomType.name}`}
+          />
+          <Stat
+            label={lang === 'es' ? 'Total' : 'Total'}
+            value={`${view.totalAmount} ${view.currency}`}
+          />
         </section>
 
         {view.status === 'CONFIRMED' && (

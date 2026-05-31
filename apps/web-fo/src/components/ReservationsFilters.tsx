@@ -1,7 +1,14 @@
 import Link from 'next/link';
 import type { ListReservationsQuery } from '@/lib/api';
 
-const STATUSES = ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'CANCELLED', 'NO_SHOW'] as const;
+const STATUSES = [
+  'PENDING',
+  'CONFIRMED',
+  'CHECKED_IN',
+  'CHECKED_OUT',
+  'CANCELLED',
+  'NO_SHOW',
+] as const;
 const SOURCES = [
   'DIRECT',
   'WALK_IN',

@@ -71,10 +71,7 @@ export class PublicOnboardingService implements OnModuleInit {
   async start(input: StartOnboardingDto): Promise<{ queued: true; email: string }> {
     const email = input.email.trim().toLowerCase();
     const exp = Math.floor(Date.now() / 1000) + this.ttlHours * 3600;
-    const { token } = signOnboardingToken(
-      { kind: 'verify', email, exp },
-      this.secret,
-    );
+    const { token } = signOnboardingToken({ kind: 'verify', email, exp }, this.secret);
     const verifyUrl = this.buildVerifyUrl(token);
     const out = await this.notifications.sendEmail({
       template: 'onboarding_verify',

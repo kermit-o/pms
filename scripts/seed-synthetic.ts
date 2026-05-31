@@ -97,8 +97,7 @@ if (!adminUrl) {
 
 const PROD_HOST_HINTS = ['fly.dev', 'flycast', 'rds.amazonaws', 'supabase.co', 'neon.tech'];
 const looksProd =
-  process.env.NODE_ENV === 'production' ||
-  PROD_HOST_HINTS.some((h) => adminUrl!.includes(h));
+  process.env.NODE_ENV === 'production' || PROD_HOST_HINTS.some((h) => adminUrl!.includes(h));
 
 if (looksProd && !CFG.forceProd) {
   console.error('La DB parece productiva. Aborta. Usa --force-prod si estás seguro.');
@@ -137,33 +136,130 @@ const rng = new Rng(CFG.seed);
 // ---------------------------------------------------------------------------
 
 const ROOM_TYPES = [
-  { code: 'IND', name: 'Individual', baseOccupancy: 1, maxOccupancy: 1, defaultRate: 75, share: 0.2 },
-  { code: 'DBL', name: 'Doble Estándar', baseOccupancy: 2, maxOccupancy: 2, defaultRate: 110, share: 0.45 },
+  {
+    code: 'IND',
+    name: 'Individual',
+    baseOccupancy: 1,
+    maxOccupancy: 1,
+    defaultRate: 75,
+    share: 0.2,
+  },
+  {
+    code: 'DBL',
+    name: 'Doble Estándar',
+    baseOccupancy: 2,
+    maxOccupancy: 2,
+    defaultRate: 110,
+    share: 0.45,
+  },
   { code: 'TWN', name: 'Twin', baseOccupancy: 2, maxOccupancy: 2, defaultRate: 110, share: 0.15 },
-  { code: 'SUP', name: 'Superior', baseOccupancy: 2, maxOccupancy: 3, defaultRate: 145, share: 0.12 },
-  { code: 'JSU', name: 'Junior Suite', baseOccupancy: 2, maxOccupancy: 4, defaultRate: 200, share: 0.05 },
+  {
+    code: 'SUP',
+    name: 'Superior',
+    baseOccupancy: 2,
+    maxOccupancy: 3,
+    defaultRate: 145,
+    share: 0.12,
+  },
+  {
+    code: 'JSU',
+    name: 'Junior Suite',
+    baseOccupancy: 2,
+    maxOccupancy: 4,
+    defaultRate: 200,
+    share: 0.05,
+  },
   { code: 'SUI', name: 'Suite', baseOccupancy: 2, maxOccupancy: 4, defaultRate: 280, share: 0.03 },
 ] as const;
 
 const FIRST_NAMES = [
-  'María', 'Carmen', 'Lucía', 'Ana', 'Isabel', 'Sofía', 'Paula', 'Laura', 'Marta', 'Elena',
-  'Antonio', 'Manuel', 'José', 'Francisco', 'Javier', 'Daniel', 'Carlos', 'Miguel', 'Alejandro', 'Pablo',
-  'Liam', 'Olivia', 'Noah', 'Emma', 'Lucas', 'Mia', 'Ethan', 'Ava', 'Léo', 'Camille',
+  'María',
+  'Carmen',
+  'Lucía',
+  'Ana',
+  'Isabel',
+  'Sofía',
+  'Paula',
+  'Laura',
+  'Marta',
+  'Elena',
+  'Antonio',
+  'Manuel',
+  'José',
+  'Francisco',
+  'Javier',
+  'Daniel',
+  'Carlos',
+  'Miguel',
+  'Alejandro',
+  'Pablo',
+  'Liam',
+  'Olivia',
+  'Noah',
+  'Emma',
+  'Lucas',
+  'Mia',
+  'Ethan',
+  'Ava',
+  'Léo',
+  'Camille',
 ];
 const LAST_NAMES = [
-  'García', 'Rodríguez', 'González', 'Fernández', 'López', 'Martínez', 'Sánchez', 'Pérez',
-  'Gómez', 'Martín', 'Jiménez', 'Ruiz', 'Hernández', 'Díaz', 'Moreno', 'Muñoz', 'Álvarez',
-  'Romero', 'Alonso', 'Gutiérrez', 'Smith', 'Müller', 'Dupont', 'Rossi', 'Johansson',
+  'García',
+  'Rodríguez',
+  'González',
+  'Fernández',
+  'López',
+  'Martínez',
+  'Sánchez',
+  'Pérez',
+  'Gómez',
+  'Martín',
+  'Jiménez',
+  'Ruiz',
+  'Hernández',
+  'Díaz',
+  'Moreno',
+  'Muñoz',
+  'Álvarez',
+  'Romero',
+  'Alonso',
+  'Gutiérrez',
+  'Smith',
+  'Müller',
+  'Dupont',
+  'Rossi',
+  'Johansson',
 ];
 const NATIONALITIES = ['ES', 'ES', 'ES', 'ES', 'ES', 'FR', 'DE', 'GB', 'IT', 'PT', 'US'];
 const AGENCIES = ['Booking.com', 'Expedia', 'Hotelbeds', 'TUI', 'Marsans', null, null, null];
 const COMPANIES = ['Acme Corp', 'Globex SL', 'Iberia Industrial', null, null, null, null];
-const MEMBERSHIPS: Array<string | null> = ['Gold', 'Platinum', 'VIP', null, null, null, null, null, null];
+const MEMBERSHIPS: Array<string | null> = [
+  'Gold',
+  'Platinum',
+  'VIP',
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+];
 
 const SEASONALITY: Record<number, number> = {
   // 0-indexed month: multiplicador sobre reservationsPerMonth
-  0: 0.55, 1: 0.6, 2: 0.7, 3: 0.85, 4: 0.95, 5: 1.1,
-  6: 1.45, 7: 1.5, 8: 1.2, 9: 0.95, 10: 0.7, 11: 0.85,
+  0: 0.55,
+  1: 0.6,
+  2: 0.7,
+  3: 0.85,
+  4: 0.95,
+  5: 1.1,
+  6: 1.45,
+  7: 1.5,
+  8: 1.2,
+  9: 0.95,
+  10: 0.7,
+  11: 0.85,
 };
 
 const SOURCES: ReservationSource[] = [
@@ -350,7 +446,15 @@ async function ensureRatePlan(propIdx: number) {
   });
 }
 
-async function ensureGuestPool(): Promise<{ id: string; firstName: string; lastName: string; nationality: string | null; membershipLevel: string | null }[]> {
+async function ensureGuestPool(): Promise<
+  {
+    id: string;
+    firstName: string;
+    lastName: string;
+    nationality: string | null;
+    membershipLevel: string | null;
+  }[]
+> {
   // Buscamos guests marcados como sintéticos del tenant.
   const existing = await prisma.guest.findMany({
     where: {
@@ -411,7 +515,9 @@ async function createMonthReservations(
   for (let i = 0; i < count; i += 1) {
     const rt = weightedRoomType(roomTypes);
     const arrivalDay = rng.int(1, 28);
-    const arrival = new Date(Date.UTC(monthAnchor.getUTCFullYear(), monthAnchor.getUTCMonth(), arrivalDay));
+    const arrival = new Date(
+      Date.UTC(monthAnchor.getUTCFullYear(), monthAnchor.getUTCMonth(), arrivalDay),
+    );
     const nights = rng.chance(0.6) ? rng.int(1, 3) : rng.int(3, 7);
     const departure = new Date(arrival);
     departure.setUTCDate(departure.getUTCDate() + nights);
@@ -490,7 +596,8 @@ async function createMonthReservations(
           create: {
             id: folioId,
             tenantId: CFG.tenantId,
-            status: status === ReservationStatus.CHECKED_OUT ? FolioStatus.CLOSED : FolioStatus.OPEN,
+            status:
+              status === ReservationStatus.CHECKED_OUT ? FolioStatus.CLOSED : FolioStatus.OPEN,
             balance: status === ReservationStatus.CHECKED_OUT ? new Prisma.Decimal(0) : totalAmount,
             currency: 'EUR',
           },

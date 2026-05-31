@@ -174,7 +174,7 @@ export class HousekeepingTasksService {
         ...toView(row),
         roomNumber: row.room?.number ?? null,
         roomFloor: row.room?.floor ?? null,
-        assigneeName: row.assignedToUserId ? userById.get(row.assignedToUserId) ?? null : null,
+        assigneeName: row.assignedToUserId ? (userById.get(row.assignedToUserId) ?? null) : null,
       }));
     });
   }

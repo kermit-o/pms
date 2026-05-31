@@ -86,7 +86,9 @@ export class NotificationsService {
       this.provider = new DryRunProvider(this.log);
       this.from = from ?? 'no-reply@aubergine.local';
       this.mode = 'dry_run';
-      this.log.warn('Notifications init: dry_run (POSTMARK_SERVER_TOKEN o NOTIFICATIONS_FROM ausentes)');
+      this.log.warn(
+        'Notifications init: dry_run (POSTMARK_SERVER_TOKEN o NOTIFICATIONS_FROM ausentes)',
+      );
     }
   }
 

@@ -63,9 +63,7 @@ export default async function HotelHomePage({ params, searchParams }: Props) {
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
         <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-aubergine-100">
-          <h2 className="text-xl font-semibold text-aubergine-700">
-            {t(lang, 'search.title')}
-          </h2>
+          <h2 className="text-xl font-semibold text-aubergine-700">{t(lang, 'search.title')}</h2>
 
           <form
             action={`/h/${encodeURIComponent(slug)}/availability`}
@@ -87,8 +85,22 @@ export default async function HotelHomePage({ params, searchParams }: Props) {
               min={minDeparture}
               defaultValue={minDeparture}
             />
-            <Field label={t(lang, 'search.adults')} name="adults" type="number" min={1} max={10} defaultValue={2} />
-            <Field label={t(lang, 'search.children')} name="children" type="number" min={0} max={10} defaultValue={0} />
+            <Field
+              label={t(lang, 'search.adults')}
+              name="adults"
+              type="number"
+              min={1}
+              max={10}
+              defaultValue={2}
+            />
+            <Field
+              label={t(lang, 'search.children')}
+              name="children"
+              type="number"
+              min={0}
+              max={10}
+              defaultValue={0}
+            />
 
             <button
               type="submit"
@@ -111,7 +123,15 @@ export default async function HotelHomePage({ params, searchParams }: Props) {
   );
 }
 
-function Header({ property, lang, slug }: { property: IbeProperty; lang: 'es' | 'en'; slug: string }) {
+function Header({
+  property,
+  lang,
+  slug,
+}: {
+  property: IbeProperty;
+  lang: 'es' | 'en';
+  slug: string;
+}) {
   return (
     <header className="border-b border-aubergine-100 bg-white">
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-4 sm:px-6">

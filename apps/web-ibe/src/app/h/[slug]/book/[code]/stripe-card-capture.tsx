@@ -29,7 +29,9 @@ export function StripeCardCapture({
   const [publishableKey, setPublishableKey] = useState<string | null>(null);
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ brand: string | null; last4: string | null } | null>(null);
+  const [success, setSuccess] = useState<{ brand: string | null; last4: string | null } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (publishableKey) setStripePromise(loadStripe(publishableKey));
@@ -61,8 +63,7 @@ export function StripeCardCapture({
   if (success) {
     return (
       <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 ring-1 ring-emerald-200">
-        ✓{' '}
-        {lang === 'es' ? 'Tarjeta guardada' : 'Card on file'}{' '}
+        ✓ {lang === 'es' ? 'Tarjeta guardada' : 'Card on file'}{' '}
         {success.brand ? `· ${success.brand}` : ''}
         {success.last4 ? ` **** ${success.last4}` : ''}
       </div>
@@ -85,9 +86,7 @@ export function StripeCardCapture({
             ? '💳 Capturar tarjeta'
             : '💳 Add card'}
       </button>
-      {error && (
-        <p className="mt-2 text-xs text-rose-700">{error}</p>
-      )}
+      {error && <p className="mt-2 text-xs text-rose-700">{error}</p>}
       {open && clientSecret && stripePromise && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
@@ -103,7 +102,10 @@ export function StripeCardCapture({
                 ✕
               </button>
             </div>
-            <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'flat' } }}>
+            <Elements
+              stripe={stripePromise}
+              options={{ clientSecret, appearance: { theme: 'flat' } }}
+            >
               <CardForm
                 slug={slug}
                 code={code}
@@ -183,7 +185,9 @@ function CardForm({
     <form onSubmit={submit} className="mt-4 space-y-4">
       <PaymentElement />
       {error && (
-        <div className="rounded-lg bg-rose-50 p-2 text-xs text-rose-800 ring-1 ring-rose-200">{error}</div>
+        <div className="rounded-lg bg-rose-50 p-2 text-xs text-rose-800 ring-1 ring-rose-200">
+          {error}
+        </div>
       )}
       <div className="flex justify-end gap-2">
         <button
@@ -199,7 +203,13 @@ function CardForm({
           disabled={busy || !stripe || !elements}
           className="rounded-lg bg-aubergine-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? (lang === 'es' ? 'Procesando…' : 'Processing…') : lang === 'es' ? 'Confirmar' : 'Confirm'}
+          {busy
+            ? lang === 'es'
+              ? 'Procesando…'
+              : 'Processing…'
+            : lang === 'es'
+              ? 'Confirmar'
+              : 'Confirm'}
         </button>
       </div>
     </form>

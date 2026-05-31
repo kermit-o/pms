@@ -37,10 +37,7 @@ describe('TurnstileService', () => {
 
   it('returns missing when enabled but token absent', async () => {
     const metrics = stubMetrics();
-    const svc = new TurnstileService(
-      buildConfig({ TURNSTILE_SECRET_KEY: 'sk' }) as never,
-      metrics,
-    );
+    const svc = new TurnstileService(buildConfig({ TURNSTILE_SECRET_KEY: 'sk' }) as never, metrics);
     expect(svc.enabled).toBe(true);
     const out = await svc.verify(undefined, '1.1.1.1', 'h');
     expect(out.ok).toBe(false);

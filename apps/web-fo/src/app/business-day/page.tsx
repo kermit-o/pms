@@ -171,55 +171,56 @@ export default async function BusinessDayPage({ searchParams }: PageProps) {
         </section>
       )}
 
-      {history.length > 0 && (() => {
-        const open = history.filter((d) => d.status === 'OPEN');
-        const lastClosed = history
-          .filter((d) => d.status === 'CLOSED' && d.closedAt)
-          .sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? ''))[0];
+      {history.length > 0 &&
+        (() => {
+          const open = history.filter((d) => d.status === 'OPEN');
+          const lastClosed = history
+            .filter((d) => d.status === 'CLOSED' && d.closedAt)
+            .sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? ''))[0];
 
-        return (
-          <section className="space-y-4">
-            {lastClosed && (
-              <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100">
-                <p className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
-                  Último cierre
-                </p>
-                <p className="mt-1 text-base font-medium text-aubergine-700">
-                  {lastClosed.businessDate} · {relativeTime(lastClosed.closedAt!)}
-                </p>
-              </div>
-            )}
+          return (
+            <section className="space-y-4">
+              {lastClosed && (
+                <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
+                    Último cierre
+                  </p>
+                  <p className="mt-1 text-base font-medium text-aubergine-700">
+                    {lastClosed.businessDate} · {relativeTime(lastClosed.closedAt!)}
+                  </p>
+                </div>
+              )}
 
-            {open.length > 0 && (
-              <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-aubergine-100">
-                <header className="bg-amber-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
-                  Días abiertos pendientes ({open.length})
-                </header>
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wide text-aubergine-500">
-                    <tr>
-                      <th className="px-4 py-2">Fecha</th>
-                      <th className="px-4 py-2">Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-aubergine-100/70">
-                    {open.map((d) => (
-                      <tr key={d.businessDate}>
-                        <td className="px-4 py-2">{d.businessDate}</td>
-                        <td className="px-4 py-2">
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                            open
-                          </span>
-                        </td>
+              {open.length > 0 && (
+                <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-aubergine-100">
+                  <header className="bg-amber-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                    Días abiertos pendientes ({open.length})
+                  </header>
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-xs uppercase tracking-wide text-aubergine-500">
+                      <tr>
+                        <th className="px-4 py-2">Fecha</th>
+                        <th className="px-4 py-2">Estado</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        );
-      })()}
+                    </thead>
+                    <tbody className="divide-y divide-aubergine-100/70">
+                      {open.map((d) => (
+                        <tr key={d.businessDate}>
+                          <td className="px-4 py-2">{d.businessDate}</td>
+                          <td className="px-4 py-2">
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                              open
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          );
+        })()}
     </main>
   );
 }

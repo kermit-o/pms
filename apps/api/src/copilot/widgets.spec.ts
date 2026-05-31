@@ -25,11 +25,16 @@ const sampleRow = {
 
 describe('extractWidgetFromTool', () => {
   it('builds an availability widget from search_availability_by_type result', () => {
-    const widget = extractWidgetFromTool(
-      'search_availability_by_type',
-      sampleInput,
-      [sampleRow, { ...sampleRow, roomTypeId: 'rt-sup', code: 'SUP', pricePerNight: '130', totalForStay: '130' }],
-    );
+    const widget = extractWidgetFromTool('search_availability_by_type', sampleInput, [
+      sampleRow,
+      {
+        ...sampleRow,
+        roomTypeId: 'rt-sup',
+        code: 'SUP',
+        pricePerNight: '130',
+        totalForStay: '130',
+      },
+    ]);
     expect(widget).not.toBeNull();
     expect(widget!.kind).toBe('availability');
     if (widget!.kind === 'availability') {
@@ -50,9 +55,7 @@ describe('extractWidgetFromTool', () => {
   });
 
   it('returns null when tool result is empty array', () => {
-    expect(
-      extractWidgetFromTool('search_availability_by_type', sampleInput, []),
-    ).toBeNull();
+    expect(extractWidgetFromTool('search_availability_by_type', sampleInput, [])).toBeNull();
   });
 
   it('returns null when tool result is not an array', () => {
@@ -65,29 +68,21 @@ describe('extractWidgetFromTool', () => {
     const broken = { ...sampleRow };
     // @ts-expect-error simulamos un cambio futuro del tool sin el campo
     delete broken.pricePerNight;
-    expect(
-      extractWidgetFromTool('search_availability_by_type', sampleInput, [broken]),
-    ).toBeNull();
+    expect(extractWidgetFromTool('search_availability_by_type', sampleInput, [broken])).toBeNull();
   });
 
   it('falls back to EUR when defaultCurrency missing', () => {
     const noCurrency = { ...sampleRow };
     // @ts-expect-error legit en tests
     delete noCurrency.defaultCurrency;
-    const widget = extractWidgetFromTool(
-      'search_availability_by_type',
-      sampleInput,
-      [noCurrency],
-    );
+    const widget = extractWidgetFromTool('search_availability_by_type', sampleInput, [noCurrency]);
     if (widget?.kind === 'availability') {
       expect(widget.data.rows[0]!.currency).toBe('EUR');
     }
   });
 
   it('returns null when input is missing arrival/departure', () => {
-    expect(
-      extractWidgetFromTool('search_availability_by_type', {}, [sampleRow]),
-    ).toBeNull();
+    expect(extractWidgetFromTool('search_availability_by_type', {}, [sampleRow])).toBeNull();
   });
 
   // ---------------------------------------------------------------------------
@@ -119,7 +114,11 @@ describe('extractWidgetFromTool', () => {
   };
 
   it('builds a folio widget from get_folio result', () => {
-    const widget = extractWidgetFromTool('get_folio', { reservationCode: 'BBM01-AB12' }, sampleFolioResult);
+    const widget = extractWidgetFromTool(
+      'get_folio',
+      { reservationCode: 'BBM01-AB12' },
+      sampleFolioResult,
+    );
     expect(widget).not.toBeNull();
     expect(widget!.kind).toBe('folio');
     if (widget!.kind === 'folio') {
@@ -409,21 +408,29 @@ describe('extractWidgetFromTool', () => {
   });
 
   it('movements widget también funciona para departure', () => {
-    const widget = extractWidgetFromTool('list_movements', {}, {
-      ...sampleMovement,
-      direction: 'departure',
-    });
+    const widget = extractWidgetFromTool(
+      'list_movements',
+      {},
+      {
+        ...sampleMovement,
+        direction: 'departure',
+      },
+    );
     if (widget?.kind === 'movements') {
       expect(widget.data.direction).toBe('departure');
     }
   });
 
   it('movements widget acepta items vacío (confirma 0 llegadas)', () => {
-    const widget = extractWidgetFromTool('list_movements', {}, {
-      direction: 'arrival',
-      date: '2026-05-22',
-      items: [],
-    });
+    const widget = extractWidgetFromTool(
+      'list_movements',
+      {},
+      {
+        direction: 'arrival',
+        date: '2026-05-22',
+        items: [],
+      },
+    );
     if (widget?.kind === 'movements') {
       expect(widget.data.rows).toHaveLength(0);
     }

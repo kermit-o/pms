@@ -70,9 +70,9 @@ describe('RateLimitGuard', () => {
     expect(await guard.canActivate(ctx(handler, makeReq('a', '/p', 'h1')))).toBe(true);
     expect(await guard.canActivate(ctx(handler, makeReq('b', '/p', 'h1')))).toBe(true);
     expect(await guard.canActivate(ctx(handler, makeReq('a', '/p', 'h2')))).toBe(true);
-    await expect(
-      guard.canActivate(ctx(handler, makeReq('a', '/p', 'h1'))),
-    ).rejects.toBeInstanceOf(HttpException);
+    await expect(guard.canActivate(ctx(handler, makeReq('a', '/p', 'h1')))).rejects.toBeInstanceOf(
+      HttpException,
+    );
   });
 
   it('rejects with 403 when IP is in property blockedIps', async () => {
@@ -100,8 +100,6 @@ describe('RateLimitGuard', () => {
       'cf-connecting-ip': '9.9.9.9',
       'x-forwarded-for': '8.8.8.8',
     });
-    await expect(guard.canActivate(ctx(handler, req))).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(guard.canActivate(ctx(handler, req))).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

@@ -12,13 +12,7 @@ import { TurnstileService } from './turnstile.service';
 @Module({
   imports: [DbModule, EventbusModule, PaymentsModule],
   controllers: [PublicIbeController],
-  providers: [
-    PublicIbeService,
-    PublicIbeMetrics,
-    RateLimitGuard,
-    TurnstileService,
-    TurnstileGuard,
-  ],
+  providers: [PublicIbeService, PublicIbeMetrics, RateLimitGuard, TurnstileService, TurnstileGuard],
   exports: [PublicIbeService],
 })
 export class PublicIbeModule {}

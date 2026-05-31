@@ -192,12 +192,10 @@ export default function CopilotSidebar() {
                 {m.widgets?.map((w, idx) => {
                   if (w.kind === 'availability')
                     return <CopilotAvailabilityWidget key={idx} widget={w} />;
-                  if (w.kind === 'folio')
-                    return <CopilotFolioWidget key={idx} widget={w} />;
+                  if (w.kind === 'folio') return <CopilotFolioWidget key={idx} widget={w} />;
                   if (w.kind === 'reservation')
                     return <CopilotReservationWidget key={idx} widget={w} />;
-                  if (w.kind === 'hsk_tasks')
-                    return <CopilotHskTasksWidget key={idx} widget={w} />;
+                  if (w.kind === 'hsk_tasks') return <CopilotHskTasksWidget key={idx} widget={w} />;
                   if (w.kind === 'movements')
                     return <CopilotMovementsWidget key={idx} widget={w} />;
                   if (w.kind === 'hsk_suggest')
@@ -346,10 +344,7 @@ function PendingToolCard({
 // Renderizado natural del tool input para que el operador entienda qué se
 // va a ejecutar sin leer JSON. Si el shape no encaja, cae a JSON crudo.
 function ToolInputSummary({ tool, input }: { tool: string; input: unknown }) {
-  const obj = (typeof input === 'object' && input !== null ? input : {}) as Record<
-    string,
-    unknown
-  >;
+  const obj = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
   const rows: Array<[string, string]> = [];
 
   if (tool === 'create_reservation') {

@@ -1,9 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  NightAuditAnomalyKind,
-  NightAuditAnomalySeverity,
-  Prisma,
-} from '@pms/db';
+import { NightAuditAnomalyKind, NightAuditAnomalySeverity, Prisma } from '@pms/db';
 import type { StepContext } from './step';
 
 /**
@@ -164,9 +160,7 @@ export class AnomalyService {
   private async detectCancellationSpree(ctx: StepContext): Promise<DetectedAnomaly[]> {
     const start = startOfDay(ctx.businessDateAsDate);
     const end = endOfDay(ctx.businessDateAsDate);
-    const rows = await ctx.tx.$queryRaw<
-      Array<{ guest_id: string; cancellations: number }>
-    >`
+    const rows = await ctx.tx.$queryRaw<Array<{ guest_id: string; cancellations: number }>>`
       SELECT
         rg.guest_id::text,
         COUNT(*)::int AS cancellations

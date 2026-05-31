@@ -8,11 +8,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  type Counter,
-  type Histogram,
-  metrics,
-} from '@opentelemetry/api';
+import { type Counter, type Histogram, metrics } from '@opentelemetry/api';
 import Stripe from 'stripe';
 import { FolioStatus, GuaranteeStatus, GuaranteeType, Prisma } from '@pms/db';
 import { FolioService } from '../folio';
@@ -55,7 +51,8 @@ export class StripeService {
     );
     const meter = metrics.getMeter('pms-api/payments');
     this.webhookEvents = meter.createCounter('stripe_webhook_events', {
-      description: 'Webhook events recibidos. outcome ∈ {handled, unknown_type, error, bad_signature, no_secret}.',
+      description:
+        'Webhook events recibidos. outcome ∈ {handled, unknown_type, error, bad_signature, no_secret}.',
     });
     this.webhookEventAge = meter.createHistogram('stripe_webhook_event_age_seconds', {
       description: 'Antigüedad del event al recibirlo (event.created → now), segundos.',
@@ -247,7 +244,10 @@ export class StripeService {
    * Webhook handler. Solo procesamos setup_intent.succeeded por ahora —
    * marca la reserva SECURED y guarda los datos visibles de la tarjeta.
    */
-  async handleWebhook(rawBody: Buffer, signature: string | undefined): Promise<{ ok: true; type: string; outcome: string }> {
+  async handleWebhook(
+    rawBody: Buffer,
+    signature: string | undefined,
+  ): Promise<{ ok: true; type: string; outcome: string }> {
     const stripe = this.requireStripe();
     if (!this.webhookSecret) {
       this.webhookEvents.add(1, { type: 'unknown', outcome: 'no_secret' });

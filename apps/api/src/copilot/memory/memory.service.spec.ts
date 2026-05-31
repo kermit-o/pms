@@ -12,7 +12,12 @@ const GUEST_ID = '33333333-3333-3333-3333-333333333333';
 
 function buildService(opts: {
   countResult?: number;
-  rankedRows?: Array<{ source_kind: string; source_ref: string | null; chunk_text: string; score: number }>;
+  rankedRows?: Array<{
+    source_kind: string;
+    source_ref: string | null;
+    chunk_text: string;
+    score: number;
+  }>;
   guest?: unknown;
 }) {
   const tx = {
@@ -52,7 +57,11 @@ describe('MemoryService.recall', () => {
         { source_kind: 'CARDEX', source_ref: 'self', chunk_text: 'Alergia al marisco', score: 0.5 },
       ],
     });
-    const out = await service.recall(user, 'cid', { guestId: GUEST_ID, query: 'alergia', limit: 5 });
+    const out = await service.recall(user, 'cid', {
+      guestId: GUEST_ID,
+      query: 'alergia',
+      limit: 5,
+    });
     expect(out.ingested).toBe(true);
     expect(tx.guestMemoryChunk.deleteMany).toHaveBeenCalledOnce();
     expect(tx.guestMemoryChunk.createMany).toHaveBeenCalledOnce();

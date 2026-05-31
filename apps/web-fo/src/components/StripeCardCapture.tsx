@@ -52,10 +52,7 @@ export function StripeCardCapture({
         <p className="mt-1 text-xs text-aubergine-700/60">
           La tarjeta se tokeniza en Stripe. No guardamos el número completo.
         </p>
-        <Elements
-          stripe={stripePromise}
-          options={{ clientSecret, appearance: { theme: 'flat' } }}
-        >
+        <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'flat' } }}>
           <CardForm reservationId={reservationId} onSuccess={onSuccess} onClose={onClose} />
         </Elements>
       </div>

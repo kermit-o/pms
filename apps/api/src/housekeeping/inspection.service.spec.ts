@@ -21,8 +21,12 @@ describe('parseVerdict', () => {
   });
 
   it('clamps confidence to [0,1]', () => {
-    expect(parseVerdict('{"verdict":"clean","issues":[],"confidence":3,"reasoning":"x"}').confidence).toBe(1);
-    expect(parseVerdict('{"verdict":"clean","issues":[],"confidence":-0.5,"reasoning":"x"}').confidence).toBe(0);
+    expect(
+      parseVerdict('{"verdict":"clean","issues":[],"confidence":3,"reasoning":"x"}').confidence,
+    ).toBe(1);
+    expect(
+      parseVerdict('{"verdict":"clean","issues":[],"confidence":-0.5,"reasoning":"x"}').confidence,
+    ).toBe(0);
   });
 
   it('throws on unknown verdict', () => {
@@ -40,7 +44,12 @@ describe('parseVerdict', () => {
   it('caps issues to 10 items and skips non-strings', () => {
     const many = Array.from({ length: 20 }, (_, i) => `i${i}`);
     const v = parseVerdict(
-      JSON.stringify({ verdict: 'damaged', issues: [...many, 42, null], confidence: 0.7, reasoning: 'rotura' }),
+      JSON.stringify({
+        verdict: 'damaged',
+        issues: [...many, 42, null],
+        confidence: 0.7,
+        reasoning: 'rotura',
+      }),
     );
     expect(v.issues.length).toBeLessThanOrEqual(10);
     expect(v.issues.every((s) => typeof s === 'string')).toBe(true);

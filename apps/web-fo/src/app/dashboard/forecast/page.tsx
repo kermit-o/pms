@@ -1,10 +1,5 @@
 import { auth } from '@/auth';
-import {
-  ApiError,
-  getForecast,
-  type ForecastMetric,
-  type ForecastResult,
-} from '@/lib/api';
+import { ApiError, getForecast, type ForecastMetric, type ForecastResult } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,8 +22,7 @@ export default async function ForecastPage({ searchParams }: PageProps) {
   const session = await auth();
   const propertyId = searchParams.propertyId;
   const horizon = Number(searchParams.horizon ?? 30);
-  const metric: ForecastMetric =
-    (searchParams.metric as ForecastMetric) ?? 'occupancy';
+  const metric: ForecastMetric = (searchParams.metric as ForecastMetric) ?? 'occupancy';
 
   let result: ForecastResult | null = null;
   let error: string | null = null;
@@ -188,18 +182,14 @@ function ForecastChart({ history, series, metric }: ChartProps) {
   const span = Math.max(0.0001, max - min);
   const xs = [...history, ...series];
   const xScale = (i: number) => pad.l + (i * (w - pad.l - pad.r)) / Math.max(1, xs.length - 1);
-  const yScale = (v: number) =>
-    pad.t + (h - pad.t - pad.b) * (1 - (v - min) / span);
+  const yScale = (v: number) => pad.t + (h - pad.t - pad.b) * (1 - (v - min) / span);
 
   const historyPath = history
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(p.value)}`)
     .join(' ');
   const offset = history.length;
   const predPath = series
-    .map(
-      (p, i) =>
-        `${i === 0 ? 'M' : 'L'} ${xScale(offset + i)} ${yScale(p.predicted)}`,
-    )
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(offset + i)} ${yScale(p.predicted)}`)
     .join(' ');
   const upperPath = series
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(offset + i)} ${yScale(p.upper)}`)
@@ -218,12 +208,7 @@ function ForecastChart({ history, series, metric }: ChartProps) {
     metric === 'occupancy' ? `${Math.round(v * 100)}%` : Math.round(v).toString();
 
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      role="img"
-      aria-label={`Forecast ${metric}`}
-      className="w-full"
-    >
+    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`Forecast ${metric}`} className="w-full">
       {ticks.map((t, i) => (
         <g key={i}>
           <line

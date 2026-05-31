@@ -39,10 +39,10 @@ export class TurnstileGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.getAllAndOverride<boolean | undefined>(
-      REQUIRE_TURNSTILE_META,
-      [context.getHandler(), context.getClass()],
-    );
+    const required = this.reflector.getAllAndOverride<boolean | undefined>(REQUIRE_TURNSTILE_META, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (!required) return true;
     if (!this.turnstile.enabled) return true;
 

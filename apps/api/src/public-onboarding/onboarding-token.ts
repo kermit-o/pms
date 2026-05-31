@@ -45,10 +45,7 @@ export interface OnboardingTokenVerifyErr {
 }
 export type OnboardingTokenVerify = OnboardingTokenVerifyOk | OnboardingTokenVerifyErr;
 
-export function verifyOnboardingToken(
-  token: string,
-  secret: string,
-): OnboardingTokenVerify {
+export function verifyOnboardingToken(token: string, secret: string): OnboardingTokenVerify {
   const parts = token.split('.');
   if (parts.length !== 2) return { ok: false, reason: 'malformed' };
   const [body, sig] = parts as [string, string];

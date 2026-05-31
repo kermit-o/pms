@@ -1,8 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import {
-  signOnboardingToken,
-  verifyOnboardingToken,
-} from './onboarding-token';
+import { signOnboardingToken, verifyOnboardingToken } from './onboarding-token';
 
 const SECRET = 'a'.repeat(64);
 
@@ -11,10 +8,7 @@ afterEach(() => vi.useRealTimers());
 describe('onboarding-token', () => {
   it('signs and verifies a valid token', () => {
     const exp = Math.floor(Date.now() / 1000) + 3600;
-    const { token, full } = signOnboardingToken(
-      { kind: 'verify', email: 'a@b.test', exp },
-      SECRET,
-    );
+    const { token, full } = signOnboardingToken({ kind: 'verify', email: 'a@b.test', exp }, SECRET);
     const out = verifyOnboardingToken(token, SECRET);
     expect(out.ok).toBe(true);
     if (out.ok) {
@@ -26,10 +20,7 @@ describe('onboarding-token', () => {
 
   it('rejects when secret does not match', () => {
     const exp = Math.floor(Date.now() / 1000) + 3600;
-    const { token } = signOnboardingToken(
-      { kind: 'verify', email: 'a@b', exp },
-      SECRET,
-    );
+    const { token } = signOnboardingToken({ kind: 'verify', email: 'a@b', exp }, SECRET);
     const out = verifyOnboardingToken(token, 'z'.repeat(64));
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.reason).toBe('bad_signature');
@@ -56,10 +47,7 @@ describe('onboarding-token', () => {
 
   it('detects bit-flip tampering', () => {
     const exp = Math.floor(Date.now() / 1000) + 3600;
-    const { token } = signOnboardingToken(
-      { kind: 'verify', email: 'a@b', exp },
-      SECRET,
-    );
+    const { token } = signOnboardingToken({ kind: 'verify', email: 'a@b', exp }, SECRET);
     const parts = token.split('.');
     const tampered = `${parts[0]!.slice(0, -1)}X.${parts[1]}`;
     const out = verifyOnboardingToken(tampered, SECRET);

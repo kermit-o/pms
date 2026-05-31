@@ -29,7 +29,7 @@
 
 ## 1 · Formato de entrada
 
-````markdown
+```markdown
 ## YYYY-MM-DD · [TIPO] · Título corto (≤ 80 chars)
 
 **Scope:** módulos/paquetes afectados
@@ -53,26 +53,26 @@ Una o dos frases.
 **Sigue pendiente.**
 
 (Opcional) Lo que queda colgando o se difiere a otra entrada.
-````
+```
 
 ### Tipos válidos
 
-| Tipo | Cuándo usarlo |
-|---|---|
-| `[FEAT]` | Funcionalidad nueva visible al usuario u operador. |
-| `[FIX]` | Bug fix en código de producción. |
-| `[REFACTOR]` | Cambio interno sin alterar comportamiento. |
-| `[DOCS]` | Solo documentación. |
-| `[INFRA]` | Cambios en CI/CD, Fly, Postgres, secrets, networking. |
-| `[DB]` | Migración Prisma, cambio de RLS, índice, particionado. |
-| `[SECURITY]` | Hardening, parche CVE, auth, RLS leak. |
-| `[COMPLIANCE]` | PCI, GDPR, SES.HOSPEDAJES, Verifactu. |
-| `[INTEGRATION]` | Stripe, Keycloak, NATS, channel manager, etc. |
-| `[ADR]` | Decisión arquitectónica formal (también en `docs/adr/`). |
-| `[SPRINT]` | Cierre de sprint completo. |
-| `[INCIDENT]` | Postmortem de incidente de producción. |
-| `[CHORE]` | Mantenimiento (deps, lockfile, formato). |
-| `[NOTE]` | Cualquier cosa que no encaja arriba. |
+| Tipo            | Cuándo usarlo                                            |
+| --------------- | -------------------------------------------------------- |
+| `[FEAT]`        | Funcionalidad nueva visible al usuario u operador.       |
+| `[FIX]`         | Bug fix en código de producción.                         |
+| `[REFACTOR]`    | Cambio interno sin alterar comportamiento.               |
+| `[DOCS]`        | Solo documentación.                                      |
+| `[INFRA]`       | Cambios en CI/CD, Fly, Postgres, secrets, networking.    |
+| `[DB]`          | Migración Prisma, cambio de RLS, índice, particionado.   |
+| `[SECURITY]`    | Hardening, parche CVE, auth, RLS leak.                   |
+| `[COMPLIANCE]`  | PCI, GDPR, SES.HOSPEDAJES, Verifactu.                    |
+| `[INTEGRATION]` | Stripe, Keycloak, NATS, channel manager, etc.            |
+| `[ADR]`         | Decisión arquitectónica formal (también en `docs/adr/`). |
+| `[SPRINT]`      | Cierre de sprint completo.                               |
+| `[INCIDENT]`    | Postmortem de incidente de producción.                   |
+| `[CHORE]`       | Mantenimiento (deps, lockfile, formato).                 |
+| `[NOTE]`        | Cualquier cosa que no encaja arriba.                     |
 
 ---
 
@@ -156,19 +156,19 @@ el backend cobraba al precio base)
   columnas a `rate_plans`:
   - `non_refundable boolean NOT NULL DEFAULT false`
   - `discount_pct numeric(5,2)` (null = sin descuento)
-  Forward-only, default false/NULL → no afecta planes existentes.
+    Forward-only, default false/NULL → no afecta planes existentes.
 - **Helper pricing puro** (`apps/api/rate-plans/pricing.ts`):
   `resolveDailyRate(defaultRate, ratePlan)` aplica en orden:
   1. `attributes.dailyRate` (override fijo, compat con código viejo).
   2. `discountPct` (porcentaje 0-100 sobre el rate resultante).
-  Tests unitarios cubren null, override, descuento, combinación
-  override+descuento, valores fuera de rango y JSON malformado.
+     Tests unitarios cubren null, override, descuento, combinación
+     override+descuento, valores fuera de rango y JSON malformado.
 - **Módulo nuevo `rate-plans`** con CRUD admin:
   - `GET /properties/:id/rate-plans` (cualquier rol con acceso)
   - `POST /properties/:id/rate-plans` (`tenant_admin`)
   - `PATCH /rate-plans/:id` (`tenant_admin`)
-  DTO acepta `code` (regex A-Z/0-9/_-, max 16), `name`, `description`,
-  `isPublic`, `nonRefundable`, `discountPct`, `dailyRate` opcional.
+    DTO acepta `code` (regex A-Z/0-9/\_-, max 16), `name`, `description`,
+    `isPublic`, `nonRefundable`, `discountPct`, `dailyRate` opcional.
 - **PublicIbeService.searchAvailability** ahora devuelve, por cada
   roomType, una lista `rates: PublicRateOption[]`. Si la propiedad no
   tiene rate plans configurados, sintetiza una opción virtual
@@ -246,6 +246,7 @@ workstream:
 - Restricciones temporales (`bookableFrom`/`bookableTo`, `minLOS`,
   `maxLOS`, `daysOfWeek`).
 - Reverse-discount (markup +X%) para tarifas premium.
+
 ## 2026-05-21 · [FEAT] · Sprint 13 W3 — Onboarding UX polish
 
 **Scope:** `apps/web-fo/src/app/onboarding`,
@@ -278,7 +279,7 @@ workstream:
     `apps/api/notifications/templates/index.ts`. Incluye accesos
     (back-office URL, IBE URL, email admin) + lista numerada de
     próximos pasos (room types, Stripe, IBE público, channel manager)
-    + SLA de soporte (< 4h laborables CET).
+    - SLA de soporte (< 4h laborables CET).
   - `PublicOnboardingService.setup()` dispara `sendEmail` con plantilla
     `onboarding_welcome` al finalizar la transacción de creación
     (best-effort: si Postmark/NATS fallan, log warn y sigue — el wizard
@@ -328,6 +329,7 @@ iteración cierra el loop sin tocar modelo de datos.
 - Reenvío del welcome desde back-office si el hotel no lo recibió.
 - A11y audit del stepper (aria-current ya está, falta keyboard nav
   si el componente se vuelve interactivo).
+
 ## 2026-05-21 · [FIX] · Hotfix — Copilot expone 401 JSON crudo de Anthropic
 
 **Scope:** `apps/api/src/copilot/anthropic-adapter.ts`
@@ -366,6 +368,7 @@ La barra lateral del Copilot mostraba literalmente
 
 El piloto BBM01 mostró el JSON crudo de Anthropic al recepcionista,
 que vio "invalid x-api-key" y un `request_id` interno. Eso es:
+
 1. Operacionalmente embarazoso (revela que la integración rota es
    con Anthropic, expone el header name `x-api-key`).
 2. Inútil para el usuario final (no puede hacer nada con esa info).
@@ -395,6 +398,7 @@ y en futuras incidencias similares la UX sea presentable.
 
 Sin esos pasos el Copilot seguirá fallando — el hotfix sólo mejora
 cómo se presenta el fallo al usuario.
+
 ## 2026-05-21 · [FIX] · Copilot — Bloquear placeholders monetarios alucinados
 
 **Scope:** `apps/api/src/copilot/`
@@ -437,6 +441,7 @@ con cinco filas pero sólo tres precios reales; las otras dos decían
 
 El LLM, bajo presión por completar una tabla, rellenó dos filas con
 "desde más €" en lugar de omitirlas o pedirme el dato. Eso es:
+
 1. Información falsa al recepcionista (cobra eso a un huésped y has
    roto el negocio del hotel).
 2. Imposible de auditar después (no queda registro de que esos
@@ -465,6 +470,7 @@ la regla, el placeholder no llega al recepcionista.
 Este commit cubre la prioridad #1 (bloqueo de alucinaciones). Las
 direcciones restantes del análisis de UX (mockups A/B/D) quedan
 abiertas:
+
 - **Mockup A — Render markdown** (~1 día, 2 deps `react-markdown` +
   `remark-gfm`): pinta la tabla bonita.
 - **Mockup B — Widgets estructurados** (~3 días): el adapter emite
@@ -476,6 +482,7 @@ abiertas:
 Recomendación: cuando se aborde Mockup B, el validador de este commit
 se convierte en safety net redundante para texto libre (cinturón +
 tirantes); puede atenuarse a sólo log sin sanear.
+
 ## 2026-05-22 · [DOCS] · Sprint 14 — plan tentativo (post-Copilot)
 
 **Scope:** `docs/SPRINT-14-PLAN.md`
@@ -576,8 +583,8 @@ operador tenía que re-pedir al Copilot.
 
 - **Migración** `20260623000000_copilot_pending_tools`:
   - Nueva tabla `copilot_pending_tools(id, session_id, tool_name,
-    input jsonb, financial bool, status text + check, created_at,
-    decided_at NULL)`. Status como text + check
+input jsonb, financial bool, status text + check, created_at,
+decided_at NULL)`. Status como text + check
     `IN ('pending','approved','rejected','failed')` en lugar de
     enum SQL para añadir estados futuros sin migración.
   - Nueva columna `copilot_messages.pending_tool_id uuid?` para
@@ -588,7 +595,7 @@ operador tenía que re-pedir al Copilot.
   `CopilotMessage`.
 - **`CopilotService`**:
   - `persistPendingTool(user, sessionId, pendingId, toolName,
-    input, financial)`: insert best-effort tras añadir al Map.
+input, financial)`: insert best-effort tras añadir al Map.
   - `markPendingDecided(user, sessionId, pendingId, status)`:
     update idempotente (`where: { id, status: 'pending' }`); log
     warn en fallo, no rompe el response.
@@ -609,6 +616,7 @@ mientras pulsa Approve se redespliega el API, y aparece el
 mensaje sin botones — confunde. Persistir cierra ese loop.
 
 Decisiones de diseño:
+
 - **Status text + check** en lugar de enum SQL: añadir estados
   ('timeout' eventual) no exige migración.
 - **Best-effort en `persistPendingTool`**: si la DB falla, el
@@ -662,10 +670,10 @@ siguiente turno.
 
 - **Migración** `20260622000000_copilot_sessions`:
   - Nueva tabla pequeña `copilot_sessions(id, tenant_id, user_id,
-    property_id NULL, created_at, deleted_at NULL)`.
+property_id NULL, created_at, deleted_at NULL)`.
   - FK cascada por tenant, índice `(tenant_id, created_at)`.
   - **No** hay FK física `copilot_messages.session_id ↔
-    copilot_sessions.id` para no romper el insert-order existente
+copilot_sessions.id` para no romper el insert-order existente
     (el primer mensaje se persiste antes de existir la sesión en
     el peor caso).
 - **Prisma schema**: `model CopilotSession` + back-relation
@@ -692,11 +700,12 @@ recreaba la sesión sin `propertyId`. Con esta tabla pequeña el
 contexto sobrevive sin tocar el flujo de inserts de mensajes.
 
 Decisiones de diseño:
+
 - **Sin FK física** entre messages y sessions: el `Map.set` +
   insert de primer mensaje deben funcionar aunque el insert del
   shell falle. Mejor consistencia eventual que bloqueos.
 - **Best-effort en createSession**: el `await
-  prisma.session.create` lo evitamos para no encolar latencia en
+prisma.session.create` lo evitamos para no encolar latencia en
   el response. Si la persistencia falla, log warn + sesión sólo
   en memoria (pre-commit behavior). El operador notará la pérdida
   tras reload, no antes.
@@ -711,7 +720,7 @@ Decisiones de diseño:
 - `apps/api/src/copilot/copilot.service.ts`
   (`persistSessionShell` + `loadSessionFromDb` con Promise.all)
 - `apps/api/src/copilot/copilot.service.spec.ts` (+3 tests
-  + mock `copilotSession.create/findFirst`)
+  - mock `copilotSession.create/findFirst`)
 
 **Tests.**
 
@@ -763,8 +772,8 @@ nombres reales, carga por camarera y tareas sin asignar.
   candidate/suggestion/unmatched con valores por defecto seguros.
 - **Componente UI** `CopilotHskSuggestWidget` en tres secciones:
   - **Carga por camarera**: lista de candidates con nombre + tareas
-    + minutos asignados + chip de % de capacidad coloreado
-    (verde < 75%, ámbar < 95%, rosa ≥ 95%).
+    - minutos asignados + chip de % de capacidad coloreado
+      (verde < 75%, ámbar < 95%, rosa ≥ 95%).
   - **Asignaciones (N)**: lista de hasta 10 suggestions, cada una
     con chip de habitación, tipo legible ("Salida · limpieza", etc.),
     minutos predichos y nombre del asignado destino.
@@ -838,8 +847,8 @@ Un único tool + un único widget cubre las dos.
     `CONFIRMED,PENDING`.
   - departure → `departureFrom = departureTo = date`, status
     `CHECKED_IN`.
-  Devuelve `{ direction, date, items }` — el extractor lee la
-  intención del propio result, no del input.
+    Devuelve `{ direction, date, items }` — el extractor lee la
+    intención del propio result, no del input.
 - **Tipos compartidos** `packages/copilot-widget-types`:
   - Quinta variante: `{ kind: 'movements'; data: MovementsWidgetData }`.
   - `MovementsWidgetData { direction, businessDate, rows[] }`.
@@ -915,7 +924,7 @@ filtrar + paginar + exportar a Excel para análisis offline.
 - **Backend `apps/api/src/copilot/csv.ts`** (nuevo, local al módulo):
   reusa el contrato RFC 4180 de `reports/csv.ts` (comillas siempre,
   escape duplicando comillas internas, CRLF). `copilotSessionsToCsv
-  (sessions)` exporta header + 7 columnas (sessionId, userId,
+(sessions)` exporta header + 7 columnas (sessionId, userId,
   firstMessage, firstMessageAt, lastActivityAt, messageCount,
   widgetCount).
 - **`CopilotController.exportSessionsCsv`**: nuevo
@@ -923,9 +932,9 @@ filtrar + paginar + exportar a Excel para análisis offline.
   que el listado JSON (limit/userId/from/to/before). Default
   `limit=200` (más alto que el viewer para exportar más). Streama
   con `Content-Disposition: attachment; filename="copilot-sessions-
-  YYYY-MM-DD.csv"`. `tenant_admin` only.
+YYYY-MM-DD.csv"`. `tenant_admin` only.
 - **Proxy web-fo** `apps/web-fo/src/app/api/admin/copilot/sessions/
-  export/route.ts`: forward server-side del access token NextAuth
+export/route.ts`: forward server-side del access token NextAuth
   (browser nunca lo ve); valida `tenant_admin` localmente antes de
   llegar al API; pasa los filtros tal cual; preserva el
   `Content-Disposition` upstream para que el navegador descargue.
@@ -980,7 +989,7 @@ operador real no lo tiene a mano.
 
 - **Backend** `CopilotService.listSessionUsers(user)`:
   - `groupBy({ by: ['userId'], _count: { sessionId }, _max:
-    { createdAt } })` sobre `copilot_messages` filtrado por tenant
+{ createdAt } })` sobre `copilot_messages` filtrado por tenant
     (RLS).
   - Join con `user` para resolver `fullName + email`.
   - Devuelve `AdminSessionUser[]` ordenado por última actividad desc.
@@ -1047,7 +1056,7 @@ recientes sin filtros — inviable para auditar un mes hacia atrás.
 - **`CopilotController.listSessions`**: forward los 4 params nuevos
   como `@Query()`. Sigue siendo `tenant_admin` only.
 - **Helper `web-fo/lib/api.ts`**: `listCopilotSessions(token,
-  filters)` ahora acepta `ListCopilotSessionsFilters` (limit, userId,
+filters)` ahora acepta `ListCopilotSessionsFilters` (limit, userId,
   from, to, before).
 - **Página `/admin/copilot/sessions`**:
   - `searchParams` (`from`, `to`, `userId`, `before`) parseados y
@@ -1063,6 +1072,7 @@ recientes sin filtros — inviable para auditar un mes hacia atrás.
 
 V1 del admin permitía ver las 100 más recientes en una sola página,
 sin forma de:
+
 - Filtrar por un usuario concreto del equipo.
 - Acotar a un rango (auditoría "qué pasó la semana pasada").
 - Avanzar más allá de las 100 primeras.
@@ -1106,30 +1116,28 @@ funciona con la query existente.
 **Branch:** `claude/copilot-admin-sessions` (sobre shared-types)
 **Refs:** cierra el bucle de observabilidad del Copilot apoyándose en
 toda la pila construida (persistencia DB + reload-from-DB + 4 widgets
-+ tipos compartidos). El `tenant_admin` ya puede inspeccionar el
-historial de conversaciones del operador sin tocar SQL.
+
+- tipos compartidos). El `tenant_admin` ya puede inspeccionar el
+  historial de conversaciones del operador sin tocar SQL.
 
 **Qué cambió.**
 
 - **Backend**:
-  - `CopilotService.listSessions(user, { limit })`:
-    - Lee hasta `limit × 10` filas de `copilot_messages` desc por
-      `createdAt`, agrupa por `sessionId` en aplicación, devuelve
-      sumario `{ sessionId, userId, firstMessage, firstMessageAt,
-      lastActivityAt, messageCount, widgetCount }` ordenado por
-      última actividad desc.
-    - `widgetCount` suma `.length` de cada `widgets jsonb` (que ahora
-      es array en DB tras slice 2). Útil para detectar conversaciones
-      "ricas" (con tarjetas) vs charla suelta.
-    - Cap defensivo: `limit` ∈ [1, 200], default 50. `messageCap = limit×10`
-      para volumetría de piloto. Si crece, queda vía para vista
-      materializada — no optimizamos antes de tiempo.
+  - `CopilotService.listSessions(user, { limit })`: - Lee hasta `limit × 10` filas de `copilot_messages` desc por
+    `createdAt`, agrupa por `sessionId` en aplicación, devuelve
+    sumario `{ sessionId, userId, firstMessage, firstMessageAt,
+lastActivityAt, messageCount, widgetCount }` ordenado por
+    última actividad desc. - `widgetCount` suma `.length` de cada `widgets jsonb` (que ahora
+    es array en DB tras slice 2). Útil para detectar conversaciones
+    "ricas" (con tarjetas) vs charla suelta. - Cap defensivo: `limit` ∈ [1, 200], default 50. `messageCap = limit×10`
+    para volumetría de piloto. Si crece, queda vía para vista
+    materializada — no optimizamos antes de tiempo.
   - `AdminSessionSummary` exportado para tipar el endpoint.
   - `CopilotController.listSessions` nuevo: `GET /copilot/sessions?limit`,
     role-guard `tenant_admin` (más restrictivo que el resto del
     controller, que admite front_desk / night_auditor).
 - **Helper `apps/web-fo/src/lib/api.ts`**: `listCopilotSessions(token,
-  limit)` + tipo `CopilotSessionSummary`.
+limit)` + tipo `CopilotSessionSummary`.
 - **Web-fo páginas nuevas**:
   - `/admin/copilot/sessions` (listado): server component con role-
     check; muestra tabla con última actividad, primer mensaje del
@@ -1151,6 +1159,7 @@ Sin esta vista el `tenant_admin` no puede inspeccionar lo que el
 Copilot está respondiendo a su equipo. Tenía que conectarse a la DB
 y leer JSON crudo de `copilot_messages` — inviable en producción.
 Esta página es:
+
 - **Auditoría**: ¿qué pidió el equipo de recepción esta semana?
 - **Detección de drift**: ¿el LLM está alucinando precios o saliéndose
   del prompt? (los widgets confirman la fuente real del dato).
@@ -1231,6 +1240,7 @@ de 3 cumplida tras availability/folio/reservation/hsk_tasks).
 **Por qué.**
 
 Tras 4 widgets, los tipos vivían triplicados:
+
 1. Definición en `apps/api/src/copilot/widgets.ts`.
 2. Definición casi idéntica en `apps/web-fo/src/lib/api.ts`.
 3. Forma implícita en cada componente React que indexaba.
@@ -1244,7 +1254,8 @@ widgets nuevos a un único archivo.
 El paquete es deliberadamente mínimo (zero deps, sólo tipos) para
 no contaminar el bundle del frontend con dependencias del servidor
 — mcp-tools no servía porque arrastra `@modelcontextprotocol/sdk`
-+ `@pms/db` (server-only).
+
+- `@pms/db` (server-only).
 
 **Archivos clave.**
 
@@ -1337,6 +1348,7 @@ estado global del turno en 0.5 segundos.
 
 Con esta cuarta variante, el patrón Mockup B cubre las 4 verticales
 operacionales del MVP:
+
 - **availability**: front-desk → ver tarifas y disponibilidad.
 - **folio**: front-desk → balance y movimientos.
 - **reservation**: front-desk → ficha de reserva antes de mutar.
@@ -1399,7 +1411,7 @@ operador perdía toda su conversación.
   4. Si no hay mensajes → 404 (sesión no existe).
 - `loadSessionFromDb` (privado):
   - Query `copilotMessage.findMany({ where: { sessionId }, orderBy:
-    { createdAt: 'asc' } })` dentro de `withTenant` (RLS aplica).
+{ createdAt: 'asc' } })` dentro de `withTenant` (RLS aplica).
   - Mapea cada row a `SessionMessage` con `widgets` deserializado
     vía nuevo helper `rowWidgets(raw)`.
   - El primer row da `userId` y `createdAt` de la sesión.
@@ -1425,6 +1437,7 @@ operador perdía toda su conversación.
 Slice 2 dejó la persistencia en sitio pero sin loader: el JSON estaba
 en DB sólo para audit. Con este commit la persistencia se convierte
 en mecanismo de continuidad real:
+
 - Deploy a Fly → la sesión sobrevive.
 - Worker reinicia por OOM → la sesión sobrevive.
 - Multi-instancia futura (load balancer entre N pods) → cualquier pod
@@ -1476,7 +1489,7 @@ en mecanismo de continuidad real:
   - Description orienta al LLM a no replicar campos en texto — UI
     pinta la tarjeta; el modelo resume en 1-2 frases.
 - **Service** `ReservationsService.findByCode(user, cid, propertyId,
-  code)`:
+code)`:
   - Resuelve por código humano (no UUID) — el operador escribe
     "BBM01-AB12" y la reserva aparece.
   - Extiende `RESERVATION_DETAIL_SELECT` inline con
@@ -1500,7 +1513,7 @@ en mecanismo de continuidad real:
       CANCELLED/NO_SHOW rosa), código en mono.
     - Bloque destacado del huésped primario (nombre, email, phone).
     - Grid 2×3 de campos clave: llegada, salida, estancia + pax,
-      tipo + habitación, total destacado, garantía + ****1234.
+      tipo + habitación, total destacado, garantía + \*\*\*\*1234.
     - Mini-bloque de saldo si hay folio (mismo color rule que el
       widget de folio).
     - Footer: botón "Abrir ficha →" a `/reservations/<id>`.
@@ -1508,7 +1521,7 @@ en mecanismo de continuidad real:
 **Por qué.**
 
 Junto a availability y folio, esta es la consulta de verificación
-más frecuente del recepcionista *antes* de mutar: "muéstrame la
+más frecuente del recepcionista _antes_ de mutar: "muéstrame la
 reserva X" → confirma datos → check-in / cancel / cargar. Antes el
 LLM parafraseaba; ahora el widget muestra todo lo crítico con un
 vistazo (incluido garantía Stripe y saldo de folio) sin riesgo de
@@ -1573,7 +1586,7 @@ arquitectura — sólo crear extractor + componente.
     The UI renders the result as a structured card — your reply
     should be a 1-2 sentence summary, not a re-render of the data."
 - **Service** `FolioService.findByReservationCode(user, cid,
-  propertyId, reservationCode)`:
+propertyId, reservationCode)`:
   - Une la búsqueda de reserva por `(propertyId, code)` + lectura
     del folio asociado en un único `withTenant` (atómico bajo RLS).
   - Devuelve `FolioDetail & { reservationCode }`.
@@ -1676,6 +1689,7 @@ este los hace durables y reduce divergencia widget↔texto del LLM.
 **Por qué.**
 
 Slice 1 dejó dos huecos:
+
 1. Los widgets vivían sólo en memoria de proceso. Audit, Grafana o un
    futuro reload-from-DB no podían recuperarlos.
 2. El LLM, sin instrucciones, repetía la tabla en texto bajo el widget
@@ -1773,6 +1787,7 @@ invente un "desde más €" porque las filas se renderizan a partir de
 datos tipados Zod-validated.
 
 Beneficios secundarios:
+
 - CTAs tipados ("Reservar →") en lugar de pedirle al LLM que
   ofrezca acciones en texto que la UI tendría que parsear.
 - Capacidad/disponibilidad real en pantalla, no oculta en el blob
@@ -1817,29 +1832,35 @@ Beneficios secundarios:
 **Scope:** `apps/api/public-ibe`, `apps/web-ibe`, `packages/db`,
 `RUNBOOK.md`
 **Branch:** `claude/s9-w4-antiabuse`
+
 ## 2026-05-19 · [INTEGRATION] · Sprint 10 W1 — Auto-Keycloak en onboarding
 
 **Scope:** `apps/api/auth`, `apps/api/public-onboarding`,
 `apps/web-fo/onboarding`, `RUNBOOK.md`
 **Branch:** `claude/s10-w1-keycloak-admin`
+
 ## 2026-05-19 · [FEAT] · Sprint 10 W3 — Cleanup nocturno de tenants huérfanos
 
 **Scope:** `apps/api/night-audit/steps`, `packages/db`, `RUNBOOK.md`
 **Branch:** `claude/s10-w3-cleanup-orphan`
+
 ## 2026-05-19 · [FEAT] · Sprint 10 W4 — Back-office admin de Property (cierre del sprint)
 
 **Scope:** `apps/api/properties`, `apps/web-fo/properties`,
 `RUNBOOK.md`
 **Branch:** `claude/s10-w4-admin-ui-v2`
+
 ## 2026-05-19 · [DOCS] · Sprint 11 plan — Production hardening pre-piloto
 
 **Scope:** `docs/SPRINT-11-PLAN.md`
 **Branch:** `claude/s11-plan`
+
 ## 2026-05-20 · [FEAT] · Sprint 11 W2 — NATS consumer de email + outbox
 
 **Scope:** `apps/api/notifications`, `apps/api/public-ibe`,
 `apps/api/eventbus`, `packages/eventbus`, `packages/db`, `RUNBOOK.md`
 **Branch:** `claude/s11-w2-email-consumer`
+
 ## 2026-05-20 · [INFRA] · Sprint 11 W4 — Grafana dashboards + alert rules (cierre del sprint)
 
 **Scope:** `infra/grafana`, `RUNBOOK.md`
@@ -1931,6 +1952,7 @@ recibe `200 OK` siempre — el email se procesa en background.
 
 **Scope:** `apps/api/notifications`, `packages/db`, `RUNBOOK.md`
 **Branch:** `claude/s11-w1-postmark-webhook`
+
 ## 2026-05-20 · [SECURITY] · Sprint 11 W3 — Stripe webhook hardening + observabilidad
 
 **Scope:** `apps/api/payments`, `RUNBOOK.md`
@@ -2179,6 +2201,7 @@ Stripe ni tipos de evento nuevos.
 **Scope:** `apps/api/public-onboarding`, `apps/api/notifications/templates`,
 `apps/web-fo/onboarding`, `packages/db`, `RUNBOOK.md`
 **Branch:** `claude/s9-w3-onboarding`
+
 - **Sprint 10 cerrado en código.** Merge a main + redeploy de los 4
   workstreams (W1 Auto-Keycloak, W2 Fix tests, W3 Cleanup nightly,
   W4 Admin UI) pendiente del PO.
@@ -2196,10 +2219,12 @@ Stripe ni tipos de evento nuevos.
 `apps/api/public-ibe`, `apps/api/night-audit`, `packages/db`,
 `packages/eventbus`, `RUNBOOK.md`
 **Branch:** `claude/s9-w2-channel-manager`
+
 ## 2026-05-19 · [DOCS] · Sprint 10 plan — Consolidación pre-piloto
 
 **Scope:** `docs/SPRINT-10-PLAN.md`
 **Branch:** `claude/s10-plan`
+
 - Configurar webhook en Postmark dashboard apuntando a
   `https://pms-api.fly.dev/public/notifications/postmark` y
   `flyctl secrets set -a pms-api POSTMARK_WEBHOOK_SECRET=...`.
@@ -2243,7 +2268,7 @@ Stripe ni tipos de evento nuevos.
   para los errores `captcha` y `rate`.
 - Cliente API web-ibe (`lib/api.ts`) reenvía `turnstileToken` opcional
   en create/cancel/resend.
-- Env vars nuevas: `TURNSTILE_SECRET_KEY` (api), 
+- Env vars nuevas: `TURNSTILE_SECRET_KEY` (api),
   `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (web-ibe).
 - RUNBOOK §22 con runbook completo (configuración Fly, SQL para
   bloqueo manual de IPs, claves de test CF, apagar el captcha sin
@@ -2297,7 +2322,7 @@ contra un solo hotel queme la cuota del resto del SaaS.
   `@Public()` (sin auth): `POST /public/onboarding/{start,verify,setup}`.
 - Tokens HMAC autocontenidos firmados con `ONBOARDING_SECRET`
   (`node:crypto`, sin lib externa). Formato `base64url(payload).
-  base64url(hmac)`, TTL configurable (default 24h), verificación
+base64url(hmac)`, TTL configurable (default 24h), verificación
   constante en tiempo.
 - Flujo `start` → email Postmark con plantilla nueva
   `onboarding_verify` (ES/EN) — **no escribe en DB** todavía. `verify`
@@ -2386,7 +2411,7 @@ tabla con limpieza nocturna.
 - Catálogo eventbus: `channel.sync_completed v1` y
   `channel.inbound_reservation_received v1`.
 - Métricas Prometheus `channel_manager_{sync_total, sync_duration_ms,
-  inbound_total, webhook_rejections_total}`. Sin label por property
+inbound_total, webhook_rejections_total}`. Sin label por property
   (consulta `channel_sync_runs` para detalle).
 - Env nuevas: `CM_SITEMINDER_API_BASE`, `CM_SITEMINDER_HMAC_SECRET`.
   Sin ellas → no-op silencioso, el PMS sigue funcionando.
@@ -2778,7 +2803,7 @@ con su consumer.
 - **API.**
   - `PublicIbeService.createSetupIntent(slug, code, lastName)` y
     `confirmSetupIntent(slug, code, lastName)`. Verifican `(code,
-    lastName)`, construyen `AuthUser` sentinel con role vacío y
+lastName)`, construyen `AuthUser` sentinel con role vacío y
     delegan a `StripeService.createSetupIntent` /
     `confirmSetupIntent` del back-office. Cero duplicación de lógica
     Stripe.
@@ -2881,7 +2906,7 @@ cumplido).
   disponibilidad varía por fecha.
 - **Infra.** `Dockerfile` multi-stage standalone, `fly.toml` apuntando
   a `pms-api.internal:3000`, port 3003. `next.config.mjs` con `output:
-  'standalone'` y `outputFileTracingRoot` para el monorepo.
+'standalone'` y `outputFileTracingRoot` para el monorepo.
 - **RUNBOOK §20.7** documenta rutas, i18n, SEO, performance y deploy.
 
 **Por qué.**
@@ -2927,7 +2952,7 @@ varía por fecha). Build sale dentro del objetivo de Lighthouse.
 - **DB.** Migration `20260612000000_property_public_slug`:
   `properties.public_slug` (TEXT, unique partial) + `published_at`
   (TIMESTAMPTZ). El IBE solo expone properties con `published_at IS NOT
-  NULL`. El slug es opaco (no expone tenantId/propertyId).
+NULL`. El slug es opaco (no expone tenantId/propertyId).
 - **Módulo nuevo** `apps/api/src/public-ibe`:
   - `PublicIbeService` con 5 acciones:
     - `getProperty(slug)`: metadata pública.
@@ -3055,7 +3080,7 @@ y memoria semántica V1.1 quedan handoff explícito a Sprint 9.
   - Acepta `data:image/...;base64,...`, valida tarea `IN_PROGRESS` o
     `COMPLETED` (retries idempotentes).
   - Guarda foto vía `PhotoStorageService.storeIn('hsk-inspection',
-    tenantId, taskId, dataUrl)` — driver inline en dev, S3 en prod.
+tenantId, taskId, dataUrl)` — driver inline en dev, S3 en prod.
   - Llama `@anthropic-ai/sdk` (sin nueva dep — reusa el cliente del
     copilot) con bloque `image` + prompt ES pidiendo JSON estricto
     `{verdict, issues, confidence, reasoning}`.
@@ -3071,11 +3096,11 @@ y memoria semántica V1.1 quedan handoff explícito a Sprint 9.
 - **HSK PWA.** `InspectionPanel` client component bajo la tarea
   COMPLETED. Selector de foto (con `capture="environment"` para abrir
   cámara), preview, llamada al proxy, feedback con verdict + reasoning
-  + lista de issues. Aviso especial cuando `damaged` (habitación OOO).
+  - lista de issues. Aviso especial cuando `damaged` (habitación OOO).
 - **Proxy** `apps/web-hsk/src/app/api/proxy/tasks/[id]/inspect/route.ts`
   con auth bearer.
 - **Tests.** `inspection.service.spec.ts` — 6 casos del parser:
-  JSON plano, fences ```json…```, clamp confidence, verdict desconocido,
+  JSON plano, fences `json…`, clamp confidence, verdict desconocido,
   no-JSON, cap issues a 10. 44/44 verde en `src/housekeeping`.
 - **RUNBOOK §19** documenta endpoint, modelo, persistencia, privacidad
   (foto cruza a Anthropic — subprocesador en DPA), desactivarlo y
@@ -3146,7 +3171,7 @@ merge a `main`.
   - `recall(guestId, query, limit)`: `ts_rank` sobre
     `plainto_tsquery('spanish', query)`. Auto-ingesta lazy si no hay
     chunks aún. Devuelve `{ chunks: [{sourceKind, sourceRef, text,
-    score}], ingested }`.
+score}], ingested }`.
 - **Tool MCP** `recall_guest_history` (read-only, auto-exec) en
   `foToolCatalog`. Tipo `RecallGuestHistoryInput` exportado.
 - **`FoToolRouter`** ruta `recall_guest_history` al `MemoryService`.
@@ -3262,8 +3287,8 @@ de historia se ven creíbles) y regresiones reproducibles.
   botón de micro + transcript + preview del intent + buttons "Aplicar al
   cargo" / "Aplicar al pago". Pre-rellena los inputs de los forms
   server-action existentes vía DOM querySelector + native `value` setter
-  + dispatch input/change. Fallback silencioso si el browser no soporta
-  Web Speech API.
+  - dispatch input/change. Fallback silencioso si el browser no soporta
+    Web Speech API.
 - **Integración.** Sección folio en `/reservations/[id]` envuelve los
   forms en `#folio-forms .folio-forms-grid` y monta el botón encima.
   Server actions intactas.
@@ -3345,16 +3370,16 @@ futuras.
 **Qué cambió.**
 
 - **API.** `StripeService.chargeNoShow(user, cid, reservationId, { amount,
-  description? })`:
+description? })`:
   - Valida amount > 0, reserva existe, tarjeta tokenizada, folio OPEN.
   - Idempotencia previa: si ya hay folio entry con `idempotencyKey
-    = stripe-no-show-{reservationId}`, devuelve `already_charged` sin
+= stripe-no-show-{reservationId}`, devuelve `already_charged` sin
     tocar Stripe.
   - Crea `PaymentIntent` con `off_session: true, confirm: true`,
     `customer` y `payment_method` del Fase 1; pasa `idempotencyKey` a
     Stripe.
   - Si `status=succeeded`, postea folio entry CHARGE vía `FolioService.
-    addCharge` (idempotente) y guarda `stripePaymentIntentId` +
+addCharge` (idempotente) y guarda `stripePaymentIntentId` +
     `stripeChargeId` en `folio_entries.attributes`.
   - Maneja `authentication_required` y `requires_action` → devuelve
     `requires_action` para que el operador retome on-session.
@@ -3438,7 +3463,7 @@ errores.
   - Columna "Huésped" muestra badge ámbar uppercase con el
     `membershipLevel` cuando lo hay (Gold/Platinum/VIP/etc.).
   - Columna "Agencia / Empresa" prioriza `agencyName || companyName ||
-    organizerName` (antes solo mostraba `organizerName`).
+organizerName` (antes solo mostraba `organizerName`).
 
 **Por qué.**
 
@@ -3735,9 +3760,9 @@ del cierre.
 
 **Qué cambió.**
 
-- **DB.** Nueva tabla `copilot_messages` (USER, ASSISTANT, TOOL_USE,
+- **DB.** Nueva tabla `copilot_messages` (USER, ASSISTANT, TOOL*USE,
   TOOL_RESULT) con tokens/latency/cache. RLS por tenant. Sin trigger
-  audit_log porque esta tabla *es* el audit trail.
+  audit_log porque esta tabla \_es* el audit trail.
 - **Adapter pattern.** `CopilotAdapter` interface + `StubAdapter` (matcher
   determinista) + `AnthropicAdapter` real (extraído de `copilot.service`,
   contrato preservado). `AdapterFactory` resuelve driver según
@@ -3747,7 +3772,7 @@ del cierre.
   `client.beta.messages` porque el SDK 0.32.x expone caching solo en
   beta. Telemetría incluye `cache_read_tokens` y `cache_write_tokens`.
 - **Métricas Prometheus** (via OTel): `copilot_messages_total{tenant,
-  role, model}`, `copilot_tokens_total{tenant, model, kind}`,
+role, model}`, `copilot_tokens_total{tenant, model, kind}`,
   `copilot_latency_seconds_*{tenant, model}`. Dashboard
   `infra/grafana/dashboards/copilot.json` con KPIs.
 - **SSE streaming.** `POST /copilot/sessions/:id/messages?stream=true`

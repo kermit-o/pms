@@ -72,7 +72,9 @@ export class ChannelManagerService {
     if (!property?.channelManagerProvider) return;
     const provider = this.providers.get(property.channelManagerProvider);
     if (!provider) {
-      this.log.warn(`Unknown CM provider="${property.channelManagerProvider}" property=${property.id}`);
+      this.log.warn(
+        `Unknown CM provider="${property.channelManagerProvider}" property=${property.id}`,
+      );
       return;
     }
     const dates = enumerateDates(input.arrival, input.departure);
@@ -308,9 +310,8 @@ export class ChannelManagerService {
     run: (apiBase: string, apiKey: string) => Promise<{ pushed: number; skipped: number }>;
   }): Promise<void> {
     const startedAt = new Date();
-    const credentialsRef = (
-      args.property as { channelManagerCredentialsRef?: string | null }
-    ).channelManagerCredentialsRef;
+    const credentialsRef = (args.property as { channelManagerCredentialsRef?: string | null })
+      .channelManagerCredentialsRef;
     const apiBase = this.resolveApiBase(args.provider.id);
     const apiKey = this.resolveSecret(credentialsRef ?? undefined);
     if (!apiBase || !apiKey) {
@@ -415,11 +416,7 @@ export class ChannelManagerService {
    * Disponibilidad por roomType y fecha (overlap reservations vs total
    * rooms). V1: single roomType heuristic; misma idea que el IBE.
    */
-  private async buildAvailabilityItems(
-    tenantId: string,
-    propertyId: string,
-    dates: string[],
-  ) {
+  private async buildAvailabilityItems(tenantId: string, propertyId: string, dates: string[]) {
     if (dates.length === 0) return [];
     const ctx = { tenantId, actorId: this.publicActor };
     return this.prisma.withTenant(ctx, async (tx) => {
@@ -516,9 +513,7 @@ export class ChannelManagerService {
     }
     // V1: ref es el nombre de la env var (ej. CM_SITEMINDER_HMAC_SECRET).
     // V2: ref será un alias en un secret manager.
-    return (
-      this.config.get(ref as keyof Env, { infer: true }) as unknown as string | undefined
-    );
+    return this.config.get(ref as keyof Env, { infer: true }) as unknown as string | undefined;
   }
 }
 

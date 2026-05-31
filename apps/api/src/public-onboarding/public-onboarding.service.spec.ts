@@ -4,11 +4,13 @@ import { PublicOnboardingService } from './public-onboarding.service';
 
 const SECRET = 'b'.repeat(64);
 
-function buildService(opts: {
-  email?: string;
-  notifyOk?: boolean;
-  tenant?: { id: string; onboardingStatus?: string | null } | null;
-} = {}) {
+function buildService(
+  opts: {
+    email?: string;
+    notifyOk?: boolean;
+    tenant?: { id: string; onboardingStatus?: string | null } | null;
+  } = {},
+) {
   const tenantRow = {
     id: 't-1',
     slug: 'pending-deadbeef',
@@ -18,10 +20,12 @@ function buildService(opts: {
   const prisma = {
     tenant: {
       upsert: vi.fn().mockResolvedValue(tenantRow),
-      findUnique: vi.fn().mockResolvedValue(
-        opts.tenant === null ? null : (opts.tenant ?? tenantRow),
-      ),
-      update: vi.fn().mockResolvedValue({ ...tenantRow, slug: 'hotel-x-12345678', name: 'Hotel X' }),
+      findUnique: vi
+        .fn()
+        .mockResolvedValue(opts.tenant === null ? null : (opts.tenant ?? tenantRow)),
+      update: vi
+        .fn()
+        .mockResolvedValue({ ...tenantRow, slug: 'hotel-x-12345678', name: 'Hotel X' }),
     },
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(txStub)),
   };
@@ -63,9 +67,7 @@ function buildService(opts: {
   };
   const keycloak = {
     enabled: false,
-    provisionTenant: vi
-      .fn()
-      .mockResolvedValue({ ok: false, reason: 'disabled' as const }),
+    provisionTenant: vi.fn().mockResolvedValue({ ok: false, reason: 'disabled' as const }),
   };
   const service = new PublicOnboardingService(
     prisma as never,
@@ -108,9 +110,7 @@ describe('PublicOnboardingService.verify', () => {
     const startOut = await captureToken(service, 'a@b.test');
     const out = await service.verify(startOut.token);
     expect(prisma.tenant.upsert).toHaveBeenCalledOnce();
-    expect(prisma.tenant.upsert.mock.calls[0]![0]!.create.onboardingStatus).toBe(
-      'EMAIL_VERIFIED',
-    );
+    expect(prisma.tenant.upsert.mock.calls[0]![0]!.create.onboardingStatus).toBe('EMAIL_VERIFIED');
     expect(out.tenantId).toBe('t-1');
     expect(out.email).toBe('a@b.test');
     expect(out.setupToken).toMatch(/^.+\..+$/);
@@ -246,10 +246,7 @@ async function captureToken(
   return { token };
 }
 
-async function captureSetupToken(
-  service: PublicOnboardingService,
-  email: string,
-): Promise<string> {
+async function captureSetupToken(service: PublicOnboardingService, email: string): Promise<string> {
   const { token } = await captureToken(service, email);
   const verified = await service.verify(token);
   return verified.setupToken;

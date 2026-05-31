@@ -26,8 +26,8 @@ export default async function OnboardingDonePage({ searchParams }: Props) {
         <OnboardingStepper current="done" />
         <h1 className="text-2xl font-semibold text-aubergine-700">¡Hotel creado!</h1>
         <p className="text-sm text-aubergine-700/70">
-          Tu instalación está lista. Acabamos de enviarte un email con estos datos
-          y los próximos pasos. Si no llega en 5 minutos, revisa spam.
+          Tu instalación está lista. Acabamos de enviarte un email con estos datos y los próximos
+          pasos. Si no llega en 5 minutos, revisa spam.
         </p>
 
         <section className="space-y-2 rounded-xl bg-aubergine-50/60 p-4 text-sm text-aubergine-700">
@@ -52,8 +52,8 @@ export default async function OnboardingDonePage({ searchParams }: Props) {
           <section className="space-y-2 rounded-xl bg-emerald-50 p-4 text-xs text-emerald-900 ring-1 ring-emerald-200">
             <p className="font-semibold uppercase tracking-wide">Credenciales temporales</p>
             <p>
-              Tu cuenta admin ya está creada. Copia esta contraseña — la pediremos al primer
-              login y tendrás que cambiarla.
+              Tu cuenta admin ya está creada. Copia esta contraseña — la pediremos al primer login y
+              tendrás que cambiarla.
             </p>
             <div className="rounded-lg bg-white p-3 font-mono text-sm tracking-wider text-aubergine-900 ring-1 ring-emerald-200">
               {sp.kcTempPassword}
@@ -68,9 +68,9 @@ export default async function OnboardingDonePage({ searchParams }: Props) {
           <section className="space-y-2 rounded-xl bg-amber-50 p-4 text-xs text-amber-900 ring-1 ring-amber-200">
             <p className="font-semibold uppercase tracking-wide">Credenciales pendientes</p>
             <p>
-              No pudimos provisionar tu usuario admin automáticamente. Lo hace
-              nuestro equipo manualmente y te enviamos las credenciales en menos
-              de 4 horas laborables (CET). Si pasa más tiempo, escríbenos a{' '}
+              No pudimos provisionar tu usuario admin automáticamente. Lo hace nuestro equipo
+              manualmente y te enviamos las credenciales en menos de 4 horas laborables (CET). Si
+              pasa más tiempo, escríbenos a{' '}
               <a href="mailto:soporte@aubergine.me" className="underline">
                 soporte@aubergine.me
               </a>{' '}

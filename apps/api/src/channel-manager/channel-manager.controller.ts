@@ -1,11 +1,4 @@
-import {
-  All,
-  Controller,
-  Headers,
-  Param,
-  Post,
-  Req,
-} from '@nestjs/common';
+import { All, Controller, Headers, Param, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { Public } from '../auth';
 import { ChannelManagerService } from './channel-manager.service';
@@ -31,10 +24,7 @@ export class ChannelManagerWebhookController {
     @Headers() headers: Record<string, string | undefined>,
     @Req() req: FastifyRequest,
   ) {
-    const rawBody =
-      typeof req.body === 'string'
-        ? req.body
-        : JSON.stringify(req.body ?? {});
+    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {});
     return this.service.processInboundBooking({ slug, rawBody, headers });
   }
 

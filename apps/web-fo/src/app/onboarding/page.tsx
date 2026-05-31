@@ -14,7 +14,9 @@ export default async function OnboardingLanding({ searchParams }: Props) {
 
   async function startAction(formData: FormData) {
     'use server';
-    const email = String(formData.get('email') ?? '').trim().toLowerCase();
+    const email = String(formData.get('email') ?? '')
+      .trim()
+      .toLowerCase();
     const locale = (formData.get('locale') === 'en' ? 'en' : 'es') as 'es' | 'en';
     if (!email || !email.includes('@')) {
       redirect('/onboarding?status=email_missing');
@@ -38,9 +40,8 @@ export default async function OnboardingLanding({ searchParams }: Props) {
           <OnboardingStepper current="email" />
           <h1 className="text-2xl font-semibold text-aubergine-700">Crea tu hotel</h1>
           <p className="text-sm text-aubergine-700/70">
-            Te enviamos un email con un enlace para confirmar tu correo (caduca
-            en 24 horas). Después configurarás los datos básicos del hotel en
-            menos de 3 minutos.
+            Te enviamos un email con un enlace para confirmar tu correo (caduca en 24 horas).
+            Después configurarás los datos básicos del hotel en menos de 3 minutos.
           </p>
         </header>
 
@@ -54,9 +55,7 @@ export default async function OnboardingLanding({ searchParams }: Props) {
             No pudimos enviar el email. Reintenta en unos minutos o usa otro proveedor.
           </Banner>
         )}
-        {sp.status === 'email_missing' && (
-          <Banner kind="error">Introduce un email válido.</Banner>
-        )}
+        {sp.status === 'email_missing' && <Banner kind="error">Introduce un email válido.</Banner>}
 
         <form action={startAction} className="space-y-4">
           <label className="block text-xs font-medium uppercase tracking-wide text-aubergine-500">

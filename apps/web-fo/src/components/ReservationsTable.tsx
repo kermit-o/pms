@@ -76,7 +76,9 @@ export function ReservationsTable({
                   {r.roomNumber ? (
                     <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-800">
                       {r.roomNumber}
-                      {r.roomFloor && <span className="ml-1 text-emerald-700/60">P{r.roomFloor}</span>}
+                      {r.roomFloor && (
+                        <span className="ml-1 text-emerald-700/60">P{r.roomFloor}</span>
+                      )}
                     </span>
                   ) : (
                     <span className="text-aubergine-700/40">—</span>

@@ -12,22 +12,45 @@ const PROP = {
   locale: 'es-ES',
 };
 
-function buildService(opts: {
-  property?: typeof PROP | null;
-  roomTypes?: Array<{ id: string; code: string; name: string; baseOccupancy: number; maxOccupancy: number; defaultRate: number; defaultCurrency: string | null }>;
-  rooms?: Array<{ id: string; roomTypeId: string }>;
-  overlapping?: Array<{ roomTypeId: string }>;
-  reservation?: unknown;
-} = {}) {
+function buildService(
+  opts: {
+    property?: typeof PROP | null;
+    roomTypes?: Array<{
+      id: string;
+      code: string;
+      name: string;
+      baseOccupancy: number;
+      maxOccupancy: number;
+      defaultRate: number;
+      defaultCurrency: string | null;
+    }>;
+    rooms?: Array<{ id: string; roomTypeId: string }>;
+    overlapping?: Array<{ roomTypeId: string }>;
+    reservation?: unknown;
+  } = {},
+) {
   const txStub = {
     roomType: {
       findMany: vi.fn().mockResolvedValue(
         opts.roomTypes ?? [
-          { id: 'rt-1', code: 'DBL', name: 'Doble', baseOccupancy: 2, maxOccupancy: 2, defaultRate: 100, defaultCurrency: 'EUR' },
+          {
+            id: 'rt-1',
+            code: 'DBL',
+            name: 'Doble',
+            baseOccupancy: 2,
+            maxOccupancy: 2,
+            defaultRate: 100,
+            defaultCurrency: 'EUR',
+          },
         ],
       ),
       findFirst: vi.fn().mockResolvedValue(
-        opts.roomTypes?.[0] ?? { id: 'rt-1', maxOccupancy: 2, defaultRate: 100, defaultCurrency: 'EUR' },
+        opts.roomTypes?.[0] ?? {
+          id: 'rt-1',
+          maxOccupancy: 2,
+          defaultRate: 100,
+          defaultCurrency: 'EUR',
+        },
       ),
     },
     room: {
@@ -57,13 +80,17 @@ function buildService(opts: {
     },
   };
   const prisma = {
-    property: { findFirst: vi.fn().mockResolvedValue(opts.property === null ? null : (opts.property ?? PROP)) },
+    property: {
+      findFirst: vi.fn().mockResolvedValue(opts.property === null ? null : (opts.property ?? PROP)),
+    },
     withTenant: vi.fn(async (_ctx, fn: (t: unknown) => Promise<unknown>) => fn(txStub)),
   };
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
   const stripe = {
     createSetupIntent: vi.fn().mockResolvedValue({ clientSecret: 'cs', publishableKey: 'pk' }),
-    confirmSetupIntent: vi.fn().mockResolvedValue({ status: 'SECURED', brand: 'visa', last4: '4242' }),
+    confirmSetupIntent: vi
+      .fn()
+      .mockResolvedValue({ status: 'SECURED', brand: 'visa', last4: '4242' }),
   };
   const notifications = {
     sendEmail: vi.fn().mockResolvedValue({ ok: true, messageId: 'm1' }),
@@ -71,9 +98,11 @@ function buildService(opts: {
     enqueueEmail: vi.fn().mockResolvedValue({ enqueued: true, dedupKey: 'k' }),
   };
   const config = {
-    get: vi.fn().mockImplementation((key: string) =>
-      key === 'IBE_PUBLIC_URL' ? 'https://book.aubergine.test' : undefined,
-    ),
+    get: vi
+      .fn()
+      .mockImplementation((key: string) =>
+        key === 'IBE_PUBLIC_URL' ? 'https://book.aubergine.test' : undefined,
+      ),
   };
   const channelManager = {
     pushDelta: vi.fn().mockResolvedValue(undefined),
@@ -203,6 +232,8 @@ describe('PublicIbeService', () => {
 
   it('createSetupIntent rechaza si code+lastName no coinciden', async () => {
     const { service } = buildService({ reservation: null });
-    await expect(service.createSetupIntent('h', 'X', 'Y')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.createSetupIntent('h', 'X', 'Y')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

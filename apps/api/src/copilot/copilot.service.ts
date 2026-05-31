@@ -69,7 +69,9 @@ export class CopilotService {
     // comportamiento que hasta este commit). El log queda visible
     // para diagnóstico.
     void this.persistSessionShell(user, sessionId, propertyId).catch((err) =>
-      this.log.warn(`copilot.session persist failed (non-fatal) ${sessionId}: ${(err as Error).message}`),
+      this.log.warn(
+        `copilot.session persist failed (non-fatal) ${sessionId}: ${(err as Error).message}`,
+      ),
     );
     return { sessionId };
   }
@@ -263,8 +265,7 @@ export class CopilotService {
         bySession.set(r.sessionId, {
           sessionId: r.sessionId,
           userId: r.userId,
-          firstMessage:
-            r.role === 'USER' && r.contentText ? r.contentText.slice(0, 140) : null,
+          firstMessage: r.role === 'USER' && r.contentText ? r.contentText.slice(0, 140) : null,
           firstMessageAt: r.createdAt.toISOString(),
           lastActivityAt: r.createdAt.toISOString(),
           messageCount: 1,
@@ -668,10 +669,7 @@ export class CopilotService {
     return hydrated;
   }
 
-  private async loadSessionFromDb(
-    user: AuthUser,
-    sessionId: string,
-  ): Promise<Session | null> {
+  private async loadSessionFromDb(user: AuthUser, sessionId: string): Promise<Session | null> {
     const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId: sessionId };
     return this.prisma.withTenant(ctx, async (tx) => {
       // Sprint 13 — cargamos shell + mensajes + pending tools en

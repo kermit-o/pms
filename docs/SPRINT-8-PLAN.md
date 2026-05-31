@@ -5,7 +5,8 @@
 > **Documento padre:** [`PROJECT.md`](../PROJECT.md) §4.4 (booking engine
 > propio) + Sprint 7 §8 (handoff).
 > **Predecesores:** Sprint 7 cerrado en código (W1-W4). Track commercial-grade
-> + Sprint 6 IA V1 cerrados.
+>
+> - Sprint 6 IA V1 cerrados.
 >
 > **Estado:** Sprint 8 ✅ código en sus 4 ramas:
 > `claude/s8-w1-public-api`, `claude/s8-w2-web-ibe`, `claude/s8-w3-booking`,
@@ -131,6 +132,7 @@ No expone tenantId al cliente — el slug es opaco.
 ### 2.2 Búsqueda de disponibilidad
 
 `GET /public/availability` con query:
+
 ```
 slug=hotel-berenjena
 arrival=2026-07-15
@@ -147,6 +149,7 @@ auth y filtrando solo public rate plans.
 ### 2.3 Crear reserva pública
 
 `POST /public/reservations` con body:
+
 ```
 {
   slug, arrival, departure, roomTypeId, ratePlanId,
@@ -176,6 +179,7 @@ Sprint 9 si no existe — V1 logue al menos).
 ### 2.5 Rate limit + abuse
 
 `@nestjs/throttler` (V1) por IP + slug. Límites:
+
 - availability: 30 req/min/IP
 - create reservation: 5/hora/IP
 - status/cancel: 20/min/IP/code
@@ -256,6 +260,7 @@ log y un endpoint de "reenviar email" stub).
 ### 5.2 Vista
 
 Muestra:
+
 - Llegada / salida / nº noches / tipo / total
 - Estado actual (CONFIRMED / CHECKED_IN / CHECKED_OUT / CANCELLED)
 - Política de cancelación aplicable: "Cancela gratis antes del
@@ -275,6 +280,7 @@ con Stripe Fase 2 si procede.
 ## 6. Datos y migraciones nuevas
 
 Idealmente cero migraciones. Reusamos:
+
 - `properties` (gana `slug` único si no existe — V1 a verificar antes
   de migrar).
 - `cancellation_policies` (existe desde Corte A reservations).

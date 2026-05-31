@@ -24,8 +24,7 @@ interface Props {
 export default async function CopilotSessionAdminDetailPage({ params }: Props) {
   const { id } = await params;
   const session = await auth();
-  if (!session?.accessToken)
-    redirect(`/login?callbackUrl=/admin/copilot/sessions/${id}`);
+  if (!session?.accessToken) redirect(`/login?callbackUrl=/admin/copilot/sessions/${id}`);
   if (!session.roles?.includes('tenant_admin')) return notFound();
 
   let view: CopilotSession;
@@ -40,10 +39,7 @@ export default async function CopilotSessionAdminDetailPage({ params }: Props) {
 
   return (
     <main className="mx-auto max-w-3xl space-y-5 px-6 py-10">
-      <Link
-        href="/admin/copilot/sessions"
-        className="text-sm text-aubergine-500 hover:underline"
-      >
+      <Link href="/admin/copilot/sessions" className="text-sm text-aubergine-500 hover:underline">
         ← Volver al listado
       </Link>
       <header>
@@ -73,8 +69,7 @@ export default async function CopilotSessionAdminDetailPage({ params }: Props) {
             }
           >
             <p className="text-[10px] uppercase tracking-wide opacity-70">
-              {m.role === 'user' ? 'Operador' : 'Aubergine'} ·{' '}
-              {formatDateTime(m.createdAt)}
+              {m.role === 'user' ? 'Operador' : 'Aubergine'} · {formatDateTime(m.createdAt)}
             </p>
             <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">
               {m.content}
@@ -82,16 +77,12 @@ export default async function CopilotSessionAdminDetailPage({ params }: Props) {
             {m.widgets?.map((w, idx) => {
               if (w.kind === 'availability')
                 return <CopilotAvailabilityWidget key={idx} widget={w} />;
-              if (w.kind === 'folio')
-                return <CopilotFolioWidget key={idx} widget={w} />;
+              if (w.kind === 'folio') return <CopilotFolioWidget key={idx} widget={w} />;
               if (w.kind === 'reservation')
                 return <CopilotReservationWidget key={idx} widget={w} />;
-              if (w.kind === 'hsk_tasks')
-                return <CopilotHskTasksWidget key={idx} widget={w} />;
-              if (w.kind === 'movements')
-                return <CopilotMovementsWidget key={idx} widget={w} />;
-              if (w.kind === 'hsk_suggest')
-                return <CopilotHskSuggestWidget key={idx} widget={w} />;
+              if (w.kind === 'hsk_tasks') return <CopilotHskTasksWidget key={idx} widget={w} />;
+              if (w.kind === 'movements') return <CopilotMovementsWidget key={idx} widget={w} />;
+              if (w.kind === 'hsk_suggest') return <CopilotHskSuggestWidget key={idx} widget={w} />;
               return null;
             })}
           </li>
@@ -99,10 +90,9 @@ export default async function CopilotSessionAdminDetailPage({ params }: Props) {
       </ol>
 
       <p className="text-[11px] text-aubergine-700/40">
-        Vista de auditoría — los widgets se rehidratan desde
-        `copilot_messages.widgets`. Las tarjetas de confirmación de tools
-        mutating (pendingTool) no se restauran tras reload: si la sesión se
-        cargó desde DB, sólo aparece el mensaje con la propuesta sin botones
+        Vista de auditoría — los widgets se rehidratan desde `copilot_messages.widgets`. Las
+        tarjetas de confirmación de tools mutating (pendingTool) no se restauran tras reload: si la
+        sesión se cargó desde DB, sólo aparece el mensaje con la propuesta sin botones
         Approve/Reject.
       </p>
     </main>

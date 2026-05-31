@@ -239,9 +239,7 @@ export function parseVerdict(text: string): VisionVerdict {
     ? obj.issues.filter((x): x is string => typeof x === 'string').slice(0, 10)
     : [];
   const confidence =
-    typeof obj.confidence === 'number'
-      ? Math.max(0, Math.min(1, obj.confidence))
-      : 0.5;
+    typeof obj.confidence === 'number' ? Math.max(0, Math.min(1, obj.confidence)) : 0.5;
   const reasoning = typeof obj.reasoning === 'string' ? obj.reasoning : '';
   return { verdict, issues, confidence, reasoning };
 }

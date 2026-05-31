@@ -1,9 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@pms/db';
 import { PrismaService } from '../db';
 import type { AuthUser } from '../auth';
@@ -106,7 +101,10 @@ export class RatePlansService {
           ? undefined
           : input.dailyRate === null
             ? Prisma.JsonNull
-            : ({ ...(existing.attributes as object | null ?? {}), dailyRate: input.dailyRate } as Prisma.InputJsonValue);
+            : ({
+                ...((existing.attributes as object | null) ?? {}),
+                dailyRate: input.dailyRate,
+              } as Prisma.InputJsonValue);
 
       return tx.ratePlan.update({
         where: { id: ratePlanId },

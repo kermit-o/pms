@@ -1,11 +1,5 @@
 import { AckPolicy, JSONCodec } from 'nats';
-import type {
-  ConsumerConfig,
-  ConsumerInfo,
-  JetStreamClient,
-  JetStreamManager,
-  JsMsg,
-} from 'nats';
+import type { ConsumerConfig, ConsumerInfo, JetStreamClient, JetStreamManager, JsMsg } from 'nats';
 import { envelopeSchema, STREAM_NAME, subjectFor, type EventEnvelope } from './envelope';
 import type { CatalogKey, PayloadOf } from './catalog';
 import { catalog } from './catalog';

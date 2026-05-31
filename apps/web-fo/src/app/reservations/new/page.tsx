@@ -259,18 +259,14 @@ async function StepTipo(props: {
               <p className="mt-3 text-xs text-aubergine-700/60">
                 Capacidad {t.baseOccupancy}-{t.maxOccupancy} pax
                 {!enoughCapacity && (
-                  <span className="ml-2 rounded bg-amber-100 px-1.5 text-amber-800">
-                    no caben
-                  </span>
+                  <span className="ml-2 rounded bg-amber-100 px-1.5 text-amber-800">no caben</span>
                 )}
               </p>
               <p className="mt-2 text-xs text-aubergine-700/60">
                 <strong className="text-aubergine-700">{t.availableRooms}</strong>/{t.totalRooms}{' '}
                 disponibles
                 {!free && (
-                  <span className="ml-2 rounded bg-rose-100 px-1.5 text-rose-800">
-                    completo
-                  </span>
+                  <span className="ml-2 rounded bg-rose-100 px-1.5 text-rose-800">completo</span>
                 )}
               </p>
               <div className="mt-4 border-t border-aubergine-100 pt-3">
@@ -379,7 +375,8 @@ async function StepHuesped(props: {
       <div className="rounded-xl bg-aubergine-50 p-3 text-xs text-aubergine-700">
         Resumen: <strong>{props.arrival}</strong> → <strong>{props.departure}</strong> ·{' '}
         {props.adults} adultos
-        {props.children > 0 ? ` + ${props.children} niños` : ''} · tipo {props.roomTypeId.slice(0, 8)}
+        {props.children > 0 ? ` + ${props.children} niños` : ''} · tipo{' '}
+        {props.roomTypeId.slice(0, 8)}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
