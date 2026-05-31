@@ -80,6 +80,86 @@ Una o dos frases.
 
 ---
 
+## 2026-05-31 · [DOC] · Sprint 14 W2 — RUNBOOK Verifactu
+
+**Scope:** `docs/RUNBOOK-verifactu.md` (nuevo).
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+Runbook operativo del módulo Verifactu. Cubre:
+- §1 Mapa rápido del bucle end-to-end (operador → backend → AEAT).
+- §2 Tabla completa de env vars + cuándo son obligatorias + guards
+  del bootstrap.
+- §3 Bootstrap por roles: módulo (admin sistema) + tenant (operador).
+- §4 Operaciones diarias del operador: emitir, reintentar, revocar.
+- §5 Troubleshooting con 8 escenarios concretos (errores + acción).
+- §6 Operaciones admin: renovación cert, rotación master key, bump
+  versión SIF, alta inicial AEAT.
+- §7 Snapshot del estado: ✅ implementado / ⚠ por verificar XSD /
+  ⏳ pendiente (mTLS, IVA por línea, rectificativas).
+- §8 Health + métricas (con TODOs marcados).
+
+Idioma: español (consistente con el resto del repo). Tono operativo
+— cada sección dice "qué pasa", "por qué" y "qué hacer".
+
+**Sin cambios de código.**
+
+---
+
+## 2026-05-31 · [FEAT] · Sprint 14 W2 — Verifactu: histórico envíos + reintento manual
+
+**Scope:** `apps/api/src/verifactu/{invoice.service.ts,verifactu.controller.ts}`,
+`apps/web-fo/src/{lib/api.ts,app/api/verifactu/invoices/[invoiceId]/submissions/route.ts,app/reservations/[id]/page.tsx}`
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+### Backend
+
+- `InvoiceService.listSubmissions(user, corr, invoiceId)` — devuelve
+  los `InvoiceSubmission` ordenados por `attemptNumber desc`.
+- `InvoiceService.requeueSubmission(user, corr, invoiceId)` — valida
+  (`NotFound` si no existe, `Conflict` si ya `ACCEPTED`, `Conflict`
+  si hay attempt PENDING/IN_PROGRESS) y republica el evento NATS
+  `verifactu.invoice.submit_requested`. El `SubmitWorker.acquireAttempt`
+  crea un attempt nuevo con `attemptNumber++`.
+- Endpoints:
+  - `GET /verifactu/invoices/:invoiceId/submissions` (tenant_admin +
+    front_desk).
+  - `POST /verifactu/invoices/:invoiceId/submissions` (tenant_admin
+    only, HTTP 202).
+
+### Web-fo
+
+- Helpers `listInvoiceSubmissions` + `requeueInvoiceSubmission` y
+  type `InvoiceSubmissionView` en `lib/api.ts`.
+- Proxy `/api/verifactu/invoices/[invoiceId]/submissions` con GET +
+  POST.
+- `InvoicePanel` extendido con `SubmissionsHistory`:
+  - Tabla con `#`, badge estado coloreado, encolado, completado,
+    código HTTP, CSV (si ACCEPTED) o error (si REJECTED/DEAD_LETTER).
+  - Botón "Reintentar envío" visible **solo** cuando hay invoice + no
+    está `ACCEPTED` + último attempt no es `PENDING`/`IN_PROGRESS`.
+  - Server action `requeueInvoiceAction` llama al proxy.
+
+**Tests.**
+
+- Verifactu suite: **90/90** verde (+4 nuevos en `invoice.service.spec.ts`
+  para `requeueSubmission`: NotFound, Conflict si ACCEPTED, Conflict
+  si hay PENDING, publish OK).
+- Typecheck + lint `@pms/api` y `@pms/web-fo` verdes.
+
+**Por qué.**
+
+Cierra el bucle UX para el operador: cuando una factura queda en
+DEAD_LETTER por culpa de AEAT caído o un cert revocado entre intentos,
+el operador puede reintentar desde la misma pantalla en lugar de
+abrir un ticket técnico. Útil mientras llegan las credenciales AEAT
+para el primer smoke.
+
+---
+
 ## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: PreprodAeatClient (HTTP, mTLS pendiente)
 
 **Scope:** `apps/api/src/verifactu/aeat/{preprod-aeat-client.ts,aeat-client.factory.ts,index.ts}`,
