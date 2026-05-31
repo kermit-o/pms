@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { ApiError, getCopilotSession, type CopilotSession } from '@/lib/api';
 import { CopilotAvailabilityWidget } from '@/components/CopilotAvailabilityWidget';
 import { CopilotFolioWidget } from '@/components/CopilotFolioWidget';
+import { CopilotForecastWidget } from '@/components/CopilotForecastWidget';
 import { CopilotHskSuggestWidget } from '@/components/CopilotHskSuggestWidget';
 import { CopilotHskTasksWidget } from '@/components/CopilotHskTasksWidget';
 import { CopilotMovementsWidget } from '@/components/CopilotMovementsWidget';
@@ -83,6 +84,7 @@ export default async function CopilotSessionAdminDetailPage({ params }: Props) {
               if (w.kind === 'hsk_tasks') return <CopilotHskTasksWidget key={idx} widget={w} />;
               if (w.kind === 'movements') return <CopilotMovementsWidget key={idx} widget={w} />;
               if (w.kind === 'hsk_suggest') return <CopilotHskSuggestWidget key={idx} widget={w} />;
+              if (w.kind === 'forecast') return <CopilotForecastWidget key={idx} widget={w} />;
               return null;
             })}
           </li>
