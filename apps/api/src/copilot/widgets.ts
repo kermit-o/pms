@@ -16,6 +16,8 @@ import type {
   AvailabilityRow,
   CopilotWidget,
   FolioEntry,
+  ForecastMetric,
+  ForecastSparklinePoint,
   HskTaskRow,
   MovementRow,
   ReservationWidgetData,
@@ -27,6 +29,9 @@ export type {
   CopilotWidget,
   FolioEntry,
   FolioWidgetData,
+  ForecastMetric,
+  ForecastSparklinePoint,
+  ForecastWidgetData,
   HskCandidateLoad,
   HskSuggestionRow,
   HskSuggestWidgetData,
@@ -67,9 +72,106 @@ export function extractWidgetFromTool(
       return buildMovementsWidget(toolResult);
     case 'hsk_suggest_assignments':
       return buildHskSuggestWidget(toolResult);
+    case 'forecast_demand':
+      return buildForecastWidget(toolResult);
     default:
       return null;
   }
+}
+
+const FORECAST_METRICS = new Set<ForecastMetric>(['occupancy', 'adr', 'revpar', 'pickup']);
+const FORECAST_HISTORY_TAIL = 14;
+
+function buildForecastWidget(toolResult: unknown): CopilotWidget | null {
+  if (!toolResult || typeof toolResult !== 'object') return null;
+  const r = toolResult as Record<string, unknown>;
+
+  if (typeof r.metric !== 'string' || !FORECAST_METRICS.has(r.metric as ForecastMetric)) {
+    return null;
+  }
+  if (typeof r.horizon !== 'number' || r.horizon <= 0) return null;
+
+  const message = typeof r.message === 'string' ? r.message : null;
+  const mape = typeof r.mape === 'number' ? r.mape : null;
+  const rmse = typeof r.rmse === 'number' ? r.rmse : null;
+
+  const series = Array.isArray(r.series) ? (r.series as Array<Record<string, unknown>>) : [];
+  const history = Array.isArray(r.history) ? (r.history as Array<Record<string, unknown>>) : [];
+
+  // Cuando el service devolvió un message (serie insuficiente), series puede
+  // venir vacío. No abortamos — el renderer cae al mensaje.
+  const validSeries = series.filter(
+    (p) =>
+      typeof p.date === 'string' &&
+      typeof p.predicted === 'number' &&
+      typeof p.lower === 'number' &&
+      typeof p.upper === 'number',
+  );
+  const validHistory = history.filter(
+    (p) => typeof p.date === 'string' && typeof p.value === 'number',
+  );
+
+  const nextDayRaw = validSeries[0];
+  const lastDayRaw = validSeries[validSeries.length - 1];
+  const lastObsRaw = validHistory[validHistory.length - 1];
+
+  const nextDay = nextDayRaw
+    ? {
+        date: nextDayRaw.date as string,
+        predicted: nextDayRaw.predicted as number,
+        lower: nextDayRaw.lower as number,
+        upper: nextDayRaw.upper as number,
+      }
+    : null;
+  const lastDay = lastDayRaw
+    ? {
+        date: lastDayRaw.date as string,
+        predicted: lastDayRaw.predicted as number,
+        lower: lastDayRaw.lower as number,
+        upper: lastDayRaw.upper as number,
+      }
+    : null;
+  const lastObservation = lastObsRaw
+    ? { date: lastObsRaw.date as string, value: lastObsRaw.value as number }
+    : null;
+
+  const avgPredicted =
+    validSeries.length > 0
+      ? round2(
+          validSeries.reduce((sum, p) => sum + (p.predicted as number), 0) / validSeries.length,
+        )
+      : null;
+
+  // Sparkline: cola del histórico + todo el horizonte.
+  const sparkline: ForecastSparklinePoint[] = [
+    ...validHistory.slice(-FORECAST_HISTORY_TAIL).map((p) => ({
+      date: p.date as string,
+      value: p.value as number,
+      predicted: false,
+    })),
+    ...validSeries.map((p) => ({
+      date: p.date as string,
+      value: p.predicted as number,
+      predicted: true,
+    })),
+  ];
+
+  return {
+    kind: 'forecast',
+    data: {
+      metric: r.metric as ForecastMetric,
+      horizon: r.horizon,
+      message,
+      mape,
+      rmse,
+      summary: { lastObservation, nextDay, lastDay, avgPredicted },
+      sparkline,
+    },
+  };
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 function buildAvailabilityWidget(toolInput: unknown, toolResult: unknown): CopilotWidget | null {

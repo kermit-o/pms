@@ -5,6 +5,7 @@ import type { CopilotSession } from '@/lib/api';
 import { streamCopilotMessage } from '@/lib/copilot-stream';
 import { CopilotAvailabilityWidget } from './CopilotAvailabilityWidget';
 import { CopilotFolioWidget } from './CopilotFolioWidget';
+import { CopilotForecastWidget } from './CopilotForecastWidget';
 import { CopilotHskSuggestWidget } from './CopilotHskSuggestWidget';
 import { CopilotHskTasksWidget } from './CopilotHskTasksWidget';
 import { CopilotMovementsWidget } from './CopilotMovementsWidget';
@@ -200,6 +201,7 @@ export default function CopilotSidebar() {
                     return <CopilotMovementsWidget key={idx} widget={w} />;
                   if (w.kind === 'hsk_suggest')
                     return <CopilotHskSuggestWidget key={idx} widget={w} />;
+                  if (w.kind === 'forecast') return <CopilotForecastWidget key={idx} widget={w} />;
                   return null;
                 })}
                 {m.pendingToolId && (
