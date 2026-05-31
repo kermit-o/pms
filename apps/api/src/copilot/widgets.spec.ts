@@ -51,7 +51,6 @@ describe('extractWidgetFromTool', () => {
 
   it('returns null for unknown tool', () => {
     expect(extractWidgetFromTool('check_in', {}, {})).toBeNull();
-    expect(extractWidgetFromTool('forecast_demand', {}, [])).toBeNull();
   });
 
   it('returns null when tool result is empty array', () => {
@@ -529,5 +528,83 @@ describe('extractWidgetFromTool', () => {
     expect(
       extractWidgetFromTool('hsk_suggest_assignments', {}, { businessDate: '2026-05-22' }),
     ).toBeNull();
+  });
+
+  it('builds a forecast widget from forecast_demand result (happy path)', () => {
+    const result = {
+      metric: 'occupancy',
+      horizon: 30,
+      modelFit: { alpha: 0.42, beta: 0.18 },
+      rmse: 5.13,
+      mape: 4.21,
+      series: [
+        { date: '2026-06-01', predicted: 0.65, lower: 0.55, upper: 0.75 },
+        { date: '2026-06-02', predicted: 0.7, lower: 0.6, upper: 0.8 },
+        { date: '2026-06-30', predicted: 0.81, lower: 0.65, upper: 0.95 },
+      ],
+      history: Array.from({ length: 20 }, (_, i) => ({
+        date: `2026-05-${String(i + 1).padStart(2, '0')}`,
+        value: 0.5 + i * 0.01,
+      })),
+      message: null,
+    };
+    const widget = extractWidgetFromTool('forecast_demand', {}, result);
+    expect(widget).not.toBeNull();
+    if (widget && widget.kind === 'forecast') {
+      expect(widget.data.metric).toBe('occupancy');
+      expect(widget.data.horizon).toBe(30);
+      expect(widget.data.mape).toBe(4.21);
+      expect(widget.data.rmse).toBe(5.13);
+      expect(widget.data.summary.nextDay?.predicted).toBe(0.65);
+      expect(widget.data.summary.lastDay?.date).toBe('2026-06-30');
+      expect(widget.data.summary.lastObservation?.date).toBe('2026-05-20');
+      // avg = (0.65 + 0.70 + 0.81) / 3 ≈ 0.72
+      expect(widget.data.summary.avgPredicted).toBe(0.72);
+      // sparkline = cola hist (14) + 3 predichos = 17
+      expect(widget.data.sparkline).toHaveLength(17);
+      expect(widget.data.sparkline.filter((p) => p.predicted)).toHaveLength(3);
+    }
+  });
+
+  it('builds a forecast widget with message when series is empty (training-insufficient)', () => {
+    const result = {
+      metric: 'pickup',
+      horizon: 30,
+      modelFit: { alpha: 0, beta: 0 },
+      rmse: null,
+      mape: null,
+      series: [],
+      history: [
+        { date: '2026-05-01', value: 2 },
+        { date: '2026-05-02', value: 3 },
+      ],
+      message: 'serie insuficiente (2 puntos < 14).',
+    };
+    const widget = extractWidgetFromTool('forecast_demand', {}, result);
+    expect(widget).not.toBeNull();
+    if (widget && widget.kind === 'forecast') {
+      expect(widget.data.message).toContain('serie insuficiente');
+      expect(widget.data.summary.nextDay).toBeNull();
+      expect(widget.data.summary.lastDay).toBeNull();
+      expect(widget.data.summary.avgPredicted).toBeNull();
+      // sparkline solo histórico (sin predichos).
+      expect(widget.data.sparkline).toHaveLength(2);
+      expect(widget.data.sparkline.every((p) => !p.predicted)).toBe(true);
+    }
+  });
+
+  it('forecast widget devuelve null si metric es desconocida', () => {
+    expect(
+      extractWidgetFromTool(
+        'forecast_demand',
+        {},
+        { metric: 'lol', horizon: 30, series: [], history: [] },
+      ),
+    ).toBeNull();
+  });
+
+  it('forecast widget devuelve null si toolResult no es objeto', () => {
+    expect(extractWidgetFromTool('forecast_demand', {}, null)).toBeNull();
+    expect(extractWidgetFromTool('forecast_demand', {}, [])).toBeNull();
   });
 });

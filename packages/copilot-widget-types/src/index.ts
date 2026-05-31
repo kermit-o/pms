@@ -187,6 +187,47 @@ export interface HskSuggestWidgetData {
 }
 
 // ---------------------------------------------------------------------------
+// forecast — forecast_demand
+// ---------------------------------------------------------------------------
+
+export type ForecastMetric = 'occupancy' | 'adr' | 'revpar' | 'pickup';
+
+export interface ForecastSparklinePoint {
+  date: string;
+  value: number;
+  /** true = predicho (parte del horizonte); false = histórico observado. */
+  predicted: boolean;
+}
+
+export interface ForecastWidgetData {
+  metric: ForecastMetric;
+  /** Número de días proyectados. */
+  horizon: number;
+  /**
+   * Mensaje del servicio cuando la serie histórica es insuficiente o algo no
+   * cuadra. Si está poblado, los campos numéricos pueden estar vacíos y el
+   * renderer enseña sólo el mensaje.
+   */
+  message: string | null;
+  /** Mean Absolute Percent Error del ajuste (%). null si no se calculó. */
+  mape: number | null;
+  /** Root Mean Square Error del ajuste. null si no se calculó. */
+  rmse: number | null;
+  summary: {
+    /** Último valor observado (línea base). */
+    lastObservation: { date: string; value: number } | null;
+    /** Predicción del primer día del horizonte (mañana). */
+    nextDay: { date: string; predicted: number; lower: number; upper: number } | null;
+    /** Predicción del último día del horizonte. */
+    lastDay: { date: string; predicted: number; lower: number; upper: number } | null;
+    /** Promedio de los `predicted` a lo largo del horizonte. */
+    avgPredicted: number | null;
+  };
+  /** Curva compacta para sparkline: últimos N históricos + horizonte completo. */
+  sparkline: ForecastSparklinePoint[];
+}
+
+// ---------------------------------------------------------------------------
 // Discriminated union — la lista crece añadiendo variantes nuevas.
 // ---------------------------------------------------------------------------
 
@@ -196,6 +237,7 @@ export type CopilotWidget =
   | { kind: 'reservation'; data: ReservationWidgetData }
   | { kind: 'hsk_tasks'; data: HskTasksWidgetData }
   | { kind: 'movements'; data: MovementsWidgetData }
-  | { kind: 'hsk_suggest'; data: HskSuggestWidgetData };
+  | { kind: 'hsk_suggest'; data: HskSuggestWidgetData }
+  | { kind: 'forecast'; data: ForecastWidgetData };
 
 export type CopilotWidgetKind = CopilotWidget['kind'];
