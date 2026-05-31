@@ -80,6 +80,45 @@ Una o dos frases.
 
 ---
 
+## 2026-05-31 · [FEAT] · Sprint 14 W2 — Verifactu: script health-check operativo
+
+**Scope:** `scripts/verifactu-health-check.ts` (nuevo).
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+Script operativo para diagnóstico Verifactu por tenant. Útil antes del
+primer envío real a AEAT y como herramienta SRE en producción para
+detectar tenants que no podrán emitir.
+
+Reporta por tenant:
+- **Emisor**: NIF + razón social poblados (rojo si no).
+- **Certificado**: existe, no revocado, días hasta caducidad
+  (verde ≥90d, amarillo <90d, rojo <30d o caducado o revocado).
+- **Invoices** (últimas 10): cuenta por estado.
+- **DLQ**: submissions DEAD_LETTER en los últimos 30 días (rojo si > 0).
+- **Overall**: 🟢 ok / 🟡 warn / 🔴 fail.
+
+Uso:
+```
+DIRECT_URL=postgres://... \
+  pnpm tsx scripts/verifactu-health-check.ts [--tenant <uuid>] [--json]
+```
+
+Exit codes:
+- 0 — todos OK.
+- 1 — al menos un tenant en fail (cualquier 🔴).
+- 2 — error conexión / DB.
+
+`--json` para integrar en monitoring (Prometheus textfile collector,
+alertmanager script, lo que sea). `--tenant <uuid>` filtra a uno solo
+(útil debuggeando soporte).
+
+**Sin cambios de código de runtime — solo script.** Typecheck OK,
+imports resuelven.
+
+---
+
 ## 2026-05-31 · [FEAT] · Sprint 14 W2 — Verifactu: hardening (cert validity + key rotation + métricas)
 
 **Scope:** `apps/api/src/verifactu/{certificate-vault.service.ts,submit.worker.ts}`,
