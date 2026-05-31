@@ -75,7 +75,8 @@ export interface VerifactuRegistroAltaInput {
   generatedAt?: Date;
 }
 
-const NS_SUMINISTRO = 'https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tikeContSocio/sii/verifactu/SuministroLR.xsd';
+const NS_SUMINISTRO =
+  'https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tikeContSocio/sii/verifactu/SuministroLR.xsd';
 
 export function buildVerifactuRegistroAlta(input: VerifactuRegistroAltaInput): string {
   const generatedAt = input.generatedAt ?? new Date();
@@ -85,21 +86,21 @@ export function buildVerifactuRegistroAlta(input: VerifactuRegistroAltaInput): s
 
   const idFactura =
     `<IDFactura>` + // ⚠ nombre exacto pendiente XSD
-      `<IDEmisorFactura>` +
-        `<NIF>${esc(input.emisor.nif)}</NIF>` + // ✅
-        `<NombreRazon>${esc(input.emisor.nombreRazon)}</NombreRazon>` + // ✅
-      `</IDEmisorFactura>` +
-      `<NumSerieFactura>${esc(numSerieFactura)}</NumSerieFactura>` + // ✅
-      `<FechaExpedicionFactura>${esc(fechaExpedicion)}</FechaExpedicionFactura>` + // ✅
+    `<IDEmisorFactura>` +
+    `<NIF>${esc(input.emisor.nif)}</NIF>` + // ✅
+    `<NombreRazon>${esc(input.emisor.nombreRazon)}</NombreRazon>` + // ✅
+    `</IDEmisorFactura>` +
+    `<NumSerieFactura>${esc(numSerieFactura)}</NumSerieFactura>` + // ✅
+    `<FechaExpedicionFactura>${esc(fechaExpedicion)}</FechaExpedicionFactura>` + // ✅
     `</IDFactura>`;
 
   const destinatarios = input.customerNif
     ? // F1: cliente con NIF.
       `<Destinatarios>` + // ⚠ por verificar
-        `<IDDestinatario>` +
-          `<NombreRazon>${esc(input.customerName)}</NombreRazon>` +
-          `<NIF>${esc(input.customerNif)}</NIF>` +
-        `</IDDestinatario>` +
+      `<IDDestinatario>` +
+      `<NombreRazon>${esc(input.customerName)}</NombreRazon>` +
+      `<NIF>${esc(input.customerNif)}</NIF>` +
+      `</IDDestinatario>` +
       `</Destinatarios>`
     : // F2: simplificada sin identificación.
       '';
@@ -109,38 +110,38 @@ export function buildVerifactuRegistroAlta(input: VerifactuRegistroAltaInput): s
   // aquí se itera.
   const desglose =
     `<Desglose>` + // ⚠ por verificar nombre
-      `<DetalleDesglose>` + // ⚠
-        `<ClaveRegimen>01</ClaveRegimen>` + // ⚠ Régimen general
-        `<CalificacionOperacion>S1</CalificacionOperacion>` + // ⚠ Sujeta y no exenta
-        `<TipoImpositivo>10.00</TipoImpositivo>` + // alojamiento
-        `<BaseImponibleOimporteNoSujeto>${esc(toFixed2(input.subtotal))}</BaseImponibleOimporteNoSujeto>` +
-        `<CuotaRepercutida>${esc(toFixed2(input.taxAmount))}</CuotaRepercutida>` +
-      `</DetalleDesglose>` +
+    `<DetalleDesglose>` + // ⚠
+    `<ClaveRegimen>01</ClaveRegimen>` + // ⚠ Régimen general
+    `<CalificacionOperacion>S1</CalificacionOperacion>` + // ⚠ Sujeta y no exenta
+    `<TipoImpositivo>10.00</TipoImpositivo>` + // alojamiento
+    `<BaseImponibleOimporteNoSujeto>${esc(toFixed2(input.subtotal))}</BaseImponibleOimporteNoSujeto>` +
+    `<CuotaRepercutida>${esc(toFixed2(input.taxAmount))}</CuotaRepercutida>` +
+    `</DetalleDesglose>` +
     `</Desglose>`;
 
   const encadenamiento =
     `<Encadenamiento>` + // ✅
-      (input.huellaAnterior
-        ? // El registro anterior se referencia por sus campos identificativos
-          // + su huella. Los nombres exactos van pendientes de XSD; usamos los
-          // mismos que en IDFactura por coherencia documentada.
-          `<RegistroAnterior>` + // ⚠
-            `<IDEmisorFactura>` +
-              `<NIF>${esc(input.emisor.nif)}</NIF>` +
-            `</IDEmisorFactura>` +
-            `<Huella>${esc(input.huellaAnterior)}</Huella>` + // ✅
-          `</RegistroAnterior>`
-        : `<PrimerRegistro>S</PrimerRegistro>`) + // ✅
+    (input.huellaAnterior
+      ? // El registro anterior se referencia por sus campos identificativos
+        // + su huella. Los nombres exactos van pendientes de XSD; usamos los
+        // mismos que en IDFactura por coherencia documentada.
+        `<RegistroAnterior>` + // ⚠
+        `<IDEmisorFactura>` +
+        `<NIF>${esc(input.emisor.nif)}</NIF>` +
+        `</IDEmisorFactura>` +
+        `<Huella>${esc(input.huellaAnterior)}</Huella>` + // ✅
+        `</RegistroAnterior>`
+      : `<PrimerRegistro>S</PrimerRegistro>`) + // ✅
     `</Encadenamiento>`;
 
   const sistema =
     `<SistemaInformatico>` + // ✅
-      `<NombreRazon>${esc(input.sistema.nombreRazon)}</NombreRazon>` +
-      `<NIF>${esc(input.sistema.nif)}</NIF>` +
-      `<NombreSistemaInformatico>${esc(input.sistema.nombreSistemaInformatico)}</NombreSistemaInformatico>` +
-      `<IdSistemaInformatico>${esc(input.sistema.idSistemaInformatico)}</IdSistemaInformatico>` +
-      `<Version>${esc(input.sistema.version)}</Version>` +
-      `<NumeroInstalacion>${esc(input.sistema.numeroInstalacion)}</NumeroInstalacion>` +
+    `<NombreRazon>${esc(input.sistema.nombreRazon)}</NombreRazon>` +
+    `<NIF>${esc(input.sistema.nif)}</NIF>` +
+    `<NombreSistemaInformatico>${esc(input.sistema.nombreSistemaInformatico)}</NombreSistemaInformatico>` +
+    `<IdSistemaInformatico>${esc(input.sistema.idSistemaInformatico)}</IdSistemaInformatico>` +
+    `<Version>${esc(input.sistema.version)}</Version>` +
+    `<NumeroInstalacion>${esc(input.sistema.numeroInstalacion)}</NumeroInstalacion>` +
     `</SistemaInformatico>`;
 
   // Root envoltorio. ⚠ nombre exacto del root: usar el del XSD vigente
@@ -148,22 +149,22 @@ export function buildVerifactuRegistroAlta(input: VerifactuRegistroAltaInput): s
   // schema; lo incluimos por seguridad.
   return (
     `<RegFactuSistemaFacturacion xmlns="${NS_SUMINISTRO}">` + // ⚠
-      `<RegistroAlta>` + // ⚠
-        `<IDVersion>1.0</IDVersion>` + // ⚠
-        idFactura +
-        `<NombreRazonEmisor>${esc(input.emisor.nombreRazon)}</NombreRazonEmisor>` + // ⚠
-        `<TipoFactura>${esc(input.tipoFactura)}</TipoFactura>` + // ✅
-        `<DescripcionOperacion>${esc(input.descripcionOperacion)}</DescripcionOperacion>` + // ✅
-        destinatarios +
-        desglose +
-        `<CuotaTotal>${esc(toFixed2(input.taxAmount))}</CuotaTotal>` + // ✅
-        `<ImporteTotal>${esc(toFixed2(input.totalAmount))}</ImporteTotal>` + // ✅
-        encadenamiento +
-        sistema +
-        `<FechaHoraHusoGenRegistro>${esc(fechaHoraHusoGen)}</FechaHoraHusoGenRegistro>` + // ✅
-        `<TipoHuella>01</TipoHuella>` + // ✅ "01" = SHA-256
-        `<Huella>${esc(input.huella)}</Huella>` + // ✅
-      `</RegistroAlta>` +
+    `<RegistroAlta>` + // ⚠
+    `<IDVersion>1.0</IDVersion>` + // ⚠
+    idFactura +
+    `<NombreRazonEmisor>${esc(input.emisor.nombreRazon)}</NombreRazonEmisor>` + // ⚠
+    `<TipoFactura>${esc(input.tipoFactura)}</TipoFactura>` + // ✅
+    `<DescripcionOperacion>${esc(input.descripcionOperacion)}</DescripcionOperacion>` + // ✅
+    destinatarios +
+    desglose +
+    `<CuotaTotal>${esc(toFixed2(input.taxAmount))}</CuotaTotal>` + // ✅
+    `<ImporteTotal>${esc(toFixed2(input.totalAmount))}</ImporteTotal>` + // ✅
+    encadenamiento +
+    sistema +
+    `<FechaHoraHusoGenRegistro>${esc(fechaHoraHusoGen)}</FechaHoraHusoGenRegistro>` + // ✅
+    `<TipoHuella>01</TipoHuella>` + // ✅ "01" = SHA-256
+    `<Huella>${esc(input.huella)}</Huella>` + // ✅
+    `</RegistroAlta>` +
     `</RegFactuSistemaFacturacion>`
   );
 }

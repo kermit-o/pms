@@ -36,10 +36,11 @@ describe('PreprodAeatClient', () => {
   it('returns ACCEPTED + extracts CSV when AEAT responds 200 with <CSV>', async () => {
     const client = new PreprodAeatClient(makeConfig('https://aeat.test/verifactu'));
     mockFetch(
-      vi.fn(async () =>
-        new Response('<RespuestaSuministro><CSV>ABCDEF0123456789</CSV></RespuestaSuministro>', {
-          status: 200,
-        }),
+      vi.fn(
+        async () =>
+          new Response('<RespuestaSuministro><CSV>ABCDEF0123456789</CSV></RespuestaSuministro>', {
+            status: 200,
+          }),
       ) as unknown as typeof fetch,
     );
     const r = await client.submit(REQ);
@@ -53,8 +54,8 @@ describe('PreprodAeatClient', () => {
   it('returns ACCEPTED with a namespaced <ns:Csv> tag too', async () => {
     const client = new PreprodAeatClient(makeConfig('https://aeat.test/verifactu'));
     mockFetch(
-      vi.fn(async () =>
-        new Response('<R><suministro:Csv>XYZ123</suministro:Csv></R>', { status: 200 }),
+      vi.fn(
+        async () => new Response('<R><suministro:Csv>XYZ123</suministro:Csv></R>', { status: 200 }),
       ) as unknown as typeof fetch,
     );
     const r = await client.submit(REQ);
@@ -65,11 +66,12 @@ describe('PreprodAeatClient', () => {
   it('returns REJECTED on HTTP 422 + extracts CodigoErrorRegistro', async () => {
     const client = new PreprodAeatClient(makeConfig('https://aeat.test/verifactu'));
     mockFetch(
-      vi.fn(async () =>
-        new Response(
-          '<E><CodigoErrorRegistro>4102</CodigoErrorRegistro><DescripcionErrorRegistro>NIF inválido</DescripcionErrorRegistro></E>',
-          { status: 422 },
-        ),
+      vi.fn(
+        async () =>
+          new Response(
+            '<E><CodigoErrorRegistro>4102</CodigoErrorRegistro><DescripcionErrorRegistro>NIF inválido</DescripcionErrorRegistro></E>',
+            { status: 422 },
+          ),
       ) as unknown as typeof fetch,
     );
     const r = await client.submit(REQ);
@@ -83,8 +85,9 @@ describe('PreprodAeatClient', () => {
   it('returns REJECTED on 200 without CSV (business-level reject)', async () => {
     const client = new PreprodAeatClient(makeConfig('https://aeat.test/verifactu'));
     mockFetch(
-      vi.fn(async () =>
-        new Response('<R><CodigoErrorRegistro>9001</CodigoErrorRegistro></R>', { status: 200 }),
+      vi.fn(
+        async () =>
+          new Response('<R><CodigoErrorRegistro>9001</CodigoErrorRegistro></R>', { status: 200 }),
       ) as unknown as typeof fetch,
     );
     const r = await client.submit(REQ);

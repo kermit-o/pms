@@ -1,10 +1,5 @@
 import { auth } from '@/auth';
-import {
-  ApiError,
-  getCertificate,
-  revokeCertificate,
-  uploadCertificate,
-} from '@/lib/api';
+import { ApiError, getCertificate, revokeCertificate, uploadCertificate } from '@/lib/api';
 
 export async function GET(): Promise<Response> {
   const session = await auth();

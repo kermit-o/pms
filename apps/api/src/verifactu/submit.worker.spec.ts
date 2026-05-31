@@ -73,7 +73,9 @@ function makeWorker(opts: {
 
   const prisma = {
     invoice: {
-      findUnique: vi.fn(async () => (opts.invoice ? { ...opts.invoice, status: invoiceStatus ?? opts.invoice.status } : null)),
+      findUnique: vi.fn(async () =>
+        opts.invoice ? { ...opts.invoice, status: invoiceStatus ?? opts.invoice.status } : null,
+      ),
       update: transitions.invoiceUpdate,
     },
     invoiceSubmission: {
@@ -184,9 +186,7 @@ describe('SubmitWorker.handle', () => {
     const updateCalls = transitions.submissionUpdate.mock.calls as unknown as Array<
       [{ data: { status: InvoiceSubmissionStatus } }]
     >;
-    const accepted = updateCalls.some(
-      (c) => c[0].data.status === InvoiceSubmissionStatus.ACCEPTED,
-    );
+    const accepted = updateCalls.some((c) => c[0].data.status === InvoiceSubmissionStatus.ACCEPTED);
     expect(accepted).toBe(true);
   });
 

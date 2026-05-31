@@ -111,7 +111,11 @@ describe('VerifactuController · certificate endpoints', () => {
       await expect(
         ctrl.getInvoiceByFolio(USER, REQ, '00000000-0000-0000-0000-000000000111'),
       ).resolves.toEqual(invoice);
-      expect(findByFolio).toHaveBeenCalledWith(USER, 'corr-1', '00000000-0000-0000-0000-000000000111');
+      expect(findByFolio).toHaveBeenCalledWith(
+        USER,
+        'corr-1',
+        '00000000-0000-0000-0000-000000000111',
+      );
     });
 
     it('throws NotFound when no invoice exists for the folio', async () => {
@@ -125,7 +129,9 @@ describe('VerifactuController · certificate endpoints', () => {
   describe('DELETE /verifactu/certificate', () => {
     it('rejects bodies without a reason', async () => {
       const ctrl = makeController({ revoke: vi.fn() });
-      await expect(ctrl.revokeCertificate(USER, REQ, {})).rejects.toBeInstanceOf(BadRequestException);
+      await expect(ctrl.revokeCertificate(USER, REQ, {})).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
 
     it('rejects too-short reasons', async () => {

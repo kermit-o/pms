@@ -51,15 +51,13 @@ interface TenantHealth {
   name: string;
   slug: string;
   emisor: { nif: string | null; razonSocial: string | null; ok: boolean };
-  certificate:
-    | {
-        subjectCn: string;
-        notAfter: string;
-        daysToExpiry: number;
-        revoked: boolean;
-        ok: boolean;
-      }
-    | null;
+  certificate: {
+    subjectCn: string;
+    notAfter: string;
+    daysToExpiry: number;
+    revoked: boolean;
+    ok: boolean;
+  } | null;
   invoices: {
     total: number;
     byStatus: Partial<Record<InvoiceStatus, number>>;
@@ -155,10 +153,19 @@ function formatHuman(reports: TenantHealth[]): string {
     } else if (r.certificate.revoked) {
       out.push(`   Cert:    ${r.certificate.subjectCn}  REVOKED`);
     } else if (r.certificate.daysToExpiry <= 0) {
-      out.push(`   Cert:    ${r.certificate.subjectCn}  EXPIRED (${Math.abs(r.certificate.daysToExpiry)} días)`);
+      out.push(
+        `   Cert:    ${r.certificate.subjectCn}  EXPIRED (${Math.abs(r.certificate.daysToExpiry)} días)`,
+      );
     } else {
-      const warn = r.certificate.daysToExpiry < 30 ? ' ⚠ <30d' : r.certificate.daysToExpiry < 90 ? ' ⚠ <90d' : '';
-      out.push(`   Cert:    ${r.certificate.subjectCn}  caduca en ${r.certificate.daysToExpiry}d${warn}`);
+      const warn =
+        r.certificate.daysToExpiry < 30
+          ? ' ⚠ <30d'
+          : r.certificate.daysToExpiry < 90
+            ? ' ⚠ <90d'
+            : '';
+      out.push(
+        `   Cert:    ${r.certificate.subjectCn}  caduca en ${r.certificate.daysToExpiry}d${warn}`,
+      );
     }
 
     if (r.invoices.total === 0) {

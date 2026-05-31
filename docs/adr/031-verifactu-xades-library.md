@@ -22,7 +22,7 @@ El estado actual del módulo:
 - **Falta** el envoltorio XAdES-BES que el validador AEAT exige:
   - `<ds:Object><xades:QualifyingProperties Target="#sig-...">`.
   - Segunda `<ds:Reference URI="#xades-SignedProperties"
-    Type="http://uri.etsi.org/01903#SignedProperties">`.
+Type="http://uri.etsi.org/01903#SignedProperties">`.
   - `<xades:SignedProperties Id="xades-SignedProperties">` con
     `<xades:SigningTime>` y `<xades:SigningCertificate>` (CertDigest +
     IssuerSerial).
@@ -49,6 +49,7 @@ Tres caminos para cerrar el gap. Esta ADR los compara y propone uno.
   A). Soporta todos los SignedProperties que vamos a necesitar.
 
 **Pros:**
+
 - Mínimo código nuestro: ~50 LOC de glue + plantilla de
   SignedProperties.
 - Las canonicalizaciones C14N (inclusiva + exclusiva) están bien
@@ -57,6 +58,7 @@ Tres caminos para cerrar el gap. Esta ADR los compara y propone uno.
 - TypeScript first.
 
 **Contras:**
+
 - Mayor superficie de dependencias (12 paquetes).
 - Documentación pública escasa: hay que leer código y tests para los
   casos AEAT-específicos.
@@ -70,17 +72,20 @@ Tres caminos para cerrar el gap. Esta ADR los compara y propone uno.
 - Deps: 3 paquetes (`@xmldom/is-dom-node`, `@xmldom/xmldom`, `xpath`).
 
 **Cubre solo XMLDSig**, no XAdES. Para cumplir la spec habría que:
+
 - Construir `<xades:QualifyingProperties>` a mano.
 - Calcular el digest de `<xades:SignedProperties>` con la
   canonicalización que el verificador AEAT espere.
 - Añadirlo como segunda Reference en SignedInfo.
 
 **Pros:**
+
 - Dep maduras + 14× más adopción que xadesjs.
 - Mantenemos control sobre la estructura XAdES exacta.
 - Menos arrastre de dependencias.
 
 **Contras:**
+
 - ~150-250 LOC de wrapper XAdES nuestro = misma superficie de bugs que
   la opción 3 en la parte XAdES (la parte XMLDSig sí gana frente a la
   opción 3).
@@ -93,6 +98,7 @@ Tres caminos para cerrar el gap. Esta ADR los compara y propone uno.
   vault del certificado).
 
 Habría que escribir:
+
 - Canonicalización C14N 1.0 (~150 LOC, con sus aristas: namespace
   prefixes heredados, `xml:space`, ordenación de atributos).
 - Construcción de SignedInfo + SignedProperties + QualifyingProperties
@@ -102,11 +108,13 @@ Habría que escribir:
   por W3C) para validar la canonicalización.
 
 **Pros:**
+
 - Sin nuevas deps → coste cero en supply chain, simpler lock file.
 - Control total: cuando AEAT cambie su validador podemos adaptar
   rápido sin esperar a un release upstream.
 
 **Contras:**
+
 - C14N tiene casos esquina que llevan **semanas** de depuración cuando
   una factura es rechazada por byte-mismatch.
 - Sin comunidad que use el código = nadie te avisa de un bug latente.
@@ -117,16 +125,16 @@ Habría que escribir:
 
 ## 3. Comparación rápida
 
-| Criterio                     | xadesjs        | xml-crypto+wrapper | Propio (node-forge) |
-| ---------------------------- | -------------- | ------------------ | ------------------- |
-| Deps nuevas                  | ~12            | 3                  | 0                   |
-| LOC propio                   | ~50            | ~200               | ~400                |
-| Cobertura XAdES nativa       | Completa       | Manual             | Manual              |
-| Riesgo C14N                  | Bajo           | Bajo               | Alto                |
-| Riesgo XAdES specifics       | Bajo           | Medio              | Alto                |
-| Mantenimiento de la dep      | Activo (Peculiar) | Muy activo (SAML) | N/A                 |
-| Coste salir si vendor cae    | Medio          | Bajo (XMLDSig OK)  | N/A                 |
-| Tiempo a "preprod verde"     | ~0.5 día       | ~2 días            | ~3-5 días           |
+| Criterio                  | xadesjs           | xml-crypto+wrapper | Propio (node-forge) |
+| ------------------------- | ----------------- | ------------------ | ------------------- |
+| Deps nuevas               | ~12               | 3                  | 0                   |
+| LOC propio                | ~50               | ~200               | ~400                |
+| Cobertura XAdES nativa    | Completa          | Manual             | Manual              |
+| Riesgo C14N               | Bajo              | Bajo               | Alto                |
+| Riesgo XAdES specifics    | Bajo              | Medio              | Alto                |
+| Mantenimiento de la dep   | Activo (Peculiar) | Muy activo (SAML)  | N/A                 |
+| Coste salir si vendor cae | Medio             | Bajo (XMLDSig OK)  | N/A                 |
+| Tiempo a "preprod verde"  | ~0.5 día          | ~2 días            | ~3-5 días           |
 
 ---
 
@@ -135,6 +143,7 @@ Habría que escribir:
 **Opción 1: `xadesjs`.**
 
 Razonamiento corto:
+
 - El bloqueo en pasar el validador AEAT es C14N exacta + estructura
   XAdES exacta. Ambas son **problemas resueltos** por la opción 1, y
   **problemas abiertos** por las otras dos.

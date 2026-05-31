@@ -125,14 +125,16 @@ function makePrisma(store: Store): PrismaService {
     $transaction: vi.fn(async (queries: Promise<unknown>[]) => Promise.all(queries)),
 
     tenant: {
-      findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
-        store.tenants.find((t) => t.id === where.id) ?? null,
+      findUnique: vi.fn(
+        async ({ where }: { where: { id: string } }) =>
+          store.tenants.find((t) => t.id === where.id) ?? null,
       ),
     },
 
     folio: {
-      findFirst: vi.fn(async ({ where }: { where: { id: string } }) =>
-        store.folios.find((f) => f.id === where.id) ?? null,
+      findFirst: vi.fn(
+        async ({ where }: { where: { id: string } }) =>
+          store.folios.find((f) => f.id === where.id) ?? null,
       ),
     },
 
@@ -141,7 +143,10 @@ function makePrisma(store: Store): PrismaService {
         const inv = store.invoices.find((i) => i.id === where.id);
         if (!inv) return null;
         const tenant = store.tenants.find((t) => t.id === inv.tenantId);
-        return { ...inv, tenant: tenant ? { nif: tenant.nif, razonSocial: tenant.razonSocial } : null };
+        return {
+          ...inv,
+          tenant: tenant ? { nif: tenant.nif, razonSocial: tenant.razonSocial } : null,
+        };
       }),
       findFirst: vi.fn(
         async (args: {
@@ -171,24 +176,27 @@ function makePrisma(store: Store): PrismaService {
           if (args.orderBy?.number === 'desc') {
             rows = rows.sort((a, b) => b.number - a.number);
           } else if (args.orderBy?.issuedAt === 'desc') {
-            rows = rows.sort(
-              (a, b) =>
-                (b.issuedAt?.getTime() ?? 0) - (a.issuedAt?.getTime() ?? 0),
-            );
+            rows = rows.sort((a, b) => (b.issuedAt?.getTime() ?? 0) - (a.issuedAt?.getTime() ?? 0));
           }
           return rows[0] ?? null;
         },
       ),
-      create: vi.fn(async ({ data }: { data: Omit<InvoiceRow, 'id' | 'status'> & { status?: InvoiceStatus } }) => {
-        const id = store.newId();
-        const row: InvoiceRow = {
-          ...data,
-          id,
-          status: data.status ?? InvoiceStatus.DRAFT,
-        };
-        store.invoices.push(row);
-        return { id };
-      }),
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: Omit<InvoiceRow, 'id' | 'status'> & { status?: InvoiceStatus };
+        }) => {
+          const id = store.newId();
+          const row: InvoiceRow = {
+            ...data,
+            id,
+            status: data.status ?? InvoiceStatus.DRAFT,
+          };
+          store.invoices.push(row);
+          return { id };
+        },
+      ),
       update: vi.fn(
         async ({ where, data }: { where: { id: string }; data: Partial<InvoiceRow> }) => {
           const row = store.invoices.find((i) => i.id === where.id);
@@ -209,7 +217,11 @@ function makePrisma(store: Store): PrismaService {
           if (args.where?.invoiceId) {
             rows = rows.filter((r) => r.invoiceId === args.where!.invoiceId);
           }
-          if (args.where?.status && typeof args.where.status === 'object' && 'in' in (args.where.status as object)) {
+          if (
+            args.where?.status &&
+            typeof args.where.status === 'object' &&
+            'in' in (args.where.status as object)
+          ) {
             const arr = (args.where.status as { in: InvoiceSubmissionStatus[] }).in;
             rows = rows.filter((r) => arr.includes(r.status));
           }
@@ -252,7 +264,7 @@ function makePrisma(store: Store): PrismaService {
 
   return {
     ...tx,
-    withTenant: vi.fn(async <T,>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
+    withTenant: vi.fn(async <T>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
   } as unknown as PrismaService;
 }
 
@@ -311,18 +323,14 @@ function setupWorld() {
     status: FolioStatus.CLOSED,
     currency: 'EUR',
     reservation: { propertyId: PROPERTY_ID },
-    entries: [
-      { type: 'CHARGE', description: 'Habitación', amount: new Prisma.Decimal('100.00') },
-    ],
+    entries: [{ type: 'CHARGE', description: 'Habitación', amount: new Prisma.Decimal('100.00') }],
   });
   store.folios.push({
     id: FOLIO_ID_B,
     status: FolioStatus.CLOSED,
     currency: 'EUR',
     reservation: { propertyId: PROPERTY_ID },
-    entries: [
-      { type: 'CHARGE', description: 'Habitación', amount: new Prisma.Decimal('200.00') },
-    ],
+    entries: [{ type: 'CHARGE', description: 'Habitación', amount: new Prisma.Decimal('200.00') }],
   });
 
   const captured: CapturedEvent[] = [];
@@ -352,9 +360,7 @@ describe('Verifactu integration: issue → submit (in-memory)', () => {
     expect(issued.invoiceNumber).toBe('A-1');
 
     // El evento publicado encaja con la firma esperada por el worker.
-    const requestedEvents = captured.filter(
-      (e) => e.type === 'verifactu.invoice.submit_requested',
-    );
+    const requestedEvents = captured.filter((e) => e.type === 'verifactu.invoice.submit_requested');
     expect(requestedEvents).toHaveLength(1);
     const evt = requestedEvents[0]!;
     expect(evt.payload.invoiceId).toBe(issued.id);
@@ -390,9 +396,7 @@ describe('Verifactu integration: issue → submit (in-memory)', () => {
       customerName: 'Bob Smith',
       customerNif: 'X1234567L',
     });
-    const evt2 = captured
-      .filter((e) => e.type === 'verifactu.invoice.submit_requested')
-      .at(-1)!;
+    const evt2 = captured.filter((e) => e.type === 'verifactu.invoice.submit_requested').at(-1)!;
     await worker.handle(evt2.payload, 1);
 
     const inv1 = store.invoices.find((i) => i.id === i1.id)!;

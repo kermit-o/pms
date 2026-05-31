@@ -100,7 +100,9 @@ describe('buildVerifactuRegistroAlta', () => {
 
   it('emits FechaHoraHusoGenRegistro in ISO-8601 with timezone', () => {
     const xml = buildVerifactuRegistroAlta(baseInput);
-    expect(xml).toContain('<FechaHoraHusoGenRegistro>2026-05-30T10:00:00.000Z</FechaHoraHusoGenRegistro>');
+    expect(xml).toContain(
+      '<FechaHoraHusoGenRegistro>2026-05-30T10:00:00.000Z</FechaHoraHusoGenRegistro>',
+    );
   });
 
   it('escapes XML special characters in the descripción and customer name', () => {
@@ -109,7 +111,9 @@ describe('buildVerifactuRegistroAlta', () => {
       descripcionOperacion: 'Bed & Breakfast <noche extra>',
       customerName: 'Tom "Cat" & Co.',
     });
-    expect(xml).toContain('<DescripcionOperacion>Bed &amp; Breakfast &lt;noche extra&gt;</DescripcionOperacion>');
+    expect(xml).toContain(
+      '<DescripcionOperacion>Bed &amp; Breakfast &lt;noche extra&gt;</DescripcionOperacion>',
+    );
     expect(xml).toContain('<NombreRazon>Tom &quot;Cat&quot; &amp; Co.</NombreRazon>');
   });
 });

@@ -21,11 +21,7 @@ function deriveKey(masterKey: string, tenantId: string): Buffer {
   return pbkdf2Sync(masterKey, tenantId, PBKDF2_ITERATIONS, KEY_BYTES, PBKDF2_DIGEST);
 }
 
-export function encryptCertificate(
-  masterKey: string,
-  tenantId: string,
-  plaintext: Buffer,
-): Buffer {
+export function encryptCertificate(masterKey: string, tenantId: string, plaintext: Buffer): Buffer {
   const key = deriveKey(masterKey, tenantId);
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
@@ -34,11 +30,7 @@ export function encryptCertificate(
   return Buffer.concat([iv, tag, ciphertext]);
 }
 
-export function decryptCertificate(
-  masterKey: string,
-  tenantId: string,
-  blob: Buffer,
-): Buffer {
+export function decryptCertificate(masterKey: string, tenantId: string, blob: Buffer): Buffer {
   if (blob.length < IV_BYTES + TAG_BYTES + 1) {
     throw new Error('Encrypted blob is too short');
   }

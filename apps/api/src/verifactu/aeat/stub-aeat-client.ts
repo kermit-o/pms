@@ -1,10 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
-import type {
-  AeatClient,
-  AeatSubmitRequest,
-  AeatSubmitResult,
-} from './aeat-client.interface';
+import type { AeatClient, AeatSubmitRequest, AeatSubmitResult } from './aeat-client.interface';
 
 /**
  * Cliente AEAT en modo stub (default).

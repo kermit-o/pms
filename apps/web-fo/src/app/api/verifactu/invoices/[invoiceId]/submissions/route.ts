@@ -1,9 +1,5 @@
 import { auth } from '@/auth';
-import {
-  ApiError,
-  listInvoiceSubmissions,
-  requeueInvoiceSubmission,
-} from '@/lib/api';
+import { ApiError, listInvoiceSubmissions, requeueInvoiceSubmission } from '@/lib/api';
 
 export async function GET(
   _req: Request,

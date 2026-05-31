@@ -69,9 +69,7 @@ function makeService(opts: {
           }
           // (b) Last number in series: where.series + orderBy.
           if (args.where?.series !== undefined) {
-            return opts.lastInvoiceNumber !== undefined
-              ? { number: opts.lastInvoiceNumber }
-              : null;
+            return opts.lastInvoiceNumber !== undefined ? { number: opts.lastInvoiceNumber } : null;
           }
           // (a) Idempotency lookup: where.folioId.
           return opts.existingInvoice ?? null;
@@ -91,7 +89,7 @@ function makeService(opts: {
   };
 
   const prisma = {
-    withTenant: vi.fn(async <T,>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
+    withTenant: vi.fn(async <T>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
   } as unknown as PrismaService;
 
   const events = { publish: vi.fn(async () => ({ id: 'e1', sequence: 1, type: 'x' })) };
@@ -111,7 +109,11 @@ describe('InvoiceService.issue', () => {
   it('rejects an invalid series', async () => {
     const { service } = makeService({});
     await expect(
-      service.issue(user, 'corr-1', { folioId: 'f1', customerName: 'Ana', series: 'invalid lower' }),
+      service.issue(user, 'corr-1', {
+        folioId: 'f1',
+        customerName: 'Ana',
+        series: 'invalid lower',
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -233,9 +235,7 @@ describe('InvoiceService.issue · Verifactu wiring', () => {
     status: FolioStatus.CLOSED,
     currency: 'EUR',
     reservation: { propertyId: 'p1' },
-    entries: [
-      { type: 'CHARGE', description: 'Room', amount: new Prisma.Decimal('100.00') },
-    ],
+    entries: [{ type: 'CHARGE', description: 'Room', amount: new Prisma.Decimal('100.00') }],
   };
 
   it('rejects when the tenant has no NIF or razón social configured', async () => {
@@ -301,7 +301,7 @@ describe('InvoiceService.requeueSubmission', () => {
       },
     };
     const prisma = {
-      withTenant: vi.fn(async <T,>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
+      withTenant: vi.fn(async <T>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
     } as unknown as PrismaService;
     const events = { publish: vi.fn(async () => ({ id: 'e1', sequence: 1, type: 'x' })) };
     const service = new InvoiceService(prisma, events as unknown as EventbusService);
@@ -319,9 +319,9 @@ describe('InvoiceService.requeueSubmission', () => {
     const { service } = makeRequeueService({
       invoice: { id: 'i1', status: InvoiceStatus.ACCEPTED, series: 'A', number: 5 },
     });
-    await expect(
-      service.requeueSubmission(user, 'corr-1', 'i1'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.requeueSubmission(user, 'corr-1', 'i1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 
   it('throws Conflict when a PENDING attempt is already in flight', async () => {
@@ -329,9 +329,9 @@ describe('InvoiceService.requeueSubmission', () => {
       invoice: { id: 'i1', status: InvoiceStatus.REJECTED, series: 'A', number: 5 },
       pendingAttempt: { id: 'sub-pending' },
     });
-    await expect(
-      service.requeueSubmission(user, 'corr-1', 'i1'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.requeueSubmission(user, 'corr-1', 'i1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 
   it('republishes submit_requested when the invoice is requeue-able', async () => {

@@ -48,9 +48,9 @@ export default async function EmisorPage() {
         </p>
         <h1 className="text-3xl font-semibold text-aubergine-700">Datos del emisor</h1>
         <p className="text-sm text-aubergine-700/70">
-          NIF + razón social que aparecerán como emisor en todas las facturas Verifactu de
-          este tenant. <strong>Sin estos datos no se pueden emitir facturas</strong> — el
-          backend rechazará la operación.
+          NIF + razón social que aparecerán como emisor en todas las facturas Verifactu de este
+          tenant. <strong>Sin estos datos no se pueden emitir facturas</strong> — el backend
+          rechazará la operación.
         </p>
         <p className="text-sm text-aubergine-700/70">
           ¿Necesitas configurar también el certificado digital?{' '}
@@ -88,8 +88,8 @@ export default async function EmisorPage() {
               className="mt-1 block w-48 rounded-lg border border-aubergine-100 bg-white px-3 py-2 font-mono text-sm focus:border-aubergine-500 focus:outline-none"
             />
             <span className="mt-1 block text-xs text-aubergine-700/60">
-              9 caracteres. Acepta NIF (8 dígitos + letra), CIF (letra + 7 + dígito/letra) y
-              NIE (X/Y/Z + 7 + letra). Se guarda en mayúsculas.
+              9 caracteres. Acepta NIF (8 dígitos + letra), CIF (letra + 7 + dígito/letra) y NIE
+              (X/Y/Z + 7 + letra). Se guarda en mayúsculas.
             </span>
           </label>
           <label className="block text-sm">

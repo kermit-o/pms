@@ -54,6 +54,7 @@ elegimos **Puppeteer**:
 - Calidad imprenta para QR + logo del hotel.
 
 **Coste asumido:**
+
 - Imagen Docker `pms-api` crece ~200 MB (chromium + fuentes).
 - Cold start Fly +2–3 s. Mitigación: machine warmup ya configurado
   para `cdg`.
@@ -61,6 +62,7 @@ elegimos **Puppeteer**:
   `puppeteer` mensual (ya parte del CI Renovate).
 
 **Alternativas descartadas:**
+
 - HTML imprimible cliente — viola requisito de hash estable.
 - `pdfkit` puro — layout más manual; no reutilizable para reports
   futuros; menos flexible para QR + branding.
@@ -82,6 +84,7 @@ Cada hotel sube su certificado `.p12` (o `.pfx`) a través de
   en UI tras guardar.
 
 **Alternativas descartadas:**
+
 - Vault externo (HashiCorp / AWS KMS) — añade dependencia y ~2 días de
   integración. Sobreingeniería para fase piloto (1–3 hoteles).
   Migración futura es contenida porque toda la criptografía vive en
@@ -93,11 +96,11 @@ Cada hotel sube su certificado `.p12` (o `.pfx`) a través de
 
 Adapter `AeatClient` con tres implementaciones intercambiables vía DI:
 
-| Impl | Cuando | Comportamiento |
-|---|---|---|
-| `StubAeatClient` | `VERIFACTU_MODE=stub` o ausente | Valida el XML, computa hash, retorna CSV ficticio determinista. Imposible enviar a AEAT. |
-| `PreprodAeatClient` | `VERIFACTU_MODE=preprod` | Apunta al endpoint de pre-producción de AEAT. Para QA. |
-| `AeatClient` (real) | `VERIFACTU_MODE=production` **y** `NODE_ENV=production` | Endpoint real. Doble guarda para impedir envío accidental. |
+| Impl                | Cuando                                                  | Comportamiento                                                                           |
+| ------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `StubAeatClient`    | `VERIFACTU_MODE=stub` o ausente                         | Valida el XML, computa hash, retorna CSV ficticio determinista. Imposible enviar a AEAT. |
+| `PreprodAeatClient` | `VERIFACTU_MODE=preprod`                                | Apunta al endpoint de pre-producción de AEAT. Para QA.                                   |
+| `AeatClient` (real) | `VERIFACTU_MODE=production` **y** `NODE_ENV=production` | Endpoint real. Doble guarda para impedir envío accidental.                               |
 
 El bootstrap del módulo `verifactu.module.ts` lanza error fatal si
 `NODE_ENV=production` y `VERIFACTU_MODE !== production`. Y a la inversa:
@@ -105,6 +108,7 @@ si `VERIFACTU_MODE=production` con `NODE_ENV !== production`, también
 falla (cinturón + tirantes).
 
 **Alternativas descartadas:**
+
 - Solo sandbox AEAT desde dev — requiere cert válido en dev, lentitud y
   rate limits de la AEAT-preprod cortan el ciclo TDD.
 - Mock por env flag sin distinción dev/prod — riesgo alto de olvidar el
@@ -130,6 +134,7 @@ Flujo:
    estado visible en `/billing/invoices`.
 
 **Alternativas descartadas:**
+
 - Fail-fast bloqueante — incompatible con operativa de hotel; AEAT cae
   con frecuencia conocida.
 - Cola sin DLQ — perdemos visibilidad si una factura lleva >1 h
@@ -197,11 +202,11 @@ forward-only, sin DROP. RLS por `tenant_id` en las tres tablas (CLAUDE.md §10).
 
 Eventos NATS:
 
-| Subject | Payload | Productor | Consumidor |
-|---|---|---|---|
-| `verifactu.invoice.submit_requested` | `{tenantId, invoiceId}` | `InvoiceService.issue()` | `SubmitWorker` |
-| `verifactu.invoice.submitted` | `{tenantId, invoiceId, csv}` | `SubmitWorker` ok | observabilidad |
-| `verifactu.invoice.rejected` | `{tenantId, invoiceId, reason}` | `SubmitWorker` 4xx | alerta + UI |
+| Subject                              | Payload                         | Productor                | Consumidor     |
+| ------------------------------------ | ------------------------------- | ------------------------ | -------------- |
+| `verifactu.invoice.submit_requested` | `{tenantId, invoiceId}`         | `InvoiceService.issue()` | `SubmitWorker` |
+| `verifactu.invoice.submitted`        | `{tenantId, invoiceId, csv}`    | `SubmitWorker` ok        | observabilidad |
+| `verifactu.invoice.rejected`         | `{tenantId, invoiceId, reason}` | `SubmitWorker` 4xx       | alerta + UI    |
 
 ---
 

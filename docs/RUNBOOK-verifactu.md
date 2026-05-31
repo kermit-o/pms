@@ -38,11 +38,11 @@ operador (UI)                       backend                         AEAT
 
 **Tres modos** (`VERIFACTU_MODE`):
 
-| Modo         | Red       | Auth     | Para qué                                  |
-| ------------ | --------- | -------- | ----------------------------------------- |
-| `stub`       | no        | n/a      | dev local, CI, demos sin AEAT             |
-| `preprod`    | HTTP      | mTLS¹    | smoke real contra entorno AEAT pruebas    |
-| `production` | HTTP      | mTLS¹    | producción real, solo NODE_ENV=production |
+| Modo         | Red  | Auth  | Para qué                                  |
+| ------------ | ---- | ----- | ----------------------------------------- |
+| `stub`       | no   | n/a   | dev local, CI, demos sin AEAT             |
+| `preprod`    | HTTP | mTLS¹ | smoke real contra entorno AEAT pruebas    |
+| `production` | HTTP | mTLS¹ | producción real, solo NODE_ENV=production |
 
 ¹ mTLS pendiente de implementar — ver §7.4.
 
@@ -50,18 +50,18 @@ operador (UI)                       backend                         AEAT
 
 ## 2. Variables de entorno
 
-| Variable                            | Default                | Obligatoria en       | Comentario |
-| ----------------------------------- | ---------------------- | -------------------- | ---------- |
-| `VERIFACTU_MODE`                    | `stub`                 | -                    | `stub` \| `preprod` \| `production` |
-| `VERIFACTU_MASTER_KEY`              | -                      | preprod, production  | ≥ 32 chars. **NUNCA rotar a la ligera** — invalida todos los .p12 cifrados. Ver §6.2. |
-| `VERIFACTU_CERT_DIR`                | `/data/verifactu`      | preprod, production  | Volumen persistente, mode 0700. |
-| `VERIFACTU_AEAT_ENDPOINT`           | -                      | preprod, production  | URL servicio web AEAT. Ver `docs/adr/031` §G. |
-| `VERIFACTU_AEAT_TIMEOUT_MS`         | `15000`                | -                    | Timeout HTTP por intento. |
-| `VERIFACTU_SISTEMA_NOMBRE_RAZON`    | `Aubergine PMS S.L.`   | production           | Razón social del fabricante (nuestra). |
-| `VERIFACTU_SISTEMA_NIF`             | `B00000000`            | production           | NIF Aubergine PMS, S.L. |
-| `VERIFACTU_SISTEMA_NOMBRE`          | `Aubergine PMS`        | -                    | Nombre comercial constante. |
-| `VERIFACTU_SISTEMA_ID`              | `01`                   | production           | Asignado por AEAT al registrar el SIF. |
-| `VERIFACTU_SISTEMA_VERSION`         | `0.1.0`                | -                    | Versión del PMS — bumpea en cada release que toca Verifactu. |
+| Variable                         | Default              | Obligatoria en      | Comentario                                                                            |
+| -------------------------------- | -------------------- | ------------------- | ------------------------------------------------------------------------------------- |
+| `VERIFACTU_MODE`                 | `stub`               | -                   | `stub` \| `preprod` \| `production`                                                   |
+| `VERIFACTU_MASTER_KEY`           | -                    | preprod, production | ≥ 32 chars. **NUNCA rotar a la ligera** — invalida todos los .p12 cifrados. Ver §6.2. |
+| `VERIFACTU_CERT_DIR`             | `/data/verifactu`    | preprod, production | Volumen persistente, mode 0700.                                                       |
+| `VERIFACTU_AEAT_ENDPOINT`        | -                    | preprod, production | URL servicio web AEAT. Ver `docs/adr/031` §G.                                         |
+| `VERIFACTU_AEAT_TIMEOUT_MS`      | `15000`              | -                   | Timeout HTTP por intento.                                                             |
+| `VERIFACTU_SISTEMA_NOMBRE_RAZON` | `Aubergine PMS S.L.` | production          | Razón social del fabricante (nuestra).                                                |
+| `VERIFACTU_SISTEMA_NIF`          | `B00000000`          | production          | NIF Aubergine PMS, S.L.                                                               |
+| `VERIFACTU_SISTEMA_NOMBRE`       | `Aubergine PMS`      | -                   | Nombre comercial constante.                                                           |
+| `VERIFACTU_SISTEMA_ID`           | `01`                 | production          | Asignado por AEAT al registrar el SIF.                                                |
+| `VERIFACTU_SISTEMA_VERSION`      | `0.1.0`              | -                   | Versión del PMS — bumpea en cada release que toca Verifactu.                          |
 
 Guards del bootstrap (`VerifactuModule.onModuleInit`):
 
@@ -118,17 +118,18 @@ facturas por estado, DEAD_LETTER en últimos 30 días. Overall 🟢/🟡/🔴.
 
 **Estados que reporta como 🔴 (fail):**
 
-| Síntoma                                | Acción                                              |
-| -------------------------------------- | --------------------------------------------------- |
-| `Emisor: NOT SET`                      | Operador en `/admin/billing/emisor`. Ver §5.1.      |
-| `Cert: NOT UPLOADED`                   | Operador en `/admin/billing/certificate`. Ver §5.2. |
-| `Cert: REVOKED`                        | Subir uno nuevo. Ver §5.3.                          |
-| `Cert: EXPIRED`                        | Renovar con FNMT-RCM. Ver §5.8.                     |
-| `Cert: caduca en <30d`                 | Renovar con FNMT-RCM **ya**. Ver §5.8.              |
-| `DLQ 30d: N` con `N > 0`               | Revisar `error_message` de los DEAD_LETTER y       |
-|                                        | reintentar desde UI cuando aplique. Ver §5.6.       |
+| Síntoma                  | Acción                                              |
+| ------------------------ | --------------------------------------------------- |
+| `Emisor: NOT SET`        | Operador en `/admin/billing/emisor`. Ver §5.1.      |
+| `Cert: NOT UPLOADED`     | Operador en `/admin/billing/certificate`. Ver §5.2. |
+| `Cert: REVOKED`          | Subir uno nuevo. Ver §5.3.                          |
+| `Cert: EXPIRED`          | Renovar con FNMT-RCM. Ver §5.8.                     |
+| `Cert: caduca en <30d`   | Renovar con FNMT-RCM **ya**. Ver §5.8.              |
+| `DLQ 30d: N` con `N > 0` | Revisar `error_message` de los DEAD_LETTER y        |
+|                          | reintentar desde UI cuando aplique. Ver §5.6.       |
 
 Exit codes:
+
 - `0` — todos OK.
 - `1` — al menos uno en fail (cualquier 🔴).
 - `2` — error de conexión / DB.
@@ -156,6 +157,7 @@ Cuando el último intento aparece como `REJECTED` o `DEAD_LETTER`,
 aparece el botón **Reintentar envío** en la cabecera del histórico.
 
 **No se permite reintentar** si:
+
 - La factura está ya `ACCEPTED` (no tiene sentido).
 - Hay un intento `PENDING` o `IN_PROGRESS` (esperar).
 
@@ -197,6 +199,7 @@ re-activa (limpia `revokedAt` + `revokedReason`).
 ### 5.5 Submission queda en `PENDING` indefinidamente
 
 Posibles causas:
+
 - **NATS down**: ver health-check `EventbusService.isHealthy()`.
 - **Worker desactivado**: revisar logs por
   `SubmitWorker disabled (test env)` — `NODE_ENV` mal configurada.
@@ -204,6 +207,7 @@ Posibles causas:
   `SubmitWorker subscribed to verifactu.invoice.submit_requested`.
 
 Manualmente:
+
 ```sql
 SELECT id, attempt_number, status, queued_at, started_at, last_error
 FROM invoice_submissions
@@ -214,6 +218,7 @@ ORDER BY attempt_number DESC;
 ### 5.6 Submission queda en `DEAD_LETTER`
 
 El worker agotó los 5 intentos. Causas comunes:
+
 - Cert revocado entre intentos → subir uno nuevo + reintentar desde UI.
 - Endpoint AEAT caído > 5 reintentos → reintentar desde UI cuando AEAT
   vuelva.
@@ -227,10 +232,10 @@ Reintento manual desde UI: §4.2.
 `error_message` típicamente contiene `CodigoErrorRegistro` +
 `DescripcionErrorRegistro`. Códigos conocidos:
 
-| Código (ej) | Significado                          | Acción |
-| ----------- | ------------------------------------ | ------ |
-| 4102        | NIF inválido (cliente o emisor)      | Corregir en `/admin/billing/emisor` o reabrir factura. |
-| Otros       | Ver guía técnica AEAT publicada.     | Si es por payload, hotfix `buildVerifactuRegistroAlta()`. |
+| Código (ej) | Significado                      | Acción                                                    |
+| ----------- | -------------------------------- | --------------------------------------------------------- |
+| 4102        | NIF inválido (cliente o emisor)  | Corregir en `/admin/billing/emisor` o reabrir factura.    |
+| Otros       | Ver guía técnica AEAT publicada. | Si es por payload, hotfix `buildVerifactuRegistroAlta()`. |
 
 Reintentar **no** ayuda si el rechazo es por validación de negocio —
 hay que rehacer la factura.
@@ -238,6 +243,7 @@ hay que rehacer la factura.
 ### 5.8 Cert caduca pronto
 
 `/admin/billing/certificate` muestra:
+
 - Badge verde si quedan > 90 días.
 - Badge ámbar si quedan ≤ 90 días.
 - Badge rojo si quedan ≤ 30 días o ya caducado.
@@ -270,12 +276,14 @@ cifrados con la vieja. Pasos:
    con la NUEVA master key (env var ya cambiada).
 
    Alternativa scriptable:
+
    ```sh
    # En la máquina con AMBAS keys disponibles:
    #  1) Leer blob cifrado, descifrar con vieja, re-cifrar con nueva.
    #  2) Sobrescribir el blob en disco.
    # (script de migración pendiente — `scripts/rotate-verifactu-master-key.ts`)
    ```
+
 3. Antes de reiniciar la API con la nueva key, hacer backup del
    directorio `/data/verifactu`.
 4. Reiniciar la API con `VERIFACTU_MASTER_KEY=<nueva>`.
@@ -358,13 +366,14 @@ Métricas OpenTelemetry expuestas por el `SubmitWorker` (meter
 
 - **`verifactu_submit_total`** (Counter). Labels:
   - `outcome`: `accepted | rejected | sign_error_nak |
-    sign_error_dead_letter | aeat_error_nak | aeat_error_dead_letter |
-    invariant_violated | invoice_not_found | idempotent_ack`.
+sign_error_dead_letter | aeat_error_nak | aeat_error_dead_letter |
+invariant_violated | invoice_not_found | idempotent_ack`.
   - `mode`: `stub | preprod | production`.
 - **`verifactu_submit_duration_ms`** (Histogram, ms). Mismas labels.
   Mide el handler completo desde `findUnique(Invoice)` hasta return.
 
 Alertas sugeridas en Grafana (TODO `infra/grafana/dashboards/verifactu.json`):
+
 - Tasa `outcome=*dead_letter` > 0 en 5 min → page (algo bloqueado).
 - Tasa `outcome=rejected` sostenida > umbral → review (AEAT validando
   duro algo del payload).

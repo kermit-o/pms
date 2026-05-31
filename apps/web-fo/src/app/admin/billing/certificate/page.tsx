@@ -68,8 +68,8 @@ export default async function CertificatePage() {
         </p>
         <h1 className="text-3xl font-semibold text-aubergine-700">Certificado Verifactu</h1>
         <p className="text-sm text-aubergine-700/70">
-          Certificado digital (PKCS#12) usado para firmar las facturas que se envían a la AEAT.
-          El archivo se cifra en reposo (AES-256-GCM) y nunca se devuelve sin descifrar.
+          Certificado digital (PKCS#12) usado para firmar las facturas que se envían a la AEAT. El
+          archivo se cifra en reposo (AES-256-GCM) y nunca se devuelve sin descifrar.
         </p>
       </header>
 
@@ -87,8 +87,8 @@ export default async function CertificatePage() {
         </h2>
         <p className="mt-1 text-sm text-aubergine-700/70">
           Selecciona el archivo .p12 emitido por tu Autoridad de Certificación (FNMT, Camerfirma,
-          etc.) e introduce la contraseña. La contraseña no se guarda; sólo se usa para validar
-          que el archivo se puede abrir y extraer los metadatos.
+          etc.) e introduce la contraseña. La contraseña no se guarda; sólo se usa para validar que
+          el archivo se puede abrir y extraer los metadatos.
         </p>
         <form action={uploadAction} className="mt-4 space-y-4">
           <label className="block text-xs font-medium uppercase tracking-wide text-aubergine-500">
@@ -188,7 +188,10 @@ function CurrentCertificateCard({
       </div>
 
       {!isRevoked && (
-        <form action={revokeAction} className="border-t border-aubergine-100 bg-aubergine-50/40 p-6">
+        <form
+          action={revokeAction}
+          className="border-t border-aubergine-100 bg-aubergine-50/40 p-6"
+        >
           <h3 className="text-sm font-semibold text-aubergine-700">Revocar certificado</h3>
           <p className="mt-1 text-xs text-aubergine-700/70">
             Marca el certificado como revocado. Las facturas dejarán de poder firmarse hasta que

@@ -149,8 +149,7 @@ export class SubmitWorker implements OnModuleInit {
 
     const attempt = await this.acquireAttempt(invoice.id, invoice.tenantId);
     if (!invoice.tenant.nif || !invoice.tenant.razonSocial || !invoice.huella) {
-      const reason =
-        'Invariant violated: invoice missing emisor data or huella before signing';
+      const reason = 'Invariant violated: invoice missing emisor data or huella before signing';
       this.log.error(`${reason} invoice=${payload.invoiceNumber}`);
       const r = await this.deadLetter(
         invoice.id,
@@ -289,7 +288,10 @@ export class SubmitWorker implements OnModuleInit {
     tenantId: string,
   ): Promise<{ id: string; attemptNumber: number }> {
     const pending = await this.prisma.invoiceSubmission.findFirst({
-      where: { invoiceId, status: { in: [InvoiceSubmissionStatus.PENDING, InvoiceSubmissionStatus.IN_PROGRESS] } },
+      where: {
+        invoiceId,
+        status: { in: [InvoiceSubmissionStatus.PENDING, InvoiceSubmissionStatus.IN_PROGRESS] },
+      },
       orderBy: { attemptNumber: 'desc' },
       select: { id: true, attemptNumber: true },
     });
@@ -424,7 +426,9 @@ export class SubmitWorker implements OnModuleInit {
         },
       );
     }
-    this.log.error(`Invoice ${invoiceNumber} DEAD_LETTER after ${attemptNumber} attempts: ${message}`);
+    this.log.error(
+      `Invoice ${invoiceNumber} DEAD_LETTER after ${attemptNumber} attempts: ${message}`,
+    );
     return 'term';
   }
 }

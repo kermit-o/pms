@@ -1,11 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.schema';
-import type {
-  AeatClient,
-  AeatSubmitRequest,
-  AeatSubmitResult,
-} from './aeat-client.interface';
+import type { AeatClient, AeatSubmitRequest, AeatSubmitResult } from './aeat-client.interface';
 
 /**
  * Cliente AEAT contra el endpoint de **pre-producción** (Verifactu preprod).
@@ -96,9 +92,7 @@ export class PreprodAeatClient implements AeatClient {
 
     if (responseCode >= 500) {
       // Servidor caído → transitorio. Lanzamos para que worker reintente.
-      throw new Error(
-        `AEAT returned ${responseCode}: ${truncate(responseBody, 200)}`,
-      );
+      throw new Error(`AEAT returned ${responseCode}: ${truncate(responseBody, 200)}`);
     }
 
     if (responseCode >= 400) {

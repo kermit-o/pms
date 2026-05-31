@@ -335,9 +335,7 @@ export class InvoiceService {
       invoiceId: invoice.id,
       invoiceNumber,
     });
-    this.log.log(
-      `Requeued invoice ${invoiceNumber} tenant=${user.tenantId} by ${user.sub}`,
-    );
+    this.log.log(`Requeued invoice ${invoiceNumber} tenant=${user.tenantId} by ${user.sub}`);
     return { invoiceId: invoice.id, invoiceNumber };
   }
 

@@ -1,12 +1,7 @@
 import { Logger, Module, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.schema';
-import {
-  AEAT_CLIENT,
-  AeatClientFactory,
-  StubAeatClient,
-  type AeatClient,
-} from './aeat';
+import { AEAT_CLIENT, AeatClientFactory, StubAeatClient, type AeatClient } from './aeat';
 import { CertificateVaultService } from './certificate-vault.service';
 import { EmisorService } from './emisor.service';
 import { InvoiceService } from './invoice.service';
@@ -46,13 +41,7 @@ import { VerifactuController } from './verifactu.controller';
     SignerService,
     SubmitWorker,
   ],
-  exports: [
-    AEAT_CLIENT,
-    InvoiceService,
-    CertificateVaultService,
-    EmisorService,
-    SignerService,
-  ],
+  exports: [AEAT_CLIENT, InvoiceService, CertificateVaultService, EmisorService, SignerService],
 })
 export class VerifactuModule implements OnModuleInit {
   private readonly log = new Logger(VerifactuModule.name);

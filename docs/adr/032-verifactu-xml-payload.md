@@ -102,11 +102,11 @@ RegFactuSistemaFacturacion                            ⚠ root, por verificar
 Códigos relevantes para nuestro caso boutique-hotel (Verifactu permite
 más, no los usamos en MVP):
 
-| Código | Descripción                          | Cuándo se emite |
-| ------ | ------------------------------------ | --------------- |
-| F1     | Factura completa                     | Default. Cliente identificado. |
-| F2     | Factura simplificada                 | Total ≤ 400 € sin desglose IVA exigible, o ≤ 3.000 € en hostelería. |
-| R1-R5  | Rectificativas (varios subtipos)     | Cuando se anula/modifica una emitida. **No MVP** — fuera de scope hasta W3+. |
+| Código | Descripción                      | Cuándo se emite                                                              |
+| ------ | -------------------------------- | ---------------------------------------------------------------------------- |
+| F1     | Factura completa                 | Default. Cliente identificado.                                               |
+| F2     | Factura simplificada             | Total ≤ 400 € sin desglose IVA exigible, o ≤ 3.000 € en hostelería.          |
+| R1-R5  | Rectificativas (varios subtipos) | Cuando se anula/modifica una emitida. **No MVP** — fuera de scope hasta W3+. |
 
 **Decisión MVP propuesta:** Por defecto F1 si el cliente tiene NIF;
 F2 si la factura es ≤ 3.000 € **y** el cliente no proporcionó NIF
@@ -122,7 +122,7 @@ backend con `BadRequest` "Sprint 14 no soporta rectificativas".
 Mecanismo "blockchain ligero" del art. 8 RD 1007/2023:
 
 1. Cada registro lleva `Huella = SHA256(huella_registro_anterior +
-   campos_identificativos_del_actual_serializados)`.
+campos_identificativos_del_actual_serializados)`.
 2. El primer registro de la cadena por emisor lleva `<PrimerRegistro>`
    en lugar de `<RegistroAnterior>`.
 3. AEAT rechaza un registro cuyo `Huella` no se valide contra el
@@ -213,16 +213,17 @@ piloto multi-property con sociedades distintas, migramos a 5.c.
 AEAT requiere identificar el software emisor con cinco campos. Tres son
 constantes en build, dos requieren registro previo con AEAT.
 
-| Campo                       | Valor propuesto                       | Comentario |
-| --------------------------- | ------------------------------------- | ---------- |
-| NombreRazon                 | "Aubergine PMS, S.L." (nuestra SL)    | Razón social del fabricante. |
-| NIF                         | NIF de Aubergine PMS, S.L.            | El PO lo provee. |
-| NombreSistemaInformatico    | "Aubergine PMS"                       | Constante en build. |
-| IdSistemaInformatico        | Asignado por AEAT al registrar el PMS | **Trámite operativo PO**. |
-| Version                     | `pkg.version` (e.g. "1.0.0")          | Constante por release. |
-| NumeroInstalacion           | UUID por instancia / tenant           | Idea: `tenantId` (UUID v4). |
+| Campo                    | Valor propuesto                       | Comentario                   |
+| ------------------------ | ------------------------------------- | ---------------------------- |
+| NombreRazon              | "Aubergine PMS, S.L." (nuestra SL)    | Razón social del fabricante. |
+| NIF                      | NIF de Aubergine PMS, S.L.            | El PO lo provee.             |
+| NombreSistemaInformatico | "Aubergine PMS"                       | Constante en build.          |
+| IdSistemaInformatico     | Asignado por AEAT al registrar el PMS | **Trámite operativo PO**.    |
+| Version                  | `pkg.version` (e.g. "1.0.0")          | Constante por release.       |
+| NumeroInstalacion        | UUID por instancia / tenant           | Idea: `tenantId` (UUID v4).  |
 
 **Pregunta al PO:**
+
 1. NIF de la sociedad Aubergine PMS, S.L. (para incrustarlo en build).
 2. Estado del registro como SistemaInformatico ante AEAT — **bloqueante
    para envío real**, no para preprod (preprod usa un id de prueba).
@@ -271,7 +272,7 @@ mínimos, no para hoteles con restaurante.
    anclar el test).
 3. **`buildVerifactuRegistroAlta()`** que reemplaza `buildInvoiceXml()`.
    Genera el XML conforme al XSD oficial. Marcado con `// VERIFICADO
-   CONTRA XSD vYYYY-MM-DD` al final del review contra el XSD vigente.
+CONTRA XSD vYYYY-MM-DD` al final del review contra el XSD vigente.
 4. **Tests del generador**: snapshot de XML esperado para 3-4 facturas
    tipo (F1 con NIF, F1 sin NIF, F2 simplificada). Comparación contra
    un golden file revisado a mano.
@@ -287,15 +288,15 @@ suma ~0.5d más).
 
 ## 9. Decisiones pendientes (resumen para el PO)
 
-| # | Decisión                                                                  |
-| - | ------------------------------------------------------------------------- |
-| A | Heurística F1/F2 propuesta en §3, ¿OK?                                    |
-| B | Modelo IDEmisor: §5.a (un emisor por tenant) o §5.b (por property)?       |
-| C | NIF de la sociedad Aubergine PMS, S.L. (SistemaInformatico).              |
-| D | Estado del registro PMS ante AEAT (preprod IdSistemaInformatico ya?).     |
-| E | `NumeroInstalacion = tenantId`, ¿OK?                                      |
-| F | IVA por línea: ¿incluir en W2 o sprint dedicado? Si no, ¿asumimos 10%?    |
-| G | XSD oficial vigente: ¿puedes confirmar URL / versión que debo seguir?     |
+| #   | Decisión                                                               |
+| --- | ---------------------------------------------------------------------- |
+| A   | Heurística F1/F2 propuesta en §3, ¿OK?                                 |
+| B   | Modelo IDEmisor: §5.a (un emisor por tenant) o §5.b (por property)?    |
+| C   | NIF de la sociedad Aubergine PMS, S.L. (SistemaInformatico).           |
+| D   | Estado del registro PMS ante AEAT (preprod IdSistemaInformatico ya?).  |
+| E   | `NumeroInstalacion = tenantId`, ¿OK?                                   |
+| F   | IVA por línea: ¿incluir en W2 o sprint dedicado? Si no, ¿asumimos 10%? |
+| G   | XSD oficial vigente: ¿puedes confirmar URL / versión que debo seguir?  |
 
 ---
 

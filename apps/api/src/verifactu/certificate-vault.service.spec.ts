@@ -2,7 +2,11 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { BadRequestException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as forge from 'node-forge';
 import type { AuthUser } from '../auth';
@@ -57,26 +61,28 @@ interface VaultRow {
   revokedReason: string | null;
 }
 
-function makeService(opts: {
-  certDir: string;
-  masterKey?: string;
-  initialRow?: VaultRow | null;
-}) {
+function makeService(opts: { certDir: string; masterKey?: string; initialRow?: VaultRow | null }) {
   let row: VaultRow | null = opts.initialRow ?? null;
 
   const tx = {
     verifactuCertificate: {
       findFirst: vi.fn(async () => row),
-      upsert: vi.fn(async ({ create }: { create: Omit<VaultRow, 'id' | 'uploadedAt' | 'revokedAt' | 'revokedReason'> }) => {
-        row = {
-          id: 'cert-1',
-          uploadedAt: new Date(),
-          revokedAt: null,
-          revokedReason: null,
-          ...create,
-        };
-        return { id: row.id, uploadedAt: row.uploadedAt, revokedAt: row.revokedAt };
-      }),
+      upsert: vi.fn(
+        async ({
+          create,
+        }: {
+          create: Omit<VaultRow, 'id' | 'uploadedAt' | 'revokedAt' | 'revokedReason'>;
+        }) => {
+          row = {
+            id: 'cert-1',
+            uploadedAt: new Date(),
+            revokedAt: null,
+            revokedReason: null,
+            ...create,
+          };
+          return { id: row.id, uploadedAt: row.uploadedAt, revokedAt: row.revokedAt };
+        },
+      ),
       update: vi.fn(async ({ data }: { data: Partial<VaultRow> }) => {
         if (!row) throw new Error('no row');
         row = { ...row, ...data };
@@ -85,12 +91,16 @@ function makeService(opts: {
     },
   };
   const prisma = {
-    withTenant: vi.fn(async <T,>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
+    withTenant: vi.fn(async <T>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
   } as unknown as PrismaService;
 
   const config = {
     get: (key: keyof Env) =>
-      key === 'VERIFACTU_MASTER_KEY' ? opts.masterKey : key === 'VERIFACTU_CERT_DIR' ? opts.certDir : undefined,
+      key === 'VERIFACTU_MASTER_KEY'
+        ? opts.masterKey
+        : key === 'VERIFACTU_CERT_DIR'
+          ? opts.certDir
+          : undefined,
   } as unknown as ConfigService<Env, true>;
 
   return {
@@ -151,7 +161,8 @@ describe('CertificateVaultService', () => {
       const cert = pfx.getBags({ bagType: certBagOid })[certBagOid]?.[0]?.cert;
       expect(cert).toBeDefined();
       const cn = (cert!.subject.attributes as Array<{ shortName?: string; value?: unknown }>)
-        .find((a) => a.shortName === 'CN')?.value?.toString();
+        .find((a) => a.shortName === 'CN')
+        ?.value?.toString();
       expect(cn).toBe('AUBERGINE HOTEL S.L.');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
@@ -230,9 +241,7 @@ describe('CertificateVaultService', () => {
         notBefore: new Date(Date.now() + 7 * 24 * 3600 * 1000), // dentro de 1 semana
         notAfter: new Date(Date.now() + 365 * 24 * 3600 * 1000),
       });
-      await expect(service.upload(USER, 'corr-1', future, 'pw')).rejects.toThrow(
-        /not yet valid/,
-      );
+      await expect(service.upload(USER, 'corr-1', future, 'pw')).rejects.toThrow(/not yet valid/);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

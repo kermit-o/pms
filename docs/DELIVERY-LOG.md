@@ -92,6 +92,7 @@ Nueva sección §3.3 que documenta cómo usar `scripts/verifactu-health-check.ts
 antes de uso real o para diagnóstico desde soporte.
 
 Cubre:
+
 - Comandos con/sin `--tenant`, con/sin `--json`.
 - Tabla de los 6 estados 🔴 que reporta y la acción para cada uno
   (con cross-refs a §5.x del propio runbook).
@@ -121,6 +122,7 @@ por el otro **y** que el estado compartido (huella encadenada) se
 mantiene consistente entre dos facturas sucesivas.
 
 Setup:
+
 - `InMemoryStore` con tenants, folios, invoices, submissions y
   generador determinista de UUIDs.
 - `prisma` mock que opera contra el store y respeta los `where`/
@@ -169,6 +171,7 @@ primer envío real a AEAT y como herramienta SRE en producción para
 detectar tenants que no podrán emitir.
 
 Reporta por tenant:
+
 - **Emisor**: NIF + razón social poblados (rojo si no).
 - **Certificado**: existe, no revocado, días hasta caducidad
   (verde ≥90d, amarillo <90d, rojo <30d o caducado o revocado).
@@ -177,12 +180,14 @@ Reporta por tenant:
 - **Overall**: 🟢 ok / 🟡 warn / 🔴 fail.
 
 Uso:
+
 ```
 DIRECT_URL=postgres://... \
   pnpm tsx scripts/verifactu-health-check.ts [--tenant <uuid>] [--json]
 ```
 
 Exit codes:
+
 - 0 — todos OK.
 - 1 — al menos un tenant en fail (cualquier 🔴).
 - 2 — error conexión / DB.
@@ -209,6 +214,7 @@ separados (`48edec9`, `65ddd7e`, este):
 ### F · Validación temporal del cert al subir
 
 `parseAndRepackP12` rechaza ahora:
+
 - `notBefore > now` → BadRequest "Certificate not yet valid".
 - `notAfter <= now` → BadRequest "Certificate already expired".
 
@@ -225,6 +231,7 @@ blob falla. Modo `--dry-run`.
 ### E · Métricas OpenTelemetry del SubmitWorker
 
 Meter `pms-api/verifactu`:
+
 - `verifactu_submit_total` (Counter) con labels `outcome` (9 valores) +
   `mode` (stub/preprod/production).
 - `verifactu_submit_duration_ms` (Histogram) — handler completo.
@@ -240,12 +247,14 @@ para Grafana.
 **Sigue pendiente (en esta rama).**
 
 Bloqueado en input PO:
+
 - mTLS en PreprodAeatClient (espera cert FNMT pruebas).
 - Verificación nombres XSD ⚠ (espera XSD vigente).
 - Smoke test AEAT preprod.
 - `VERIFACTU_SISTEMA_*` con valores reales.
 
 No bloqueado pero fuera de scope W2:
+
 - IVA por línea (sprint dedicado).
 - Rectificativas R1-R5 (sprint dedicado).
 - Dashboard Grafana `infra/grafana/dashboards/verifactu.json`.
@@ -260,6 +269,7 @@ No bloqueado pero fuera de scope W2:
 **Qué cambió.**
 
 Runbook operativo del módulo Verifactu. Cubre:
+
 - §1 Mapa rápido del bucle end-to-end (operador → backend → AEAT).
 - §2 Tabla completa de env vars + cuándo son obligatorias + guards
   del bootstrap.
@@ -354,16 +364,17 @@ Implementa `AeatClient` (modo `preprod`). Sustituye el `throw` que había
 en el factory para el modo.
 
 Pipeline:
-  1. POST al endpoint con `Content-Type: application/xml; charset=utf-8`
-     y body = `signedXml`.
-  2. `AbortController` para timeout configurable.
-  3. Parsing de respuesta:
-     - HTTP 5xx → throw → SubmitWorker reintenta.
-     - HTTP 4xx → `REJECTED` con `errorMessage` extraído.
-     - HTTP 2xx + `<CSV>` (o `<*:Csv>` namespaced) → `ACCEPTED`.
-     - HTTP 2xx sin CSV (con `<CodigoErrorRegistro>` típicamente) →
-       `REJECTED`.
-     - Network error → throw → SubmitWorker reintenta.
+
+1. POST al endpoint con `Content-Type: application/xml; charset=utf-8`
+   y body = `signedXml`.
+2. `AbortController` para timeout configurable.
+3. Parsing de respuesta:
+   - HTTP 5xx → throw → SubmitWorker reintenta.
+   - HTTP 4xx → `REJECTED` con `errorMessage` extraído.
+   - HTTP 2xx + `<CSV>` (o `<*:Csv>` namespaced) → `ACCEPTED`.
+   - HTTP 2xx sin CSV (con `<CodigoErrorRegistro>` típicamente) →
+     `REJECTED`.
+   - Network error → throw → SubmitWorker reintenta.
 
 ### Estado de autenticación: **mTLS pendiente**
 
@@ -441,17 +452,17 @@ estimación del ADR-031 (~12 deps).
 Refactor completo: deja de construir `<ds:Signature>` a mano y delega
 en `xadesjs.SignedXml.Sign()`. Pipeline:
 
-  1. Carga `.p12` del vault → forge → key + cert.
-  2. `forge.pki.wrapRsaPrivateKey()` → PKCS#8 DER → `crypto.subtle.importKey()`
-     → CryptoKey (RSASSA-PKCS1-v1_5 / SHA-256).
-  3. Parsea XML con `@xmldom/xmldom`.
-  4. `signedXml.Sign(algorithm, key, doc, options)` con:
-     - `references: [{ hash: 'SHA-256', transforms: ['enveloped', 'c14n'], uri: '' }]`
-     - `signingCertificate: certDerB64` → `<xades:SigningCertificate>`
-     - `x509: [certDerB64]` → `<ds:KeyInfo>/<ds:X509Data>/<ds:X509Certificate>`
-     - `signingTime: { value: new Date() }` → `<xades:SigningTime>`
-  5. Inyecta `<ds:Signature>` como último hijo del raíz (enveloped).
-  6. Serializa con `XMLSerializer` y devuelve.
+1. Carga `.p12` del vault → forge → key + cert.
+2. `forge.pki.wrapRsaPrivateKey()` → PKCS#8 DER → `crypto.subtle.importKey()`
+   → CryptoKey (RSASSA-PKCS1-v1_5 / SHA-256).
+3. Parsea XML con `@xmldom/xmldom`.
+4. `signedXml.Sign(algorithm, key, doc, options)` con:
+   - `references: [{ hash: 'SHA-256', transforms: ['enveloped', 'c14n'], uri: '' }]`
+   - `signingCertificate: certDerB64` → `<xades:SigningCertificate>`
+   - `x509: [certDerB64]` → `<ds:KeyInfo>/<ds:X509Data>/<ds:X509Certificate>`
+   - `signingTime: { value: new Date() }` → `<xades:SigningTime>`
+5. Inyecta `<ds:Signature>` como último hijo del raíz (enveloped).
+6. Serializa con `XMLSerializer` y devuelve.
 
 Bootstrap en `onModuleInit()` (idempotente): inyecta
 `globalThis.crypto` como engine WebCrypto y `{DOMParser, XMLSerializer, xpath}`
@@ -460,17 +471,19 @@ como dependencias node de xml-core.
 ### Estructura del XML firmado
 
 Ahora el output incluye:
-  - `<ds:Signature>` con DOS `<ds:Reference>`: la del doc (URI="") y la
-    de `SignedProperties` (URI="#xades-…").
-  - `<ds:KeyInfo>` con `<ds:X509Data>/<ds:X509Certificate>` (cert completo).
-  - `<ds:Object>/<xades:QualifyingProperties>` con:
-    - `<xades:SignedProperties>` con:
-      - `<xades:SignedSignatureProperties>` con:
-        - `<xades:SigningTime>`
-        - `<xades:SigningCertificate>` con CertDigest + IssuerSerial.
+
+- `<ds:Signature>` con DOS `<ds:Reference>`: la del doc (URI="") y la
+  de `SignedProperties` (URI="#xades-…").
+- `<ds:KeyInfo>` con `<ds:X509Data>/<ds:X509Certificate>` (cert completo).
+- `<ds:Object>/<xades:QualifyingProperties>` con:
+  - `<xades:SignedProperties>` con:
+    - `<xades:SignedSignatureProperties>` con:
+      - `<xades:SigningTime>`
+      - `<xades:SigningCertificate>` con CertDigest + IssuerSerial.
 
 Es **XAdES-BES completo según ETSI TS 101 903**. AEAT acepta este perfil
-+ con la verificación de canonicalización exacta que hace xml-core.
+
+- con la verificación de canonicalización exacta que hace xml-core.
 
 **Tests.**
 
@@ -512,41 +525,42 @@ nativo de Node 20, que es el mismo motor que usaría un verificador.
 
 Generador del XML conforme al `RegistroAlta` Verifactu. Estructura:
 
-  - `<RegFactuSistemaFacturacion xmlns="…SuministroLR.xsd">` (root)
-  - `<RegistroAlta>` con:
-    - `<IDVersion>1.0</IDVersion>`
-    - `<IDFactura>` (`IDEmisorFactura` con NIF+NombreRazon, `NumSerieFactura`
-      `A-42`, `FechaExpedicionFactura` `DD-MM-YYYY`).
-    - `<NombreRazonEmisor>`, `<TipoFactura>` (F1/F2), `<DescripcionOperacion>`.
-    - `<Destinatarios>` solo si hay NIF cliente (F1); omitido en F2.
-    - `<Desglose>` con un `DetalleDesglose` único al 10 % de alojamiento
-      (ADR-032 pregunta F pendiente — IVA por línea queda para sprint
-      dedicado).
-    - `<CuotaTotal>`, `<ImporteTotal>` con 2 decimales.
-    - `<Encadenamiento>` con `<PrimerRegistro>S</PrimerRegistro>` o
-      `<RegistroAnterior>` (con NIF emisor + huella anterior).
-    - `<SistemaInformatico>` con 6 campos desde env vars.
-    - `<FechaHoraHusoGenRegistro>` ISO 8601.
-    - `<TipoHuella>01</TipoHuella>` (SHA-256) + `<Huella>`.
+- `<RegFactuSistemaFacturacion xmlns="…SuministroLR.xsd">` (root)
+- `<RegistroAlta>` con:
+  - `<IDVersion>1.0</IDVersion>`
+  - `<IDFactura>` (`IDEmisorFactura` con NIF+NombreRazon, `NumSerieFactura`
+    `A-42`, `FechaExpedicionFactura` `DD-MM-YYYY`).
+  - `<NombreRazonEmisor>`, `<TipoFactura>` (F1/F2), `<DescripcionOperacion>`.
+  - `<Destinatarios>` solo si hay NIF cliente (F1); omitido en F2.
+  - `<Desglose>` con un `DetalleDesglose` único al 10 % de alojamiento
+    (ADR-032 pregunta F pendiente — IVA por línea queda para sprint
+    dedicado).
+  - `<CuotaTotal>`, `<ImporteTotal>` con 2 decimales.
+  - `<Encadenamiento>` con `<PrimerRegistro>S</PrimerRegistro>` o
+    `<RegistroAnterior>` (con NIF emisor + huella anterior).
+  - `<SistemaInformatico>` con 6 campos desde env vars.
+  - `<FechaHoraHusoGenRegistro>` ISO 8601.
+  - `<TipoHuella>01</TipoHuella>` (SHA-256) + `<Huella>`.
 
 **Honestidad sobre nombres XSD (CLAUDE.md §9):** cada elemento lleva
 marcador inline:
-  - ✅ confirmado por texto regulatorio del RD/Orden.
-  - ⚠ por verificar contra el XSD vigente. Coincide con la guía
-    técnica pública pero el nombre exacto puede variar entre
-    versiones — **antes de envío real a preprod/producción hay que
-    validar contra el XSD activo**.
+
+- ✅ confirmado por texto regulatorio del RD/Orden.
+- ⚠ por verificar contra el XSD vigente. Coincide con la guía
+  técnica pública pero el nombre exacto puede variar entre
+  versiones — **antes de envío real a preprod/producción hay que
+  validar contra el XSD activo**.
 
 ### Env vars `SistemaInformatico`
 
 Cinco vars nuevas en `env.schema.ts` con defaults razonables para dev:
 
-  - `VERIFACTU_SISTEMA_NOMBRE_RAZON` (default "Aubergine PMS S.L.")
-  - `VERIFACTU_SISTEMA_NIF` (default "B00000000" placeholder)
-  - `VERIFACTU_SISTEMA_NOMBRE` (default "Aubergine PMS")
-  - `VERIFACTU_SISTEMA_ID` (default "01" — placeholder hasta el alta
-    AEAT del PMS, pregunta D del ADR-032)
-  - `VERIFACTU_SISTEMA_VERSION` (default "0.1.0")
+- `VERIFACTU_SISTEMA_NOMBRE_RAZON` (default "Aubergine PMS S.L.")
+- `VERIFACTU_SISTEMA_NIF` (default "B00000000" placeholder)
+- `VERIFACTU_SISTEMA_NOMBRE` (default "Aubergine PMS")
+- `VERIFACTU_SISTEMA_ID` (default "01" — placeholder hasta el alta
+  AEAT del PMS, pregunta D del ADR-032)
+- `VERIFACTU_SISTEMA_VERSION` (default "0.1.0")
 
 `NumeroInstalacion` = `tenantId` (decisión E del ADR-032).
 
@@ -856,6 +870,7 @@ el blocker real frente al validador AEAT es C14N exacta + estructura
 XAdES exacta — problema resuelto por xadesjs, abierto por las otras.
 
 **Decisiones pendientes para el PO** (§6):
+
 1. ¿Apruebas `xadesjs`?
 2. Cuándo facilitas credenciales AEAT preprod + cert FNMT-RCM de
    pruebas.
@@ -889,6 +904,7 @@ he tocado código.
 ### Catálogo de eventos
 
 Añadidos al catálogo de eventos:
+
 - `verifactu.invoice.submitted` — `{invoiceId, invoiceNumber, csv, attemptNumber}`.
 - `verifactu.invoice.rejected` — `{..., errorMessage, attemptNumber, isDeadLetter}`.
 
@@ -933,6 +949,7 @@ cerrado en modo `stub`: el operador emite factura → worker la firma y
 evento downstream.
 
 Para envío real a AEAT preprod faltan dos piezas, ambas documentadas:
+
 1. **XAdES-BES qualifying properties** (pendiente ADR sobre librería).
 2. **`PreprodAeatClient` HTTP real** (próximo commit, ya es viable
    porque el contrato `AeatClient` está fijo).
@@ -941,13 +958,13 @@ Para envío real a AEAT preprod faltan dos piezas, ambas documentadas:
 
 - Verifactu suite: **55/55** verde (+10 nuevos).
   - `submit.worker.spec.ts` (7 tests):
-    * invoice no existe → term.
-    * invoice ya ACCEPTED → ack idempotente.
-    * AEAT ACCEPTED → invoice ACCEPTED + submission ACCEPTED + publish.
-    * AEAT REJECTED → REJECTED + publish (isDeadLetter=true) + term.
-    * signer throw + intentos restantes → nak.
-    * signer throw en último intento → DEAD_LETTER + publish + term.
-    * AEAT throw transitorio → nak.
+    - invoice no existe → term.
+    - invoice ya ACCEPTED → ack idempotente.
+    - AEAT ACCEPTED → invoice ACCEPTED + submission ACCEPTED + publish.
+    - AEAT REJECTED → REJECTED + publish (isDeadLetter=true) + term.
+    - signer throw + intentos restantes → nak.
+    - signer throw en último intento → DEAD_LETTER + publish + term.
+    - AEAT throw transitorio → nak.
   - `invoice-xml.spec.ts` (3 tests): canonical XML estable, omisión de
     Nif/Address opcionales, escape XML de caracteres especiales.
 - Typecheck + lint `@pms/api` verdes.
@@ -1239,12 +1256,12 @@ existe en claro en memoria durante la firma".
 **Tests.**
 
 - Verifactu suite: **29/29** verde
-  - certificate-crypto       5 tests (round-trip, IV aleatorio, fallo wrong key/tenant)
-  - certificate-vault        6 tests (upload, revoke, load, fallos config)
-  - invoice-totals           4 tests
-  - invoice.service          6 tests
-  - stub-aeat-client         3 tests
-  - verifactu.module guards  5 tests
+  - certificate-crypto 5 tests (round-trip, IV aleatorio, fallo wrong key/tenant)
+  - certificate-vault 6 tests (upload, revoke, load, fallos config)
+  - invoice-totals 4 tests
+  - invoice.service 6 tests
+  - stub-aeat-client 3 tests
+  - verifactu.module guards 5 tests
 - Typecheck + lint `@pms/api` verdes.
 
 **Sigue pendiente (commits sucesivos en esta misma rama).**
@@ -1269,7 +1286,7 @@ existe en claro en memoria durante la firma".
 
 - **`VerifactuController`** (`apps/api/src/verifactu/verifactu.controller.ts`):
   expone `POST /verifactu/invoices/issue`. RBAC vía `@Roles('tenant_admin',
-  'front_desk')` (los guards globales `JwtAuthGuard` + `RolesGuard` se
+'front_desk')` (los guards globales `JwtAuthGuard` + `RolesGuard` se
   aplican automáticamente). DTO Zod (`IssueInvoiceDto`) con `safeParse` →
   `BadRequestException` con detalle de issues.
 - **Proxy Next.js** en `apps/web-fo/src/app/api/verifactu/invoices/issue/route.ts`:
@@ -1335,7 +1352,7 @@ misma garantía de idempotencia y RBAC del resto del PMS.
   5. Allocate `number = MAX(number)+1` per `(tenant, series)`. Serie por
      defecto `'A'` (validada con `/^[A-Z][A-Z0-9-]{0,7}$/`).
   6. `INSERT invoice (status=ISSUED)` + `INSERT invoice_submission
-     (attempt_number=1, status=PENDING)`. El worker se encarga del envío
+(attempt_number=1, status=PENDING)`. El worker se encarga del envío
      real cuando exista.
 - Tras commit, publica `verifactu.invoice.submit_requested` con
   `{invoiceId, invoiceNumber}` al stream NATS.
@@ -1366,7 +1383,7 @@ contra el endpoint de pre-producción cuando el `.p12` esté cargado.
 **Tests.**
 
 - Vitest verifactu suite: 18/18 verde (4 totals + 6 service + 3 stub-aeat
-  + 5 module-guards).
+  - 5 module-guards).
 - Typecheck (`@pms/api`, `@pms/web-fo`) y lint (`@pms/api`) verdes.
 
 **Sigue pendiente (commits sucesivos en esta misma rama).**

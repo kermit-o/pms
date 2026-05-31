@@ -240,8 +240,7 @@ function parseAndRepackP12(
   const keyBagAltOid = forge.pki.oids.keyBag as string;
   const keyBags = p12.getBags({ bagType: keyBagOid });
   const altKeyBags = p12.getBags({ bagType: keyBagAltOid });
-  const privateKey =
-    keyBags[keyBagOid]?.[0]?.key ?? altKeyBags[keyBagAltOid]?.[0]?.key;
+  const privateKey = keyBags[keyBagOid]?.[0]?.key ?? altKeyBags[keyBagAltOid]?.[0]?.key;
   if (!privateKey) {
     throw new BadRequestException('PKCS#12 archive does not contain a private key');
   }

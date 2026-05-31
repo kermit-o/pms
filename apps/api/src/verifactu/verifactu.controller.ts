@@ -55,11 +55,7 @@ export class VerifactuController {
 
   @Post('invoices/issue')
   @Roles('tenant_admin', 'front_desk')
-  async issue(
-    @CurrentUser() user: AuthUser,
-    @Req() req: FastifyRequest,
-    @Body() body: unknown,
-  ) {
+  async issue(@CurrentUser() user: AuthUser, @Req() req: FastifyRequest, @Body() body: unknown) {
     const parsed = IssueInvoiceDto.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.issues.map((i) => i.message).join('; '));

@@ -76,11 +76,7 @@ interface Outcome {
   error?: string;
 }
 
-async function rotateOne(
-  tenantId: string,
-  path: string,
-  revokedAt: Date | null,
-): Promise<Outcome> {
+async function rotateOne(tenantId: string, path: string, revokedAt: Date | null): Promise<Outcome> {
   // Saltamos certs revocados — no se usarán nunca más, no merece la pena
   // re-cifrarlos. Quedan accesibles solo con la key vieja para auditoría.
   if (revokedAt) {
@@ -124,7 +120,9 @@ async function main(): Promise<void> {
     const o = await rotateOne(cert.tenantId, cert.encryptedBlobPath, cert.revokedAt);
     outcomes.push(o);
     const tag = o.status === 'ok' ? 'OK' : o.status === 'skipped-revoked' ? 'SKIP' : 'ERR';
-    console.log(`  [${tag}] tenant=${o.tenantId} path=${o.path}${o.error ? ` err=${o.error}` : ''}`);
+    console.log(
+      `  [${tag}] tenant=${o.tenantId} path=${o.path}${o.error ? ` err=${o.error}` : ''}`,
+    );
   }
 
   const ok = outcomes.filter((o) => o.status === 'ok').length;

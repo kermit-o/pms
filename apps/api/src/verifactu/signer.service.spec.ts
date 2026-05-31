@@ -81,11 +81,15 @@ function makeVault(tmp: string) {
     },
   };
   const prisma = {
-    withTenant: vi.fn(async <T,>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
+    withTenant: vi.fn(async <T>(_ctx: unknown, fn: (tx: unknown) => Promise<T>) => fn(tx)),
   } as unknown as PrismaService;
   const config = {
     get: (key: keyof Env) =>
-      key === 'VERIFACTU_MASTER_KEY' ? 'm'.repeat(40) : key === 'VERIFACTU_CERT_DIR' ? tmp : undefined,
+      key === 'VERIFACTU_MASTER_KEY'
+        ? 'm'.repeat(40)
+        : key === 'VERIFACTU_CERT_DIR'
+          ? tmp
+          : undefined,
   } as unknown as ConfigService<Env, true>;
 
   return new CertificateVaultService(prisma, config);
@@ -100,41 +104,37 @@ async function makeSigner(tmp: string): Promise<SignerService> {
 }
 
 describe('SignerService (XAdES-BES vía xadesjs)', () => {
-  it(
-    'produces a XAdES-BES enveloped signature with two References + QualifyingProperties',
-    async () => {
-      const tmp = mkdtempSync(join(tmpdir(), 'signer-'));
-      try {
-        const signer = await makeSigner(tmp);
-        const sourceXml = '<Invoice><Header>X</Header><Total>100</Total></Invoice>';
-        const result = await signer.sign(TENANT, sourceXml);
+  it('produces a XAdES-BES enveloped signature with two References + QualifyingProperties', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'signer-'));
+    try {
+      const signer = await makeSigner(tmp);
+      const sourceXml = '<Invoice><Header>X</Header><Total>100</Total></Invoice>';
+      const result = await signer.sign(TENANT, sourceXml);
 
-        // Signature insertada como hijo del raíz, antes del cierre.
-        expect(result.xml).toContain('</Invoice>');
-        expect(result.xml).toMatch(/<(ds:)?Signature\b/);
+      // Signature insertada como hijo del raíz, antes del cierre.
+      expect(result.xml).toContain('</Invoice>');
+      expect(result.xml).toMatch(/<(ds:)?Signature\b/);
 
-        // XAdES-BES emite DOS Reference: una al doc (URI=""), otra a
-        // SignedProperties (URI="#...-SignedProperties").
-        const refMatches = result.xml.match(/<(?:ds:)?Reference\b/g) ?? [];
-        expect(refMatches.length).toBeGreaterThanOrEqual(2);
+      // XAdES-BES emite DOS Reference: una al doc (URI=""), otra a
+      // SignedProperties (URI="#...-SignedProperties").
+      const refMatches = result.xml.match(/<(?:ds:)?Reference\b/g) ?? [];
+      expect(refMatches.length).toBeGreaterThanOrEqual(2);
 
-        // QualifyingProperties con SignedSignatureProperties + SigningTime +
-        // SigningCertificate (puede aparecer como SigningCertificate o
-        // SigningCertificateV2 según opciones — verificamos el nombre raíz).
-        expect(result.xml).toMatch(/<(xades:)?QualifyingProperties\b/);
-        expect(result.xml).toMatch(/<(xades:)?SignedProperties\b/);
-        expect(result.xml).toMatch(/<(xades:)?SigningTime\b/);
-        expect(result.xml).toMatch(/<(xades:)?SigningCertificate(V2)?\b/);
+      // QualifyingProperties con SignedSignatureProperties + SigningTime +
+      // SigningCertificate (puede aparecer como SigningCertificate o
+      // SigningCertificateV2 según opciones — verificamos el nombre raíz).
+      expect(result.xml).toMatch(/<(xades:)?QualifyingProperties\b/);
+      expect(result.xml).toMatch(/<(xades:)?SignedProperties\b/);
+      expect(result.xml).toMatch(/<(xades:)?SigningTime\b/);
+      expect(result.xml).toMatch(/<(xades:)?SigningCertificate(V2)?\b/);
 
-        // KeyInfo con el cert.
-        expect(result.xml).toMatch(/<(ds:)?X509Certificate\b/);
-        expect(result.xml).toMatch(/<(ds:)?SignatureValue\b/);
-      } finally {
-        rmSync(tmp, { recursive: true, force: true });
-      }
-    },
-    30_000, // RSA-2048 + crypto subtle puede tardar
-  );
+      // KeyInfo con el cert.
+      expect(result.xml).toMatch(/<(ds:)?X509Certificate\b/);
+      expect(result.xml).toMatch(/<(ds:)?SignatureValue\b/);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 30_000); // RSA-2048 + crypto subtle puede tardar
 
   it('throws when no certificate has been uploaded for the tenant', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'signer-'));
@@ -148,17 +148,13 @@ describe('SignerService (XAdES-BES vía xadesjs)', () => {
     }
   });
 
-  it(
-    'throws when the input is not well-formed XML',
-    async () => {
-      const tmp = mkdtempSync(join(tmpdir(), 'signer-'));
-      try {
-        const signer = await makeSigner(tmp);
-        await expect(signer.sign(TENANT, 'definitely not xml')).rejects.toThrow();
-      } finally {
-        rmSync(tmp, { recursive: true, force: true });
-      }
-    },
-    30_000,
-  );
+  it('throws when the input is not well-formed XML', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'signer-'));
+    try {
+      const signer = await makeSigner(tmp);
+      await expect(signer.sign(TENANT, 'definitely not xml')).rejects.toThrow();
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 30_000);
 });
