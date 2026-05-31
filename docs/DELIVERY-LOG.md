@@ -80,6 +80,32 @@ Una o dos frases.
 
 ---
 
+## 2026-05-31 · [DOC] · Sprint 14 W2 — RUNBOOK §3.3 verificar bootstrap con health-check
+
+**Scope:** `docs/RUNBOOK-verifactu.md` (sección §3.3 nueva).
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+Nueva sección §3.3 que documenta cómo usar `scripts/verifactu-health-check.ts`
+(creado en commit `033b905`) para validar el bootstrap de un tenant
+antes de uso real o para diagnóstico desde soporte.
+
+Cubre:
+- Comandos con/sin `--tenant`, con/sin `--json`.
+- Tabla de los 6 estados 🔴 que reporta y la acción para cada uno
+  (con cross-refs a §5.x del propio runbook).
+- Exit codes (0/1/2) y sugerencia de cron diario en producción para
+  alertar si exit ≠ 0.
+
+Cierra el bucle entre las dos piezas añadidas en esta sesión
+(health-check + RUNBOOK) — el script estaba creado pero no descubrible
+desde la documentación operativa.
+
+**Sin código.**
+
+---
+
 ## 2026-05-31 · [TEST] · Sprint 14 W2 — Verifactu: test de integración issue → submit
 
 **Scope:** `apps/api/src/verifactu/integration.spec.ts` (nuevo).

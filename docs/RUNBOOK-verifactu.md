@@ -96,6 +96,45 @@ Guards del bootstrap (`VerifactuModule.onModuleInit`):
    `/reservations/[id]`. Verificar que aparece en el histórico de envíos
    con estado `ACCEPTED` (y CSV poblado si modo preprod/production).
 
+### 3.3 Verificar bootstrap con el health-check
+
+Antes de pasar el tenant a uso real (o cuando soporte reporta
+"no me deja emitir"), ejecutar el script de diagnóstico:
+
+```sh
+# Todos los tenants:
+DIRECT_URL=postgres://... pnpm tsx scripts/verifactu-health-check.ts
+
+# Uno solo (para soporte puntual):
+DIRECT_URL=postgres://... pnpm tsx scripts/verifactu-health-check.ts \
+  --tenant 00000000-0000-0000-0000-000000000000
+
+# JSON para integrar con monitoring / alerting:
+DIRECT_URL=postgres://... pnpm tsx scripts/verifactu-health-check.ts --json
+```
+
+Reporta por tenant: emisor, cert (días a caducidad), últimas 10
+facturas por estado, DEAD_LETTER en últimos 30 días. Overall 🟢/🟡/🔴.
+
+**Estados que reporta como 🔴 (fail):**
+
+| Síntoma                                | Acción                                              |
+| -------------------------------------- | --------------------------------------------------- |
+| `Emisor: NOT SET`                      | Operador en `/admin/billing/emisor`. Ver §5.1.      |
+| `Cert: NOT UPLOADED`                   | Operador en `/admin/billing/certificate`. Ver §5.2. |
+| `Cert: REVOKED`                        | Subir uno nuevo. Ver §5.3.                          |
+| `Cert: EXPIRED`                        | Renovar con FNMT-RCM. Ver §5.8.                     |
+| `Cert: caduca en <30d`                 | Renovar con FNMT-RCM **ya**. Ver §5.8.              |
+| `DLQ 30d: N` con `N > 0`               | Revisar `error_message` de los DEAD_LETTER y       |
+|                                        | reintentar desde UI cuando aplique. Ver §5.6.       |
+
+Exit codes:
+- `0` — todos OK.
+- `1` — al menos uno en fail (cualquier 🔴).
+- `2` — error de conexión / DB.
+
+Útil para cron diario en producción → alerta si exit != 0.
+
 ---
 
 ## 4. Operaciones diarias del operador
