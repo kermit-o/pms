@@ -314,12 +314,22 @@ integration) ya está listo.
 `GET /health` incluye el estado del eventbus. No hay endpoint
 específico Verifactu — el módulo no abre puertos propios.
 
-Métricas OpenTelemetry expuestas por el `SubmitWorker` (vía counter
-`pms-api/verifactu` — pendiente de añadir):
-- TODO: `verifactu_submit_total{outcome=accepted|rejected|dead_letter|nak}`
-- TODO: `verifactu_submit_duration_ms` (histograma).
+Métricas OpenTelemetry expuestas por el `SubmitWorker` (meter
+`pms-api/verifactu`):
 
-Dashboards Grafana: TODO en `infra/grafana/dashboards/verifactu.json`.
+- **`verifactu_submit_total`** (Counter). Labels:
+  - `outcome`: `accepted | rejected | sign_error_nak |
+    sign_error_dead_letter | aeat_error_nak | aeat_error_dead_letter |
+    invariant_violated | invoice_not_found | idempotent_ack`.
+  - `mode`: `stub | preprod | production`.
+- **`verifactu_submit_duration_ms`** (Histogram, ms). Mismas labels.
+  Mide el handler completo desde `findUnique(Invoice)` hasta return.
+
+Alertas sugeridas en Grafana (TODO `infra/grafana/dashboards/verifactu.json`):
+- Tasa `outcome=*dead_letter` > 0 en 5 min → page (algo bloqueado).
+- Tasa `outcome=rejected` sostenida > umbral → review (AEAT validando
+  duro algo del payload).
+- p95 `verifactu_submit_duration_ms{mode=preprod}` > 30s → page.
 
 ---
 

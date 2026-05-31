@@ -80,6 +80,62 @@ Una o dos frases.
 
 ---
 
+## 2026-05-31 · [FEAT] · Sprint 14 W2 — Verifactu: hardening (cert validity + key rotation + métricas)
+
+**Scope:** `apps/api/src/verifactu/{certificate-vault.service.ts,submit.worker.ts}`,
+`scripts/rotate-verifactu-master-key.ts` (nuevo),
+`docs/RUNBOOK-verifactu.md`
+**Branch:** `claude/s14-w2-verifactu`
+
+Tres mejoras de robustez/operativa sin dependencias externas, en commits
+separados (`48edec9`, `65ddd7e`, este):
+
+### F · Validación temporal del cert al subir
+
+`parseAndRepackP12` rechaza ahora:
+- `notBefore > now` → BadRequest "Certificate not yet valid".
+- `notAfter <= now` → BadRequest "Certificate already expired".
+
+Los certs cercanos a caducar siguen aceptándose — la UI ya muestra
+badge ámbar/rojo. Esto bloquea solo casos absurdos. +2 tests.
+
+### D · Script `scripts/rotate-verifactu-master-key.ts`
+
+Cubre la deuda marcada en RUNBOOK §6.2. Lee blob → descifra con clave
+vieja → re-cifra con nueva → escritura atómica (.tmp + rename).
+Garantías: idempotente, salta certs revocados, exit 2 si cualquier
+blob falla. Modo `--dry-run`.
+
+### E · Métricas OpenTelemetry del SubmitWorker
+
+Meter `pms-api/verifactu`:
+- `verifactu_submit_total` (Counter) con labels `outcome` (9 valores) +
+  `mode` (stub/preprod/production).
+- `verifactu_submit_duration_ms` (Histogram) — handler completo.
+
+RUNBOOK §8 actualizado con la lista de outcomes y 3 alertas sugeridas
+para Grafana.
+
+**Tests.**
+
+- Verifactu suite: **92/92** verde (+2 nuevos en vault validity).
+- Typecheck + lint `@pms/api` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+Bloqueado en input PO:
+- mTLS en PreprodAeatClient (espera cert FNMT pruebas).
+- Verificación nombres XSD ⚠ (espera XSD vigente).
+- Smoke test AEAT preprod.
+- `VERIFACTU_SISTEMA_*` con valores reales.
+
+No bloqueado pero fuera de scope W2:
+- IVA por línea (sprint dedicado).
+- Rectificativas R1-R5 (sprint dedicado).
+- Dashboard Grafana `infra/grafana/dashboards/verifactu.json`.
+
+---
+
 ## 2026-05-31 · [DOC] · Sprint 14 W2 — RUNBOOK Verifactu
 
 **Scope:** `docs/RUNBOOK-verifactu.md` (nuevo).

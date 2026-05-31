@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { type Counter, type Histogram, metrics } from '@opentelemetry/api';
 import { InvoiceStatus, InvoiceSubmissionStatus } from '@pms/db';
 import type { HandlerResult } from '@pms/eventbus';
 import { PrismaService } from '../db';
@@ -8,6 +9,17 @@ import { EventbusService } from '../eventbus';
 import { AEAT_CLIENT, type AeatClient, type AeatSubmitResult } from './aeat';
 import { buildVerifactuRegistroAlta } from './invoice-xml';
 import { SignerService } from './signer.service';
+
+type SubmitOutcome =
+  | 'accepted'
+  | 'rejected'
+  | 'sign_error_nak'
+  | 'sign_error_dead_letter'
+  | 'aeat_error_nak'
+  | 'aeat_error_dead_letter'
+  | 'invariant_violated'
+  | 'invoice_not_found'
+  | 'idempotent_ack';
 
 /**
  * SubmitWorker (ADR-030 §4).
@@ -41,6 +53,8 @@ export class SubmitWorker implements OnModuleInit {
   private readonly log = new Logger(SubmitWorker.name);
   private readonly enabled: boolean;
   private readonly maxDeliver: number;
+  private readonly outcomeCounter: Counter;
+  private readonly durationHistogram: Histogram;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -51,6 +65,22 @@ export class SubmitWorker implements OnModuleInit {
   ) {
     this.enabled = this.config.get('NODE_ENV', { infer: true }) !== 'test';
     this.maxDeliver = 5;
+
+    const meter = metrics.getMeter('pms-api/verifactu');
+    this.outcomeCounter = meter.createCounter('verifactu_submit_total', {
+      description:
+        'Intentos del SubmitWorker contra AEAT, etiquetados por outcome y modo del cliente.',
+    });
+    this.durationHistogram = meter.createHistogram('verifactu_submit_duration_ms', {
+      description: 'Latencia end-to-end del handler del SubmitWorker (ms).',
+      unit: 'ms',
+    });
+  }
+
+  private record(outcome: SubmitOutcome, startedAt: number): void {
+    const labels = { outcome, mode: this.aeat.mode };
+    this.outcomeCounter.add(1, labels);
+    this.durationHistogram.record(Date.now() - startedAt, labels);
   }
 
   async onModuleInit(): Promise<void> {
@@ -82,6 +112,7 @@ export class SubmitWorker implements OnModuleInit {
     payload: { invoiceId: string; invoiceNumber: string },
     deliveryAttempt: number,
   ): Promise<HandlerResult> {
+    const startedAt = Date.now();
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: payload.invoiceId },
       select: {
@@ -105,30 +136,31 @@ export class SubmitWorker implements OnModuleInit {
       },
     });
     if (!invoice) {
-      // El upstream creó el evento pero la factura no existe — registro y term.
       this.log.error(`Invoice ${payload.invoiceId} not found — terminating`);
+      this.record('invoice_not_found', startedAt);
       return 'term';
     }
 
     if (invoice.status === InvoiceStatus.ACCEPTED) {
       this.log.log(`Invoice ${payload.invoiceNumber} already ACCEPTED — idempotent ack`);
+      this.record('idempotent_ack', startedAt);
       return 'ack';
     }
 
-    // Sanity: el tenant DEBE tener NIF/razón social aquí. issue() ya lo
-    // valida; si llegamos sin ellos es un bug aguas arriba (no transitorio).
     const attempt = await this.acquireAttempt(invoice.id, invoice.tenantId);
     if (!invoice.tenant.nif || !invoice.tenant.razonSocial || !invoice.huella) {
       const reason =
         'Invariant violated: invoice missing emisor data or huella before signing';
       this.log.error(`${reason} invoice=${payload.invoiceNumber}`);
-      return this.deadLetter(
+      const r = await this.deadLetter(
         invoice.id,
         payload.invoiceNumber,
         attempt.id,
         attempt.attemptNumber,
         reason,
       );
+      this.record('invariant_violated', startedAt);
+      return r;
     }
 
     let signedXml: string;
@@ -165,9 +197,19 @@ export class SubmitWorker implements OnModuleInit {
       const message = (err as Error).message.slice(0, 500);
       this.log.error(`Sign failed invoice=${payload.invoiceNumber}: ${message}`);
       await this.markAttemptFailed(attempt.id, message);
-      return this.shouldRetry(deliveryAttempt)
-        ? 'nak'
-        : this.deadLetter(invoice.id, payload.invoiceNumber, attempt.id, attempt.attemptNumber, message);
+      if (this.shouldRetry(deliveryAttempt)) {
+        this.record('sign_error_nak', startedAt);
+        return 'nak';
+      }
+      const r = await this.deadLetter(
+        invoice.id,
+        payload.invoiceNumber,
+        attempt.id,
+        attempt.attemptNumber,
+        message,
+      );
+      this.record('sign_error_dead_letter', startedAt);
+      return r;
     }
 
     let result: AeatSubmitResult;
@@ -181,9 +223,19 @@ export class SubmitWorker implements OnModuleInit {
       const message = (err as Error).message.slice(0, 500);
       this.log.error(`AEAT submit threw invoice=${payload.invoiceNumber}: ${message}`);
       await this.markAttemptFailed(attempt.id, message, signedXml);
-      return this.shouldRetry(deliveryAttempt)
-        ? 'nak'
-        : this.deadLetter(invoice.id, payload.invoiceNumber, attempt.id, attempt.attemptNumber, message);
+      if (this.shouldRetry(deliveryAttempt)) {
+        this.record('aeat_error_nak', startedAt);
+        return 'nak';
+      }
+      const r = await this.deadLetter(
+        invoice.id,
+        payload.invoiceNumber,
+        attempt.id,
+        attempt.attemptNumber,
+        message,
+      );
+      this.record('aeat_error_dead_letter', startedAt);
+      return r;
     }
 
     if (result.status === 'ACCEPTED') {
@@ -201,6 +253,7 @@ export class SubmitWorker implements OnModuleInit {
       this.log.log(
         `Invoice ${payload.invoiceNumber} ACCEPTED by AEAT csv=${result.csv} attempt=${attempt.attemptNumber}`,
       );
+      this.record('accepted', startedAt);
       return 'ack';
     }
 
@@ -218,6 +271,7 @@ export class SubmitWorker implements OnModuleInit {
       },
     );
     this.log.warn(`Invoice ${payload.invoiceNumber} REJECTED: ${result.errorMessage}`);
+    this.record('rejected', startedAt);
     return 'term';
   }
 
