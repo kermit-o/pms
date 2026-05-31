@@ -5,9 +5,7 @@ export const dynamic = 'force-dynamic';
 export default function ManageRedirectPage() {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-6 py-12 text-center">
-      <h1 className="text-xl font-semibold text-aubergine-700">
-        Gestiona tu reserva
-      </h1>
+      <h1 className="text-xl font-semibold text-aubergine-700">Gestiona tu reserva</h1>
       <p className="text-sm text-aubergine-700/70">
         Indica el código del hotel donde reservaste y a continuación tu código + apellido.
       </p>

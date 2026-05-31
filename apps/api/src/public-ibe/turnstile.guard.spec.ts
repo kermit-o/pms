@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import {
-  REQUIRE_TURNSTILE_META,
-  RequireTurnstile,
-  TurnstileGuard,
-} from './turnstile.guard';
+import { REQUIRE_TURNSTILE_META, RequireTurnstile, TurnstileGuard } from './turnstile.guard';
 import type { TurnstileService } from './turnstile.service';
 
 function makeCtx(handler: object, body: unknown = {}, headers: Record<string, string> = {}) {
@@ -66,9 +62,7 @@ describe('TurnstileGuard', () => {
       verify: vi.fn().mockResolvedValue({ ok: true }),
     } as unknown as TurnstileService;
     const guard = new TurnstileGuard(reflector, svc);
-    const ok = await guard.canActivate(
-      makeCtx(handler, {}, { 'cf-turnstile-response': 'h-tok' }),
-    );
+    const ok = await guard.canActivate(makeCtx(handler, {}, { 'cf-turnstile-response': 'h-tok' }));
     expect(ok).toBe(true);
     expect(svc.verify).toHaveBeenCalledWith('h-tok', expect.any(String), 'hotel');
   });

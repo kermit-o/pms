@@ -48,7 +48,8 @@ export function CopilotMovementsWidget({ widget }: { widget: CopilotMovementsWid
                     </span>
                   </p>
                   <p className="text-[10px] text-aubergine-700/60">
-                    {r.roomTypeCode ?? '?'} · {r.adults + r.children} pax · {r.totalAmount} {r.currency}
+                    {r.roomTypeCode ?? '?'} · {r.adults + r.children} pax · {r.totalAmount}{' '}
+                    {r.currency}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5 text-right">
@@ -84,10 +85,7 @@ export function CopilotMovementsWidget({ widget }: { widget: CopilotMovementsWid
       {rows.length > 12 && (
         <p className="px-1 text-[10px] text-aubergine-700/50">
           Mostrando 12 de {rows.length}. Ve la lista completa en{' '}
-          <a
-            href={isArrival ? '/arrivals' : '/departures'}
-            className="underline"
-          >
+          <a href={isArrival ? '/arrivals' : '/departures'} className="underline">
             {isArrival ? 'Llegadas' : 'Salidas'}
           </a>
           .

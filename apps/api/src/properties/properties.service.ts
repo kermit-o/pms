@@ -1,18 +1,9 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
-import type {
-  BlockedIpsDto,
-  ChannelManagerConfigDto,
-  PublishPropertyDto,
-} from './properties.dto';
+import type { BlockedIpsDto, ChannelManagerConfigDto, PublishPropertyDto } from './properties.dto';
 
 /**
  * Back-office admin de Property (Sprint 10 W4).
@@ -155,9 +146,7 @@ export class PropertiesService {
       },
     });
 
-    this.log.log(
-      `property ${propertyId} CM ${input.provider ?? '<cleared>'} configured`,
-    );
+    this.log.log(`property ${propertyId} CM ${input.provider ?? '<cleared>'} configured`);
 
     return input;
   }

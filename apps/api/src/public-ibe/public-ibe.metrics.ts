@@ -31,7 +31,8 @@ export class PublicIbeMetrics {
       description: 'Requests rechazadas porque la IP está en blockedIps del hotel.',
     });
     this.turnstileFailures = this.meter.createCounter('public_ibe_turnstile_failures', {
-      description: 'Verificaciones Turnstile fallidas. reason ∈ {missing, invalid, network, disabled}.',
+      description:
+        'Verificaciones Turnstile fallidas. reason ∈ {missing, invalid, network, disabled}.',
     });
     this.turnstileVerifications = this.meter.createCounter('public_ibe_turnstile_verifications', {
       description: 'Verificaciones Turnstile completadas. outcome ∈ {success, failure}.',

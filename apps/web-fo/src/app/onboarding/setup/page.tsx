@@ -36,10 +36,12 @@ export default async function OnboardingSetupPage({ searchParams }: Props) {
     'use server';
     const name = String(formData.get('hotelName') ?? '').trim();
     const city = String(formData.get('city') ?? '').trim();
-    const country = String(formData.get('country') ?? 'ES').trim().toUpperCase();
+    const country = String(formData.get('country') ?? 'ES')
+      .trim()
+      .toUpperCase();
     const timezone = String(formData.get('timezone') ?? 'Europe/Madrid');
     const currency = String(formData.get('currency') ?? 'EUR').toUpperCase();
-    const locale = (String(formData.get('locale') ?? 'es-ES') as 'es-ES' | 'en-US');
+    const locale = String(formData.get('locale') ?? 'es-ES') as 'es-ES' | 'en-US';
     const roomsCount = Number(formData.get('roomsCount') ?? 0);
     const fullName = String(formData.get('fullName') ?? '').trim();
     const terms = formData.get('acceptTerms') === 'on';
@@ -88,8 +90,8 @@ export default async function OnboardingSetupPage({ searchParams }: Props) {
   return (
     <Shell>
       <p className="text-sm text-aubergine-700/70">
-        Email verificado: <strong>{email}</strong>. Cuéntanos lo básico del hotel y crearemos
-        tu instalación.
+        Email verificado: <strong>{email}</strong>. Cuéntanos lo básico del hotel y crearemos tu
+        instalación.
       </p>
 
       {sp.error === 'fields' && <Banner>Completa todos los campos obligatorios.</Banner>}
@@ -140,9 +142,7 @@ export default async function OnboardingSetupPage({ searchParams }: Props) {
 
         <label className="flex items-start gap-2 rounded-xl bg-aubergine-50/40 p-3 text-xs text-aubergine-700">
           <input type="checkbox" name="acceptTerms" className="mt-0.5" required />
-          <span>
-            Acepto los términos de uso y la política de privacidad de Aubergine PMS.
-          </span>
+          <span>Acepto los términos de uso y la política de privacidad de Aubergine PMS.</span>
         </label>
 
         <button

@@ -234,8 +234,8 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
               Cobro de no-show
             </p>
             <p className="mt-1 text-xs text-aubergine-700/60">
-              Stripe Fase 2 — carga directa a la tarjeta tokenizada. Idempotente:
-              re-pulsar no duplica el cargo.
+              Stripe Fase 2 — carga directa a la tarjeta tokenizada. Idempotente: re-pulsar no
+              duplica el cargo.
             </p>
             <div className="mt-3">
               <NoShowChargeButton
@@ -369,44 +369,44 @@ function FolioPanel({
         <div id="folio-forms" className="space-y-4">
           <FolioVoiceButton formScopeSelector="#folio-forms .folio-forms-grid" />
           <div className="folio-forms-grid mt-2 grid gap-6 md:grid-cols-2">
-          <form action={addCharge} className="space-y-3 rounded-xl bg-aubergine-50/40 p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
-              Añadir cargo
-            </h3>
-            <FieldText name="description" label="Concepto" required />
-            <FieldNumber name="amount" label="Importe" required step="0.01" />
-            <Select name="type" label="Tipo" defaultValue="CHARGE">
-              <option value="CHARGE">Cargo</option>
-              <option value="TAX">IVA</option>
-            </Select>
-            <button
-              type="submit"
-              className="w-full rounded-lg bg-aubergine-600 py-2 text-sm font-medium text-white transition hover:bg-aubergine-700"
-            >
-              Añadir cargo
-            </button>
-          </form>
+            <form action={addCharge} className="space-y-3 rounded-xl bg-aubergine-50/40 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
+                Añadir cargo
+              </h3>
+              <FieldText name="description" label="Concepto" required />
+              <FieldNumber name="amount" label="Importe" required step="0.01" />
+              <Select name="type" label="Tipo" defaultValue="CHARGE">
+                <option value="CHARGE">Cargo</option>
+                <option value="TAX">IVA</option>
+              </Select>
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-aubergine-600 py-2 text-sm font-medium text-white transition hover:bg-aubergine-700"
+              >
+                Añadir cargo
+              </button>
+            </form>
 
-          <form action={addPayment} className="space-y-3 rounded-xl bg-emerald-50/50 p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-              Registrar pago
-            </h3>
-            <FieldText name="description" label="Concepto" required />
-            <FieldNumber name="amount" label="Importe" required step="0.01" />
-            <Select name="paymentMethod" label="Método">
-              <option value="CARD">Tarjeta</option>
-              <option value="CASH">Efectivo</option>
-              <option value="BANK_TRANSFER">Transferencia</option>
-              <option value="OTHER">Otro</option>
-            </Select>
-            <FieldText name="reference" label="Referencia" />
-            <button
-              type="submit"
-              className="w-full rounded-lg bg-emerald-600 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
-            >
-              Registrar pago
-            </button>
-          </form>
+            <form action={addPayment} className="space-y-3 rounded-xl bg-emerald-50/50 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                Registrar pago
+              </h3>
+              <FieldText name="description" label="Concepto" required />
+              <FieldNumber name="amount" label="Importe" required step="0.01" />
+              <Select name="paymentMethod" label="Método">
+                <option value="CARD">Tarjeta</option>
+                <option value="CASH">Efectivo</option>
+                <option value="BANK_TRANSFER">Transferencia</option>
+                <option value="OTHER">Otro</option>
+              </Select>
+              <FieldText name="reference" label="Referencia" />
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-emerald-600 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
+              >
+                Registrar pago
+              </button>
+            </form>
           </div>
         </div>
       )}
@@ -548,15 +548,12 @@ function GuaranteeCard({
   // Stripe captura tarjeta y fija el tipo a CARD_ON_FILE server-side, así que
   // también lo permitimos cuando no hay tipo asignado todavía.
   const canCaptureCard =
-    (status === 'PENDING' || status === 'FAILED') &&
-    (type === 'CARD_ON_FILE' || type === 'NONE');
+    (status === 'PENDING' || status === 'FAILED') && (type === 'CARD_ON_FILE' || type === 'NONE');
 
   return (
     <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">
-          Garantía
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-aubergine-500">Garantía</p>
         <span
           className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${statusStyles[status]}`}
         >
@@ -568,9 +565,7 @@ function GuaranteeCard({
             · {amount} {currency}
           </span>
         )}
-        {reference && (
-          <span className="text-sm text-aubergine-700/70">· ref {reference}</span>
-        )}
+        {reference && <span className="text-sm text-aubergine-700/70">· ref {reference}</span>}
       </div>
       {status === 'PENDING' && deadline && (
         <p className="mt-2 text-xs text-amber-700">
@@ -582,8 +577,8 @@ function GuaranteeCard({
           <StripeCaptureButton reservationId={reservationId} />
           <p className="mt-1 text-[10px] text-aubergine-700/60">
             Tokeniza la tarjeta con Stripe (PCI-safe).
-            {isNone && ' Al capturar, el tipo cambia a Tarjeta en archivo (CCG).'}
-            {' '}O marca manual abajo si la tomas por teléfono.
+            {isNone && ' Al capturar, el tipo cambia a Tarjeta en archivo (CCG).'} O marca manual
+            abajo si la tomas por teléfono.
           </p>
         </div>
       )}

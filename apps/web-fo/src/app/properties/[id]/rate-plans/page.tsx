@@ -30,8 +30,7 @@ export default async function RatePlansPage({ params, searchParams }: Props) {
   const { id } = await params;
   const sp = await searchParams;
   const session = await auth();
-  if (!session?.accessToken)
-    redirect(`/login?callbackUrl=/properties/${id}/rate-plans`);
+  if (!session?.accessToken) redirect(`/login?callbackUrl=/properties/${id}/rate-plans`);
 
   let plans: RatePlanListItem[];
   try {
@@ -51,10 +50,11 @@ export default async function RatePlansPage({ params, searchParams }: Props) {
     'use server';
     const session = await auth();
     if (!session?.accessToken) redirect('/login');
-    const code = String(formData.get('code') ?? '').trim().toUpperCase();
+    const code = String(formData.get('code') ?? '')
+      .trim()
+      .toUpperCase();
     const name = String(formData.get('name') ?? '').trim();
-    const description =
-      String(formData.get('description') ?? '').trim() || undefined;
+    const description = String(formData.get('description') ?? '').trim() || undefined;
     const nonRefundable = formData.get('nonRefundable') === 'on';
     const discountRaw = String(formData.get('discountPct') ?? '').trim();
     const dailyRateRaw = String(formData.get('dailyRate') ?? '').trim();
@@ -89,8 +89,7 @@ export default async function RatePlansPage({ params, searchParams }: Props) {
     const ratePlanId = String(formData.get('id') ?? '');
     if (!ratePlanId) redirect(`/properties/${id}/rate-plans?status=fail`);
     const name = String(formData.get('name') ?? '').trim() || undefined;
-    const description =
-      String(formData.get('description') ?? '').trim() || undefined;
+    const description = String(formData.get('description') ?? '').trim() || undefined;
     const nonRefundable = formData.get('nonRefundable') === 'on';
     const isPublic = formData.get('isPublic') === 'on';
     const discountRaw = String(formData.get('discountPct') ?? '').trim();
@@ -124,17 +123,13 @@ export default async function RatePlansPage({ params, searchParams }: Props) {
         </p>
         <h1 className="text-3xl font-semibold text-aubergine-700">Rate plans</h1>
         <p className="mt-1 text-sm text-aubergine-700/70">
-          Tarifas vendibles en el IBE. Una propiedad sin rate plans configurados
-          muestra automáticamente la tarifa flexible base.
+          Tarifas vendibles en el IBE. Una propiedad sin rate plans configurados muestra
+          automáticamente la tarifa flexible base.
         </p>
       </header>
 
-      {sp.status === 'created' && (
-        <Banner kind="success">Rate plan creado.</Banner>
-      )}
-      {sp.status === 'updated' && (
-        <Banner kind="success">Rate plan actualizado.</Banner>
-      )}
+      {sp.status === 'created' && <Banner kind="success">Rate plan creado.</Banner>}
+      {sp.status === 'updated' && <Banner kind="success">Rate plan actualizado.</Banner>}
       {sp.status === 'collision' && (
         <Banner kind="error">Ya existe un rate plan con ese código en esta propiedad.</Banner>
       )}
@@ -202,7 +197,8 @@ export default async function RatePlansPage({ params, searchParams }: Props) {
                             step="0.01"
                             min="0"
                             defaultValue={
-                              typeof fixedDailyRate === 'number' || typeof fixedDailyRate === 'string'
+                              typeof fixedDailyRate === 'number' ||
+                              typeof fixedDailyRate === 'string'
                                 ? String(fixedDailyRate)
                                 : ''
                             }
@@ -230,11 +226,7 @@ export default async function RatePlansPage({ params, searchParams }: Props) {
                           No reembolsable
                         </label>
                         <label className="flex items-center gap-2 text-xs text-aubergine-700">
-                          <input
-                            type="checkbox"
-                            name="isPublic"
-                            defaultChecked={p.isPublic}
-                          />
+                          <input type="checkbox" name="isPublic" defaultChecked={p.isPublic} />
                           Visible en IBE
                         </label>
                         <div className="col-span-2 flex gap-2 sm:col-span-6">
@@ -308,8 +300,8 @@ export default async function RatePlansPage({ params, searchParams }: Props) {
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100">
         <h2 className="text-base font-semibold text-aubergine-700">Crear rate plan</h2>
         <p className="mt-1 text-xs text-aubergine-700/60">
-          El código sirve como identificador interno (ej. <code>BAR</code>,{' '}
-          <code>NRF10</code>). Sólo A-Z, 0-9, <code>_</code>, <code>-</code>; máx 16 caracteres.
+          El código sirve como identificador interno (ej. <code>BAR</code>, <code>NRF10</code>).
+          Sólo A-Z, 0-9, <code>_</code>, <code>-</code>; máx 16 caracteres.
         </p>
         <form action={createAction} className="mt-4 grid gap-3 sm:grid-cols-6">
           <Field
@@ -344,11 +336,7 @@ export default async function RatePlansPage({ params, searchParams }: Props) {
             min="0"
             className="col-span-1"
           />
-          <Field
-            name="description"
-            label="Descripción (opc.)"
-            className="col-span-6"
-          />
+          <Field name="description" label="Descripción (opc.)" className="col-span-6" />
           <label className="col-span-3 flex items-center gap-2 text-xs text-aubergine-700">
             <input type="checkbox" name="nonRefundable" />
             No reembolsable (exige pago upfront)
@@ -382,7 +370,9 @@ function Field({
   className?: string;
 } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <label className={`text-xs font-medium uppercase tracking-wide text-aubergine-500 ${className ?? ''}`}>
+    <label
+      className={`text-xs font-medium uppercase tracking-wide text-aubergine-500 ${className ?? ''}`}
+    >
       {label}
       <input
         name={name}

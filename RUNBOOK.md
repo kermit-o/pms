@@ -845,12 +845,12 @@ estándar de residuales escaladas por √horizonte.
 
 **Métricas soportadas:**
 
-| metric    | Fuente                                                  |
-|-----------|--------------------------------------------------------|
-| occupancy | `night_audit_snapshots[MANAGER].occupancyPct`           |
-| adr       | `night_audit_snapshots[MANAGER].adr`                    |
-| revpar    | `night_audit_snapshots[MANAGER].revpar`                 |
-| pickup    | `reservations` con `DATE(created_at) = arrival_date`   |
+| metric    | Fuente                                               |
+| --------- | ---------------------------------------------------- |
+| occupancy | `night_audit_snapshots[MANAGER].occupancyPct`        |
+| adr       | `night_audit_snapshots[MANAGER].adr`                 |
+| revpar    | `night_audit_snapshots[MANAGER].revpar`              |
+| pickup    | `reservations` con `DATE(created_at) = arrival_date` |
 
 **Ventana de entrenamiento:** 365 días (fallback 90 si la propiedad es
 nueva). Si la serie tiene menos de 14 puntos, el servicio devuelve
@@ -926,12 +926,12 @@ y `stripePaymentMethodId` no nulo (capturado en Fase 1).
 **Endpoint:** `POST /payments/stripe/reservations/:id/charge-no-show` con
 body `{ amount: number, description?: string }`. Devuelve:
 
-| status            | Significado                                          |
-|-------------------|-----------------------------------------------------|
-| `succeeded`       | PaymentIntent ok + folio entry creada                |
-| `already_charged` | Idempotente — re-pulsar no duplica                   |
-| `requires_action` | El banco pide SCA — operador toma in-person          |
-| `failed`          | Otro error (`error` con el message de Stripe)        |
+| status            | Significado                                   |
+| ----------------- | --------------------------------------------- |
+| `succeeded`       | PaymentIntent ok + folio entry creada         |
+| `already_charged` | Idempotente — re-pulsar no duplica            |
+| `requires_action` | El banco pide SCA — operador toma in-person   |
+| `failed`          | Otro error (`error` con el message de Stripe) |
 
 **Idempotencia.** El folio entry se posta con
 `idempotencyKey = stripe-no-show-{reservationId}`. Al PaymentIntent se le
@@ -962,6 +962,7 @@ audit log del folio capta la creación del entry.
 sobre el bloque de "Añadir cargo / Registrar pago".
 
 **Cómo se usa.** Pulsa el micro, dicta una frase tipo:
+
 - "Carga 35 a la 305 por minibar" → pre-rellena el form de cargo.
 - "Cobra 50 en efectivo por extras" → pre-rellena el form de pago con
   paymentMethod=CASH.
@@ -971,12 +972,12 @@ pago"). **Nada se ejecuta sin tu confirmación** (ADR-020).
 
 **Gramática V1.** Parser regex puro (`apps/web-fo/src/lib/voice-fo-grammar.ts`):
 
-| Frase de ejemplo                              | Intent          |
-|----------------------------------------------|-----------------|
-| `carga 35 a la 305 por limpieza`             | `add_charge`    |
-| `cargo de cincuenta euros desayuno`          | `add_charge`    |
-| `cobra 100 en efectivo`                      | `add_payment`   |
-| `pago de treinta y cinco con tarjeta`        | `add_payment`   |
+| Frase de ejemplo                      | Intent        |
+| ------------------------------------- | ------------- |
+| `carga 35 a la 305 por limpieza`      | `add_charge`  |
+| `cargo de cincuenta euros desayuno`   | `add_charge`  |
+| `cobra 100 en efectivo`               | `add_payment` |
+| `pago de treinta y cinco con tarjeta` | `add_payment` |
 
 Si no detecta intent claro, muestra el transcript y deja al operador
 escribir. Los números 0-99 en palabras (`treinta y cinco`) se entienden.
@@ -1020,16 +1021,16 @@ DIRECT_URL="postgres://pms:pms@localhost:5432/pms" \
 
 Flags relevantes:
 
-| Flag                        | Default                                | Notas                       |
-|----------------------------|----------------------------------------|-----------------------------|
-| `--tenant <uuid>`           | `333…333`                              | Crea el tenant si no existe |
-| `--properties <N>`          | `1`                                    |                             |
-| `--rooms-per-property <N>`  | `30`                                   |                             |
-| `--history-months <N>`      | `12`                                   |                             |
-| `--reservations-per-month`  | `100`                                  | Por property                |
-| `--reset`                   | off                                    | Borra sintéticos antes      |
-| `--seed <int>`              | `42`                                   | Reproducibilidad LCG        |
-| `--no-confirm`              | off                                    | Salta el delay inicial      |
+| Flag                       | Default   | Notas                       |
+| -------------------------- | --------- | --------------------------- |
+| `--tenant <uuid>`          | `333…333` | Crea el tenant si no existe |
+| `--properties <N>`         | `1`       |                             |
+| `--rooms-per-property <N>` | `30`      |                             |
+| `--history-months <N>`     | `12`      |                             |
+| `--reservations-per-month` | `100`     | Por property                |
+| `--reset`                  | off       | Borra sintéticos antes      |
+| `--seed <int>`             | `42`      | Reproducibilidad LCG        |
+| `--no-confirm`             | off       | Salta el delay inicial      |
 
 ### 17.3 Qué genera
 
@@ -1116,13 +1117,14 @@ con un único bloque `image` + prompt en español pidiendo JSON estricto
 síncrona; suele tardar 2-5 s.
 
 **Persistencia:**
+
 - `housekeeping_tasks.attributes.inspection = { verdict, issues,
-  confidence, reasoning, model, imageUrl, hasInlinePhoto, reviewedAt,
-  reviewedByUserId }`.
+confidence, reasoning, model, imageUrl, hasInlinePhoto, reviewedAt,
+reviewedByUserId }`.
 - Si `verdict === 'damaged'` y la tarea tiene `roomId`, la habitación
   pasa a `OUT_OF_ORDER` server-side.
 - La foto se almacena vía `PhotoStorageService.storeIn('hsk-inspection',
-  …)`. Driver inline (dev) o S3 (prod) según `PHOTO_STORAGE_DRIVER`.
+…)`. Driver inline (dev) o S3 (prod) según `PHOTO_STORAGE_DRIVER`.
 
 **Privacidad / GDPR.** La foto sí cruza a Anthropic. Documentar al
 hotel como subprocesador del DPA cuando se active. En dev, sin
@@ -1164,13 +1166,13 @@ UPDATE properties SET published_at = NULL WHERE id = '<property-uuid>';
 
 Base path: `/public/ibe`. Sin auth. Rate-limit in-memory por IP+ruta.
 
-| Método | Ruta                                              | Rate (V1)       |
-|--------|--------------------------------------------------|-----------------|
-| GET    | `/properties/:slug`                              | 60/min          |
-| GET    | `/properties/:slug/availability?arrival&departure&adults&children` | 30/min |
-| POST   | `/properties/:slug/reservations`                 | 5/hora          |
-| GET    | `/properties/:slug/reservations/:code?lastName=` | 20/min          |
-| POST   | `/properties/:slug/reservations/:code/cancel`    | 5/hora          |
+| Método | Ruta                                                               | Rate (V1) |
+| ------ | ------------------------------------------------------------------ | --------- |
+| GET    | `/properties/:slug`                                                | 60/min    |
+| GET    | `/properties/:slug/availability?arrival&departure&adults&children` | 30/min    |
+| POST   | `/properties/:slug/reservations`                                   | 5/hora    |
+| GET    | `/properties/:slug/reservations/:code?lastName=`                   | 20/min    |
+| POST   | `/properties/:slug/reservations/:code/cancel`                      | 5/hora    |
 
 Body de `POST reservations` valida con Zod: arrival/departure ISO,
 roomTypeId, occupancy, guest con `gdprConsent: true` obligatorio,
@@ -1187,7 +1189,8 @@ correlationId se genera por request (`ibe-<rand>`) para trazar.
 
 `RateLimitGuard` propio (sin nueva dep). Buckets in-memory por
 `route|ip`. Suficiente para piloto; reemplazar por `@nestjs/throttler`
-+ Redis cuando haya multi-instancia real.
+
+- Redis cuando haya multi-instancia real.
 
 ### 20.5 Cancelación
 
@@ -1203,7 +1206,7 @@ si aplica).
 - `reservation.created v1` con `source = DIRECT` cuando viene del IBE
   (no hay flag específico V1 — `notes` lo registra).
 - `reservation.cancelled v1` con `reason = "Cancelada por el huésped
-  desde IBE"` y `policyApplied = <policyName>`.
+desde IBE"` y `policyApplied = <policyName>`.
 
 ### 20.7 App pública `apps/web-ibe` — Sprint 8 W2
 
@@ -1212,15 +1215,15 @@ via slug en URL (`/h/<slug>`). Una sola app para N properties.
 
 **Rutas V1:**
 
-| Ruta | Estado |
-|------|--------|
-| `/` | Landing con buscador de hotel |
-| `/h?slug=...` | Redirect a `/h/<slug>` |
-| `/h/<slug>` | Home del hotel + formulario de búsqueda |
-| `/h/<slug>/availability?arrival&departure&adults&children&lang` | Listado de tarifas |
-| `/h/<slug>/book` | (W3, pendiente) |
-| `/h/<slug>/manage` | (W4, pendiente) |
-| `/manage` | Redirector genérico |
+| Ruta                                                            | Estado                                  |
+| --------------------------------------------------------------- | --------------------------------------- |
+| `/`                                                             | Landing con buscador de hotel           |
+| `/h?slug=...`                                                   | Redirect a `/h/<slug>`                  |
+| `/h/<slug>`                                                     | Home del hotel + formulario de búsqueda |
+| `/h/<slug>/availability?arrival&departure&adults&children&lang` | Listado de tarifas                      |
+| `/h/<slug>/book`                                                | (W3, pendiente)                         |
+| `/h/<slug>/manage`                                              | (W4, pendiente)                         |
+| `/manage`                                                       | Redirector genérico                     |
 
 **i18n.** ES/EN sin librería externa — diccionario en
 `apps/web-ibe/src/lib/i18n.ts`, locale por `?lang=es|en` con default
@@ -1249,19 +1252,19 @@ proxy CDN — diseño en Sprint 9.
 
 **Rutas web-ibe:**
 
-| Ruta | Descripción |
-|------|------------|
-| `/h/<slug>/book?arrival&departure&adults&children&roomTypeId` | Form datos huésped + GDPR |
-| `/h/<slug>/book/<code>?lastName=` | Confirmación + opcional captura tarjeta |
-| `/api/setup-intent?slug&code&lastName` (POST) | Proxy a API pública |
-| `/api/confirm-setup-intent?slug&code&lastName` (POST) | Proxy a confirm |
+| Ruta                                                          | Descripción                             |
+| ------------------------------------------------------------- | --------------------------------------- |
+| `/h/<slug>/book?arrival&departure&adults&children&roomTypeId` | Form datos huésped + GDPR               |
+| `/h/<slug>/book/<code>?lastName=`                             | Confirmación + opcional captura tarjeta |
+| `/api/setup-intent?slug&code&lastName` (POST)                 | Proxy a API pública                     |
+| `/api/confirm-setup-intent?slug&code&lastName` (POST)         | Proxy a confirm                         |
 
 **Endpoints API públicos (W3):**
 
-| Método | Ruta | Rate |
-|--------|------|------|
-| POST | `/public/ibe/properties/:slug/reservations/:code/setup-intent` | 10/min |
-| POST | `/public/ibe/properties/:slug/reservations/:code/confirm-setup-intent` | 10/min |
+| Método | Ruta                                                                   | Rate   |
+| ------ | ---------------------------------------------------------------------- | ------ |
+| POST   | `/public/ibe/properties/:slug/reservations/:code/setup-intent`         | 10/min |
+| POST   | `/public/ibe/properties/:slug/reservations/:code/confirm-setup-intent` | 10/min |
 
 Body `{ lastName }`. Devuelven `{ clientSecret, publishableKey }` y
 `{ status, brand, last4 }` respectivamente.
@@ -1279,7 +1282,7 @@ Body `{ lastName }`. Devuelven `{ clientSecret, publishableKey }` y
 6. Modal con Stripe Elements (igual que web-fo). Tras
    `confirmSetup` exitoso, llama `confirm-setup-intent` proxy →
    `StripeService.confirmSetupIntent` marca reserva SECURED.
-7. UI muestra "✓ Tarjeta guardada · Visa **** 4242".
+7. UI muestra "✓ Tarjeta guardada · Visa \*\*\*\* 4242".
 
 **Privacidad / PCI.** El PAN nunca toca nuestros servidores (SAQ A).
 El sentinel actor para audit es
@@ -1291,9 +1294,9 @@ El sentinel actor para audit es
 
 **Endpoint nuevo (API):**
 
-| Método | Ruta | Rate |
-|--------|------|------|
-| POST | `/public/ibe/properties/:slug/reservations/:code/resend-confirmation` | 3/hora |
+| Método | Ruta                                                                  | Rate   |
+| ------ | --------------------------------------------------------------------- | ------ |
+| POST   | `/public/ibe/properties/:slug/reservations/:code/resend-confirmation` | 3/hora |
 
 Body `{ lastName }`. Verifica `(code, lastName)`. V1 sólo loguea
 estructurado — el consumer real de email (Postmark/SendGrid) llega en
@@ -1301,8 +1304,8 @@ Sprint 9. Devuelve `{ queued: true, email }`.
 
 **Ruta web-ibe:**
 
-| Ruta | Descripción |
-|------|------------|
+| Ruta               | Descripción                                                         |
+| ------------------ | ------------------------------------------------------------------- |
 | `/h/<slug>/manage` | Form lookup (code + apellido). Si vienen via query, muestra detalle |
 
 Flujo:
@@ -1320,8 +1323,7 @@ Flujo:
 5. Banners: `cancelled` (con monto), `cancel_needs_accept`,
    `cancel_fail`, `resent`, `resend_fail`, `lookup_fail`.
 
-Sin cobro automatizado de penalización — el back-office (Stripe Fase
-2) lo ejecuta cuando aplique.
+Sin cobro automatizado de penalización — el back-office (Stripe Fase 2) lo ejecuta cuando aplique.
 
 **Sprint 8 IBE V1 completo** (W1 API pública + W2 app web-ibe + W3
 booking + Stripe + W4 manage). Pendiente: email real (S9), captcha en
@@ -1356,11 +1358,11 @@ Postmark requiere verificar el `From` (single sender o dominio).
 
 ### 21.3 Plantillas V1
 
-| Template                       | Trigger                          | Locales |
-|--------------------------------|----------------------------------|---------|
-| `reservation_confirmation`     | IBE create + resend              | ES, EN  |
-| `reservation_cancelled`        | IBE cancel                       | ES, EN  |
-| `front_desk_new_reservation`   | Pending S10 (front desk inbox)   | ES      |
+| Template                     | Trigger                        | Locales |
+| ---------------------------- | ------------------------------ | ------- |
+| `reservation_confirmation`   | IBE create + resend            | ES, EN  |
+| `reservation_cancelled`      | IBE cancel                     | ES, EN  |
+| `front_desk_new_reservation` | Pending S10 (front desk inbox) | ES      |
 
 Render: `{{ key }}` con regex puro, soporta dotted paths (`brand.name`).
 Wrap HTML mínimo (table layout, inline styles, sin assets). Branding
@@ -1446,16 +1448,16 @@ si el patrón de tráfico lo pide.
 
 Cuotas vigentes (Sprint 9):
 
-| Endpoint | max | window |
-|---|---|---|
-| `GET /properties/:slug` | 60 | 60s |
-| `GET /properties/:slug/availability` | 30 | 60s |
-| `POST /properties/:slug/reservations` | 5 | 60min |
-| `GET /properties/:slug/reservations/:code` | 20 | 60s |
-| `POST .../cancel` | 5 | 60min |
-| `POST .../setup-intent` | 10 | 60s |
-| `POST .../confirm-setup-intent` | 10 | 60s |
-| `POST .../resend-confirmation` | 3 | 60min |
+| Endpoint                                   | max | window |
+| ------------------------------------------ | --- | ------ |
+| `GET /properties/:slug`                    | 60  | 60s    |
+| `GET /properties/:slug/availability`       | 30  | 60s    |
+| `POST /properties/:slug/reservations`      | 5   | 60min  |
+| `GET /properties/:slug/reservations/:code` | 20  | 60s    |
+| `POST .../cancel`                          | 5   | 60min  |
+| `POST .../setup-intent`                    | 10  | 60s    |
+| `POST .../confirm-setup-intent`            | 10  | 60s    |
+| `POST .../resend-confirmation`             | 3   | 60min  |
 
 La IP se extrae en este orden: `cf-connecting-ip` (cuando estamos tras
 Cloudflare) → `x-forwarded-for` (Fly proxy) → `req.ip` (fallback).
@@ -1510,6 +1512,7 @@ Borrar `TURNSTILE_SECRET_KEY` del API (`flyctl secrets unset`). El
 guard pasa de largo. El componente del IBE seguirá montado hasta que
 también se quite la `NEXT_PUBLIC_TURNSTILE_SITE_KEY` y se redeploye —
 mientras tanto el captcha se completa pero su token se ignora.
+
 ## 23. Onboarding wizard self-service — Sprint 9 W3
 
 El wizard permite que un hotel se cree solo, sin operador Aubergine. La
@@ -1599,6 +1602,7 @@ de respuesta.
 ### 23.6 Página `/onboarding/done`
 
 Muestra al hotel:
+
 - email del admin
 - tenant ID + slug público generados
 - link al IBE (`https://pms-web-ibe.fly.dev/h/<slug>`)
@@ -1617,6 +1621,7 @@ WHERE onboarding_status = 'EMAIL_VERIFIED'
   AND slug LIKE 'pending-%'
   AND created_at < NOW() - INTERVAL '7 days';
 ```
+
 ## 24. Channel Manager — Sprint 9 W2
 
 El módulo `channel-manager` conecta el PMS con un Channel Manager
@@ -1677,6 +1682,7 @@ silencioso — el PMS sigue funcionando sin CM.
 `POST https://pms-api.fly.dev/public/cm/<slug>/webhook`
 
 Headers requeridos:
+
 - `x-siteminder-signature: <hex sha256 HMAC>` calculado sobre el body
   crudo.
 
@@ -1693,14 +1699,18 @@ Body (V1 SiteMinder shape):
   "roomTypeCode": "DBL",
   "total": { "amount": "200.00", "currency": "EUR" },
   "customer": {
-    "firstName": "...", "lastName": "...",
-    "email": "...", "phone": "...", "nationality": "ES"
+    "firstName": "...",
+    "lastName": "...",
+    "email": "...",
+    "phone": "...",
+    "nationality": "ES"
   },
   "specialRequests": "..."
 }
 ```
 
 Respuestas:
+
 - `200 { reservationId, code, outcome: created|updated }`
 - `400` payload inválido / room type desconocido / CM no configurado
 - `403` firma HMAC inválida
@@ -1880,6 +1890,7 @@ WHERE  id = '<...>';
 
 Y manualmente completar el flujo (crear property + admin user) si no
 existía aún — RUNBOOK §23 cubre el flujo manual.
+
 ## 27. Back-office admin de Property — Sprint 10 W4
 
 `/properties/[id]/settings` en el web-fo permite que el operador del
@@ -1927,6 +1938,7 @@ para auditoría o trigger de invalidación de caché en otros módulos
 El rol `tenant_admin` se asigna en el realm del tenant. Cualquier
 usuario sin él recibe 403 al intentar guardar. Operadores normales
 (`front_desk`) pueden ver la configuración pero no modificarla.
+
 ## 28. Postmark bounce/complaint webhook — Sprint 11 W1
 
 Endpoint público `POST /public/notifications/postmark` que recibe los
@@ -1956,14 +1968,14 @@ aceptar bounces sin validar.
 
 ### 28.3 Comportamiento por record type
 
-| RecordType | Acción |
-|---|---|
-| `Bounce` con `Type=HardBounce` | suppression `HARD_BOUNCE` |
-| `Bounce` con `Type` ≠ `HardBounce` | noop |
-| `SpamComplaint` | suppression `SPAM_COMPLAINT` |
-| `SubscriptionChange` con `SuppressSending=true` | suppression `UNSUBSCRIBE` |
-| `SubscriptionChange` con `SuppressSending=false` | reactivación (delete) |
-| Otros (Delivery, Open, Click, ...) | 200 OK sin acción |
+| RecordType                                       | Acción                       |
+| ------------------------------------------------ | ---------------------------- |
+| `Bounce` con `Type=HardBounce`                   | suppression `HARD_BOUNCE`    |
+| `Bounce` con `Type` ≠ `HardBounce`               | noop                         |
+| `SpamComplaint`                                  | suppression `SPAM_COMPLAINT` |
+| `SubscriptionChange` con `SuppressSending=true`  | suppression `UNSUBSCRIBE`    |
+| `SubscriptionChange` con `SuppressSending=false` | reactivación (delete)        |
+| Otros (Delivery, Open, Click, ...)               | 200 OK sin acción            |
 
 ### 28.4 Métricas
 
@@ -1999,21 +2011,22 @@ ON CONFLICT (email) DO UPDATE
 Quitar `POSTMARK_WEBHOOK_SECRET` → endpoint vuelve a 503. La
 suppression list sigue activa (el pre-check en `sendEmail` lee la
 tabla, independientemente del webhook).
+
 ## 29. Stripe webhook hardening — Sprint 11 W3
 
 Endurece la verificación del webhook de Stripe y añade observabilidad.
 
 ### 29.1 Comportamiento
 
-| Caso | Status | Body |
-|---|---|---|
-| `STRIPE_WEBHOOK_SECRET` ausente | 503 | `STRIPE_WEBHOOK_SECRET no configurado` |
-| header `stripe-signature` ausente | **403** (antes 400) | `missing_stripe_signature` |
-| firma incorrecta | **403** (antes 400) | `signature_mismatch` |
-| raw body ausente | 400 | `raw_body_required` |
-| event `setup_intent.succeeded` | 200 | `{ ok, type, outcome: 'handled' }` |
-| otros event types | 200 | `{ ok, type, outcome: 'unknown_type' }` |
-| handler interno falla | 500 (Stripe reintenta) | — |
+| Caso                              | Status                 | Body                                    |
+| --------------------------------- | ---------------------- | --------------------------------------- |
+| `STRIPE_WEBHOOK_SECRET` ausente   | 503                    | `STRIPE_WEBHOOK_SECRET no configurado`  |
+| header `stripe-signature` ausente | **403** (antes 400)    | `missing_stripe_signature`              |
+| firma incorrecta                  | **403** (antes 400)    | `signature_mismatch`                    |
+| raw body ausente                  | 400                    | `raw_body_required`                     |
+| event `setup_intent.succeeded`    | 200                    | `{ ok, type, outcome: 'handled' }`      |
+| otros event types                 | 200                    | `{ ok, type, outcome: 'unknown_type' }` |
+| handler interno falla             | 500 (Stripe reintenta) | —                                       |
 
 403 vs 400 importa: las suites de seguridad alertan sobre 403
 agregado (señal de auth/firma) sin disparar alarmas de
@@ -2030,6 +2043,7 @@ stripe_webhook_event_age_seconds_*{type}     # histograma
 ```
 
 Alertas sugeridas:
+
 - `rate(stripe_webhook_events_total{outcome="bad_signature"}[5m]) > 0.1`
   → posible ataque o secret rotado mal.
 - `histogram_quantile(0.95, stripe_webhook_event_age_seconds_bucket) > 60`
@@ -2094,6 +2108,7 @@ Si NATS no está disponible, `enqueueEmail` hace fallback a
 ### 30.3 Outbox y dedup
 
 Cada evento entrante:
+
 1. Lookup en `notification_outbox` por `dedup_key`. Si está
    `DELIVERED`/`SUPPRESSED` → ack inmediato (re-entrega idempotente).
 2. Upsert outbox con `status='PENDING'` + `attempts++`.
@@ -2116,6 +2131,7 @@ notification_consumer_events_total{template, outcome}
 ```
 
 Alertas sugeridas:
+
 - `rate(notification_consumer_events_total{outcome="failed"}[5m]) > 0.1`
   → fallos transitorios o Postmark caído.
 - Inspect outbox con `status='FAILED'` y `attempts >= 5` para casos
@@ -2153,33 +2169,37 @@ fallback inline y el outbox no se llena.
 
 ### 30.7 Sites migrados desde sendEmail inline
 
-| Site | Antes (S9 W1) | Ahora (S11 W2) |
-|---|---|---|
-| `PublicIbeService.dispatchConfirmation` | `sendEmail` inline | `enqueueEmail` con `dedup=ibe-confirmation-{code}` |
-| `PublicIbeService.dispatchCancellation` | `sendEmail` inline | `enqueueEmail` con `dedup=ibe-cancellation-{code}` |
-| `PublicIbeService.resendConfirmation` | reuses dispatchConfirmation | dispatchConfirmation con `dedupSuffix=-resend-<ts>` |
-| `PublicOnboardingService.start` (S9 W3) | `sendEmail` inline | **pendiente** — migrar tras merge S9 W3 |
+| Site                                    | Antes (S9 W1)               | Ahora (S11 W2)                                      |
+| --------------------------------------- | --------------------------- | --------------------------------------------------- |
+| `PublicIbeService.dispatchConfirmation` | `sendEmail` inline          | `enqueueEmail` con `dedup=ibe-confirmation-{code}`  |
+| `PublicIbeService.dispatchCancellation` | `sendEmail` inline          | `enqueueEmail` con `dedup=ibe-cancellation-{code}`  |
+| `PublicIbeService.resendConfirmation`   | reuses dispatchConfirmation | dispatchConfirmation con `dedupSuffix=-resend-<ts>` |
+| `PublicOnboardingService.start` (S9 W3) | `sendEmail` inline          | **pendiente** — migrar tras merge S9 W3             |
+
 ## 31. Grafana dashboards Sprint 11 — IBE / CM / Payments / Notifications
 
 `infra/grafana/dashboards/` añade cuatro dashboards JSON importables
 cubriendo todos los métricas que añadimos en S6-S11:
 
-| Dashboard | UID | Métricas |
-|---|---|---|
-| `ibe.json` | `aubergine-ibe` | `public_ibe_{rate_limit_hits,blocklist_hits,turnstile_failures,turnstile_verifications}_total` |
-| `channel-manager.json` | `aubergine-channel-manager` | `channel_manager_{sync_total,sync_duration_ms,inbound_total,webhook_rejections_total}` |
-| `payments.json` | `aubergine-payments` | `stripe_webhook_{events_total,event_age_seconds}` |
-| `notifications.json` | `aubergine-notifications` | `notification_consumer_events_total`, `email_{suppressions_added,send_skipped_suppressed}_total`, `postmark_webhook_{records,rejections}_total` |
+| Dashboard              | UID                         | Métricas                                                                                                                                        |
+| ---------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ibe.json`             | `aubergine-ibe`             | `public_ibe_{rate_limit_hits,blocklist_hits,turnstile_failures,turnstile_verifications}_total`                                                  |
+| `channel-manager.json` | `aubergine-channel-manager` | `channel_manager_{sync_total,sync_duration_ms,inbound_total,webhook_rejections_total}`                                                          |
+| `payments.json`        | `aubergine-payments`        | `stripe_webhook_{events_total,event_age_seconds}`                                                                                               |
+| `notifications.json`   | `aubergine-notifications`   | `notification_consumer_events_total`, `email_{suppressions_added,send_skipped_suppressed}_total`, `postmark_webhook_{records,rejections}_total` |
 
 ### 31.1 Importar
 
 #### Grafana Cloud
+
 ```
 Dashboards → New → Import → Upload JSON file
 ```
+
 Repetir para cada uno de los 4 archivos.
 
 #### Self-hosted
+
 Los dashboards están provisionados file-based via `dashboards.yaml`
 existente — basta con que Grafana monte `infra/grafana/dashboards/`
 como volumen y los nuevos archivos se cargan al reiniciar.
@@ -2187,6 +2207,7 @@ como volumen y los nuevos archivos se cargan al reiniciar.
 ### 31.2 Alert rules nuevas (`alerts.yaml`)
 
 Cuatro grupos añadidos:
+
 - `aubergine-s11-payments` (2 reglas: bad_signature, event_age_p95).
 - `aubergine-s11-notifications` (3 reglas: consumer_failures,
   postmark_bad_signature, suppressions_burst).
@@ -2195,6 +2216,7 @@ Cuatro grupos añadidos:
   webhook_rejections).
 
 Severities:
+
 - `page` — despierta al on-call (StripeWebhookBadSignature por
   defecto, indica ataque o config rota).
 - `warn` — slack channel, revisar mañana.
@@ -2202,6 +2224,7 @@ Severities:
 ### 31.3 Cardinalidad
 
 Todos los nuevos counters usan labels acotados:
+
 - `slug` (≈ decenas de hoteles a medio plazo).
 - `route` (≈ 7 endpoints IBE).
 - `type` Stripe (≈ 20-30 tipos relevantes).

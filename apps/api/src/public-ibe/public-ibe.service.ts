@@ -84,10 +84,7 @@ export class PublicIbeService {
     if (arrival >= departure) {
       throw new BadRequestException('arrival must be before departure');
     }
-    const nights = Math.max(
-      1,
-      Math.round((departure.getTime() - arrival.getTime()) / 86_400_000),
-    );
+    const nights = Math.max(1, Math.round((departure.getTime() - arrival.getTime()) / 86_400_000));
 
     const ctx = this.publicCtx(property.tenantId);
     const results = await this.prisma.withTenant(ctx, async (tx) => {
@@ -248,9 +245,7 @@ export class PublicIbeService {
           throw new BadRequestException('ratePlanId no encontrado o no público');
         }
         if (ratePlan.nonRefundable && input.paymentMode !== 'charge') {
-          throw new BadRequestException(
-            'Tarifa no reembolsable: requiere paymentMode=charge.',
-          );
+          throw new BadRequestException('Tarifa no reembolsable: requiere paymentMode=charge.');
         }
       }
 
@@ -325,9 +320,7 @@ export class PublicIbeService {
     // si la property no lo está). Errores del CM no rompen la creación.
     void this.channelManager
       .pushDelta({ propertyId: property.id, arrival: input.arrival, departure: input.departure })
-      .catch((err) =>
-        this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`),
-      );
+      .catch((err) => this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`));
 
     await this.events.publish('reservation.created', ctx, {
       reservationId: reservationOut.id,
@@ -478,17 +471,11 @@ export class PublicIbeService {
       // cobro upfront ya se ejecutó (eso se valida adicionalmente en
       // S12 W3 vía folio entry `pi-charge-*`).
       if (existing.ratePlan?.nonRefundable) {
-        throw new ConflictException(
-          'Tarifa no reembolsable — esta reserva no admite cancelación.',
-        );
+        throw new ConflictException('Tarifa no reembolsable — esta reserva no admite cancelación.');
       }
 
       const policy = existing.cancellationPolicy;
-      const penalty = computePenalty(
-        existing.arrivalDate,
-        Number(existing.totalAmount),
-        policy,
-      );
+      const penalty = computePenalty(existing.arrivalDate, Number(existing.totalAmount), policy);
       if (penalty > 0 && !input.acceptPenalty) {
         throw new ConflictException(
           `Penalización aplicable: ${penalty.toFixed(2)} ${existing.currency}. Confirma con acceptPenalty=true.`,
@@ -522,10 +509,12 @@ export class PublicIbeService {
 
     // Push delta al channel manager — la cancelación libera inventario.
     void this.channelManager
-      .pushDelta({ propertyId: property.id, arrival: result.arrivalIso, departure: result.departureIso })
-      .catch((err) =>
-        this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`),
-      );
+      .pushDelta({
+        propertyId: property.id,
+        arrival: result.arrivalIso,
+        departure: result.departureIso,
+      })
+      .catch((err) => this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`));
 
     await this.events.publish('reservation.cancelled', ctx, {
       reservationId: result.id,
@@ -838,10 +827,7 @@ function generateCode(propertyCode: string): string {
 }
 
 function canCancel(row: { status: ReservationStatus }): boolean {
-  return (
-    row.status === ReservationStatus.PENDING ||
-    row.status === ReservationStatus.CONFIRMED
-  );
+  return row.status === ReservationStatus.PENDING || row.status === ReservationStatus.CONFIRMED;
 }
 
 /**

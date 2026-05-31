@@ -166,6 +166,7 @@ huésped. RUNBOOK §28.
 
 Cambiar los 5 sitios que hoy llaman `NotificationsService.sendEmail`
 inline a publicar `email.send_requested` en NATS:
+
 - `PublicIbeService.dispatchConfirmation` / `dispatchCancellation`
 - `PublicIbeService.resendConfirmation`
 - `PublicOnboardingService.start`
@@ -258,23 +259,27 @@ Cada JSON es un dashboard exportado importable desde Grafana
 ### 5.2 Paneles por dashboard
 
 **IBE** (S8 + S9 W4):
+
 - Reservas creadas / hora (`rate(reservation_created_total[1h])`).
 - Rate limit hits / 5m por slug.
 - Turnstile failures por reason.
 - Blocklist hits por slug.
 
 **Channel manager** (S9 W2):
+
 - Sync runs / hora por kind + status.
 - Sync duration p50/p95/p99.
 - Inbound reservations / hora por source.
 - Webhook rejections por reason.
 
 **Payments** (S5+S11 W3):
+
 - Stripe webhook events / hora por type + outcome.
 - Webhook event age p95.
 - Failed payments.
 
 **Notifications** (S9 W1 + S11 W1 + W2):
+
 - Emails enviados / hora por template.
 - Suppressions añadidas / día.
 - Consumer outcomes (delivered / failed / suppressed).
@@ -293,12 +298,12 @@ Cada JSON es un dashboard exportado importable desde Grafana
 
 ## 6. Datos y migraciones nuevas
 
-| Migración | Contenido |
-|-----------|-----------|
-| `email_suppressions` | W1 |
-| `notification_outbox` | W2 |
-| — | W3 no toca DB. |
-| — | W4 no toca DB. |
+| Migración             | Contenido      |
+| --------------------- | -------------- |
+| `email_suppressions`  | W1             |
+| `notification_outbox` | W2             |
+| —                     | W3 no toca DB. |
+| —                     | W4 no toca DB. |
 
 ---
 

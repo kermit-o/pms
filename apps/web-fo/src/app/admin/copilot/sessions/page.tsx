@@ -60,22 +60,17 @@ export default async function CopilotSessionsAdminPage({ searchParams }: PagePro
 
   // Cursor para "older →": último timestamp de la página actual.
   const olderCursor =
-    sessions.length === filters.limit
-      ? sessions[sessions.length - 1]!.lastActivityAt
-      : null;
+    sessions.length === filters.limit ? sessions[sessions.length - 1]!.lastActivityAt : null;
   const hasActiveFilter = Boolean(sp.userId || sp.from || sp.to || sp.before);
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-6 py-10">
       <header>
-        <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
-          Aubergine · Admin
-        </p>
+        <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">Aubergine · Admin</p>
         <h1 className="text-3xl font-semibold text-aubergine-700">Copilot · Sesiones</h1>
         <p className="mt-1 text-sm text-aubergine-700/70">
-          Historial reciente de conversaciones del asistente. Útil para auditar
-          la operativa, detectar consultas frecuentes y depurar respuestas raras
-          del modelo.
+          Historial reciente de conversaciones del asistente. Útil para auditar la operativa,
+          detectar consultas frecuentes y depurar respuestas raras del modelo.
         </p>
       </header>
 
@@ -162,9 +157,7 @@ export default async function CopilotSessionsAdminPage({ searchParams }: PagePro
                     {s.firstMessage ? (
                       <p className="text-aubergine-900">{s.firstMessage}</p>
                     ) : (
-                      <p className="italic text-aubergine-700/50">
-                        (sin mensaje del operador)
-                      </p>
+                      <p className="italic text-aubergine-700/50">(sin mensaje del operador)</p>
                     )}
                     <p className="mt-0.5 font-mono text-[10px] text-aubergine-700/40">
                       {s.sessionId.slice(0, 8)} · usuario {s.userId.slice(0, 8)}
@@ -199,8 +192,7 @@ export default async function CopilotSessionsAdminPage({ searchParams }: PagePro
 
       <div className="flex items-center justify-between gap-3">
         <p className="text-[11px] text-aubergine-700/40">
-          Página de 50 sesiones. Persistido en `copilot_messages` (mensajes +
-          widgets).
+          Página de 50 sesiones. Persistido en `copilot_messages` (mensajes + widgets).
         </p>
         <div className="flex items-center gap-2">
           <a

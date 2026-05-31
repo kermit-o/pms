@@ -137,9 +137,7 @@ export default async function ReservationGroupPage({
       </Link>
 
       <header>
-        <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">
-          Aubergine · Grupo
-        </p>
+        <p className="text-xs uppercase tracking-[0.3em] text-aubergine-500">Aubergine · Grupo</p>
         <h1 className="font-mono text-2xl font-semibold text-aubergine-700">{detail.code}</h1>
         <p className="text-base text-aubergine-700/80">{detail.name}</p>
         <p className="mt-1 text-sm text-aubergine-700/60">
@@ -148,7 +146,10 @@ export default async function ReservationGroupPage({
             .map(([rt, n]) => `${n}×${rt.slice(0, 8)}`)
             .join(' · ')}
           {commonArrival && commonDeparture && (
-            <> · {commonArrival} → {commonDeparture}</>
+            <>
+              {' '}
+              · {commonArrival} → {commonDeparture}
+            </>
           )}
         </p>
       </header>

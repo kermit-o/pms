@@ -28,7 +28,11 @@ export class MemoryService {
    * El número de chunks es modesto: cardex (1) + last N stays (≤10) + last
    * N folio notes (≤10) ≈ 21 max por huésped. Reescribimos con upsert.
    */
-  async ingestForGuest(user: AuthUser, correlationId: string, guestId: string): Promise<{
+  async ingestForGuest(
+    user: AuthUser,
+    correlationId: string,
+    guestId: string,
+  ): Promise<{
     written: number;
   }> {
     const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId };
@@ -98,7 +102,11 @@ export class MemoryService {
           : null,
         guest.notes ? `Notas cardex: ${guest.notes}` : null,
       ].filter(Boolean) as string[];
-      if (guest.attributes && typeof guest.attributes === 'object' && !Array.isArray(guest.attributes)) {
+      if (
+        guest.attributes &&
+        typeof guest.attributes === 'object' &&
+        !Array.isArray(guest.attributes)
+      ) {
         const attrs = guest.attributes as Record<string, unknown>;
         const preferences = attrs.preferences as string | undefined;
         const allergies = attrs.allergies as string | undefined;
@@ -178,7 +186,10 @@ export class MemoryService {
     user: AuthUser,
     correlationId: string,
     input: { guestId: string; query: string; limit: number },
-  ): Promise<{ chunks: Array<{ sourceKind: string; sourceRef: string | null; text: string; score: number }>; ingested: boolean }> {
+  ): Promise<{
+    chunks: Array<{ sourceKind: string; sourceRef: string | null; text: string; score: number }>;
+    ingested: boolean;
+  }> {
     const ctx = { tenantId: user.tenantId, actorId: user.sub, correlationId };
     let ingested = false;
     const initial = await this.prisma.withTenant(ctx, (tx) =>
@@ -189,10 +200,17 @@ export class MemoryService {
       ingested = true;
     }
 
-    const chunks = await this.prisma.withTenant(ctx, (tx) =>
-      tx.$queryRaw<
-        Array<{ source_kind: string; source_ref: string | null; chunk_text: string; score: number }>
-      >`
+    const chunks = await this.prisma.withTenant(
+      ctx,
+      (tx) =>
+        tx.$queryRaw<
+          Array<{
+            source_kind: string;
+            source_ref: string | null;
+            chunk_text: string;
+            score: number;
+          }>
+        >`
         SELECT source_kind::text,
                source_ref,
                chunk_text,

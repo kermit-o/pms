@@ -110,7 +110,9 @@ export class RateLimitGuard implements CanActivate {
       });
       const attrs = property?.attributes as { blockedIps?: unknown } | null | undefined;
       if (!attrs || !Array.isArray(attrs.blockedIps)) return new Set();
-      const ips = attrs.blockedIps.filter((x): x is string => typeof x === 'string' && x.length > 0);
+      const ips = attrs.blockedIps.filter(
+        (x): x is string => typeof x === 'string' && x.length > 0,
+      );
       return new Set(ips);
     } catch (err) {
       this.log.warn(`loadBlocklist slug=${slug} error: ${(err as Error).message}`);

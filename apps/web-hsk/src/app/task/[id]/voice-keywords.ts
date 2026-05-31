@@ -26,7 +26,12 @@ const RULES: Array<{ status: RoomStatusKeyword; patterns: RegExp[] }> = [
   },
   {
     status: 'INSPECTED',
-    patterns: [/\binspeccion(ada|ado|es)?\b/, /\binspecion(ada|ado)?\b/, /\bsupervisada\b/, /\brevisada\b/],
+    patterns: [
+      /\binspeccion(ada|ado|es)?\b/,
+      /\binspecion(ada|ado)?\b/,
+      /\bsupervisada\b/,
+      /\brevisada\b/,
+    ],
   },
   {
     status: 'DIRTY',
@@ -49,10 +54,5 @@ export function parseRoomStatusKeyword(text: string): RoomStatusKeyword | null {
 }
 
 function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 }

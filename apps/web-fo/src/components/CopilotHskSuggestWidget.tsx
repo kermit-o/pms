@@ -29,7 +29,11 @@ export function CopilotHskSuggestWidget({ widget }: { widget: CopilotHskSuggestW
             {candidates.map((c) => {
               const pct = Math.round((c.totalAssignedMin / shiftCapacityMin) * 100);
               const tone =
-                pct >= 95 ? 'bg-rose-100 text-rose-900' : pct >= 75 ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900';
+                pct >= 95
+                  ? 'bg-rose-100 text-rose-900'
+                  : pct >= 75
+                    ? 'bg-amber-100 text-amber-900'
+                    : 'bg-emerald-100 text-emerald-900';
               return (
                 <li
                   key={c.userId}

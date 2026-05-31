@@ -108,8 +108,8 @@ piloto.
 
 ### 2.3 Migraciones
 
-| Migración | Contenido |
-|---|---|
+| Migración                 | Contenido                                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `20260710_tenant_billing` | `tenants.stripe_customer_id`, `stripe_subscription_id`, `subscription_status` (text + check), `current_period_end` |
 
 ### 2.4 Decisiones a tomar con el PO
@@ -168,8 +168,8 @@ facturas — friction crítica.
 
 ### 3.4 Migraciones
 
-| Migración | Contenido |
-|---|---|
+| Migración           | Contenido                                                              |
+| ------------------- | ---------------------------------------------------------------------- |
 | `20260712_invoices` | tabla `invoices` (col completa), `invoice_submissions` para audit AEAT |
 
 ### 3.5 Sprint count tentativo

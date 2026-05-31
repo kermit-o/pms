@@ -30,7 +30,9 @@ vi.mock('@anthropic-ai/sdk', () => ({
 function buildAdapter() {
   const resolver = {
     has: vi.fn().mockReturnValue(true),
-    getMeta: vi.fn().mockReturnValue({ name: 'x', description: 'x', mutating: false, financial: false }),
+    getMeta: vi
+      .fn()
+      .mockReturnValue({ name: 'x', description: 'x', mutating: false, financial: false }),
     execute: vi.fn().mockResolvedValue({ ok: true }),
     tryValidate: vi.fn().mockReturnValue({ ok: true }),
   };
@@ -134,9 +136,7 @@ describe('AnthropicAdapter', () => {
     const config = { get: vi.fn().mockReturnValue(undefined) };
     const adapter = new AnthropicAdapter(resolver as never, config as never);
     expect(adapter.isAvailable()).toBe(false);
-    await expect(adapter.propose(session, user, 'cid', 'm')).rejects.toThrow(
-      /ANTHROPIC_API_KEY/,
-    );
+    await expect(adapter.propose(session, user, 'cid', 'm')).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
 
   it('returns friendly text when Anthropic responds 401 invalid key', async () => {
@@ -173,8 +173,7 @@ describe('AnthropicAdapter', () => {
       content: [
         {
           type: 'text',
-          text:
-            '| Doble | 95 € |\n| Junior Suite | desde más € |\n| Suite | desde más € |',
+          text: '| Doble | 95 € |\n| Junior Suite | desde más € |\n| Suite | desde más € |',
         },
       ],
       usage: { input_tokens: 5, output_tokens: 10 },

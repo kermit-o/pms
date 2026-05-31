@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  NightAuditAnomalyKind,
-  NightAuditAnomalySeverity,
-} from '@pms/db';
+import { NightAuditAnomalyKind, NightAuditAnomalySeverity } from '@pms/db';
 import { AnomalyService } from './anomaly.service';
 import type { StepContext } from './step';
 
@@ -37,9 +34,7 @@ describe('AnomalyService', () => {
     const queryRaw = vi
       .fn()
       // duplicate charges
-      .mockResolvedValueOnce([
-        { idempotency_key: 'dup-1', rows: 2, amounts: '100.00,150.00' },
-      ])
+      .mockResolvedValueOnce([{ idempotency_key: 'dup-1', rows: 2, amounts: '100.00,150.00' }])
       // deep discounts: empty
       .mockResolvedValueOnce([])
       // cancellation spree: empty
@@ -85,9 +80,7 @@ describe('AnomalyService', () => {
     const queryRaw = vi
       .fn()
       .mockResolvedValueOnce([]) // duplicates
-      .mockResolvedValueOnce([
-        { folio_id: 'fff', charges: '100', discounts: '60' },
-      ])
+      .mockResolvedValueOnce([{ folio_id: 'fff', charges: '100', discounts: '60' }])
       .mockResolvedValueOnce([]); // cancellations
     const ctx = buildCtx({ queryRaw });
     const out = await service.detectAll(ctx);

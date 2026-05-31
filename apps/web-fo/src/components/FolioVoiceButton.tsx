@@ -16,11 +16,7 @@ import { parseVoiceFoCommand, type VoiceFoIntent } from '@/lib/voice-fo-grammar'
  * El operador revisa y pulsa "Añadir cargo / Registrar pago" como
  * siempre (ADR-020 — nada se ejecuta sin confirmación humana).
  */
-export function FolioVoiceButton({
-  formScopeSelector,
-}: {
-  formScopeSelector: string;
-}) {
+export function FolioVoiceButton({ formScopeSelector }: { formScopeSelector: string }) {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -93,7 +89,9 @@ export function FolioVoiceButton({
     if (!intent || intent.kind !== 'add_charge') return;
     const scope = document.querySelector(formScopeSelector);
     if (!scope) return;
-    const chargeForm = scope.querySelector('form[action] input[name="description"]')?.closest('form');
+    const chargeForm = scope
+      .querySelector('form[action] input[name="description"]')
+      ?.closest('form');
     if (!chargeForm) return;
     fillInput(chargeForm, 'description', intent.description);
     fillInput(chargeForm, 'amount', intent.amount.toFixed(2));

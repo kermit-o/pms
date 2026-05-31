@@ -75,14 +75,11 @@ export function NoShowChargeButton({
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className="space-y-3 rounded-2xl bg-white p-4 ring-1 ring-rose-200"
-    >
+    <form onSubmit={submit} className="space-y-3 rounded-2xl bg-white p-4 ring-1 ring-rose-200">
       <p className="text-xs text-aubergine-700/70">
         Cargar a {cardBrand ? `${cardBrand} ` : 'tarjeta '}
-        ****{cardLast4 ?? '----'}. El cargo es off-session — si el banco pide SCA
-        el operador deberá retomar en presencia del huésped.
+        ****{cardLast4 ?? '----'}. El cargo es off-session — si el banco pide SCA el operador deberá
+        retomar en presencia del huésped.
       </p>
       <label className="block text-xs text-aubergine-700">
         Importe ({currency})

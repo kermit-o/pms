@@ -48,7 +48,9 @@ export default async function ManagePage({ params, searchParams }: Props) {
     if (!c || !ln) {
       redirect(`/h/${slug}/manage?lang=${lang}&status=lookup_fail`);
     }
-    redirect(`/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(c)}&lastName=${encodeURIComponent(ln)}`);
+    redirect(
+      `/h/${slug}/manage?lang=${lang}&code=${encodeURIComponent(c)}&lastName=${encodeURIComponent(ln)}`,
+    );
   }
 
   async function cancelAction(formData: FormData) {
@@ -111,15 +113,16 @@ export default async function ManagePage({ params, searchParams }: Props) {
   if (!code || !lastName) {
     return (
       <Shell slug={slug} lang={lang}>
-        <h2 className="text-xl font-semibold text-aubergine-700">
-          {t(lang, 'manage.title')}
-        </h2>
+        <h2 className="text-xl font-semibold text-aubergine-700">{t(lang, 'manage.title')}</h2>
         {sp.status === 'lookup_fail' && (
           <Banner kind="error">
             {lang === 'es' ? 'Faltan campos obligatorios.' : 'Required fields are missing.'}
           </Banner>
         )}
-        <form action={lookupAction} className="mt-4 space-y-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100">
+        <form
+          action={lookupAction}
+          className="mt-4 space-y-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100"
+        >
           <label className="block text-xs font-medium uppercase tracking-wide text-aubergine-500">
             {t(lang, 'manage.code')}
             <input
@@ -233,8 +236,14 @@ export default async function ManagePage({ params, searchParams }: Props) {
       <section className="mt-4 grid gap-3 sm:grid-cols-2">
         <Stat label={lang === 'es' ? 'Llegada' : 'Check-in'} value={view.arrival} />
         <Stat label={lang === 'es' ? 'Salida' : 'Check-out'} value={view.departure} />
-        <Stat label={lang === 'es' ? 'Tipo' : 'Room type'} value={`${view.roomType.code} · ${view.roomType.name}`} />
-        <Stat label={lang === 'es' ? 'Total' : 'Total'} value={`${view.totalAmount} ${view.currency}`} />
+        <Stat
+          label={lang === 'es' ? 'Tipo' : 'Room type'}
+          value={`${view.roomType.code} · ${view.roomType.name}`}
+        />
+        <Stat
+          label={lang === 'es' ? 'Total' : 'Total'}
+          value={`${view.totalAmount} ${view.currency}`}
+        />
       </section>
 
       {view.cancellationPolicy && (
@@ -258,7 +267,10 @@ export default async function ManagePage({ params, searchParams }: Props) {
         </form>
 
         {view.cancellable && (
-          <form action={cancelAction} className="sm:flex-1 space-y-2 rounded-xl bg-rose-50 p-3 ring-1 ring-rose-200">
+          <form
+            action={cancelAction}
+            className="sm:flex-1 space-y-2 rounded-xl bg-rose-50 p-3 ring-1 ring-rose-200"
+          >
             <label className="flex items-start gap-2 text-xs text-rose-900">
               <input type="checkbox" name="acceptPenalty" className="mt-0.5" />
               <span>
@@ -279,7 +291,10 @@ export default async function ManagePage({ params, searchParams }: Props) {
       </section>
 
       <p className="mt-6 text-center">
-        <Link href={`/h/${slug}/manage?lang=${lang}`} className="text-xs text-aubergine-700 underline">
+        <Link
+          href={`/h/${slug}/manage?lang=${lang}`}
+          className="text-xs text-aubergine-700 underline"
+        >
           {lang === 'es' ? 'Buscar otra reserva' : 'Look up another booking'}
         </Link>
       </p>
@@ -300,7 +315,10 @@ function Shell({
     <>
       <header className="border-b border-aubergine-100 bg-white">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <Link href={`/h/${slug}?lang=${lang}`} className="text-sm text-aubergine-700 hover:underline">
+          <Link
+            href={`/h/${slug}?lang=${lang}`}
+            className="text-sm text-aubergine-700 hover:underline"
+          >
             ← Aubergine
           </Link>
         </div>
@@ -310,7 +328,13 @@ function Shell({
   );
 }
 
-function Banner({ kind, children }: { kind: 'success' | 'warn' | 'error'; children: React.ReactNode }) {
+function Banner({
+  kind,
+  children,
+}: {
+  kind: 'success' | 'warn' | 'error';
+  children: React.ReactNode;
+}) {
   const cls = {
     success: 'bg-emerald-50 text-emerald-900 ring-emerald-200',
     warn: 'bg-amber-50 text-amber-900 ring-amber-200',

@@ -35,9 +35,9 @@ describe('PostmarkWebhookController', () => {
     const suppressions = {} as unknown as EmailSuppressionsService;
     const config = { get: vi.fn(() => undefined) };
     const controller = new PostmarkWebhookController(config as never, suppressions);
-    await expect(
-      controller.handle(reqFor('{}'), 'whatever', {} as never),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(controller.handle(reqFor('{}'), 'whatever', {} as never)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('rejects bad signature with 403', async () => {

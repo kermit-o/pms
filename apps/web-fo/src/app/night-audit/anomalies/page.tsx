@@ -126,10 +126,7 @@ export default async function AnomaliesPage({ searchParams }: PageProps) {
 
       <ul className="space-y-3">
         {rows.map((a) => (
-          <li
-            key={a.id}
-            className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100"
-          >
+          <li key={a.id} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-aubergine-100">
             <div className="flex flex-wrap items-center gap-3">
               <SeverityBadge severity={a.severity} />
               <KindBadge kind={a.kind} />

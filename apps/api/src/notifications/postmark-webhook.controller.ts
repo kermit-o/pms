@@ -66,15 +66,14 @@ export class PostmarkWebhookController {
     this.secret = config.get('POSTMARK_WEBHOOK_SECRET', { infer: true });
     const meter = metrics.getMeter('pms-api/notifications');
     this.recordsTotal = meter.createCounter('postmark_webhook_records', {
-      description: 'Postmark webhook records procesados. record_type ∈ {bounce, complaint, subscription_change, other}.',
+      description:
+        'Postmark webhook records procesados. record_type ∈ {bounce, complaint, subscription_change, other}.',
     });
     this.recordsRejected = meter.createCounter('postmark_webhook_rejections', {
       description: 'Postmark webhook rejections. reason ∈ {bad_signature, no_secret}.',
     });
     if (!this.secret) {
-      this.log.warn(
-        'POSTMARK_WEBHOOK_SECRET not set — webhook will reject all requests with 503.',
-      );
+      this.log.warn('POSTMARK_WEBHOOK_SECRET not set — webhook will reject all requests with 503.');
     }
   }
 

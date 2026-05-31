@@ -27,13 +27,13 @@ flyctl deploy -c apps/web-ibe/fly.toml --dockerfile apps/web-ibe/Dockerfile
 
 ## Routes (V1, Sprint 8 W2)
 
-| Route | Description |
-|------|-------------|
-| `/` | Landing — search by hotel slug |
-| `/h/<slug>` | Hotel home + search form |
-| `/h/<slug>/availability?...` | Availability results |
-| `/h/<slug>/book?...` | Booking flow + Stripe (W3, pending) |
-| `/h/<slug>/manage` | Reservation lookup (W4, pending) |
-| `/manage` | Generic redirect to hotel selector |
+| Route                        | Description                         |
+| ---------------------------- | ----------------------------------- |
+| `/`                          | Landing — search by hotel slug      |
+| `/h/<slug>`                  | Hotel home + search form            |
+| `/h/<slug>/availability?...` | Availability results                |
+| `/h/<slug>/book?...`         | Booking flow + Stripe (W3, pending) |
+| `/h/<slug>/manage`           | Reservation lookup (W4, pending)    |
+| `/manage`                    | Generic redirect to hotel selector  |
 
 See `docs/SPRINT-8-PLAN.md` and `RUNBOOK.md` §20 for the full plan.

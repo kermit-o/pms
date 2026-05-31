@@ -6,7 +6,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { Prisma, ReservationSource, ReservationStatus as PrismaReservationStatus, RoomStatus, HousekeepingTaskStatus, HousekeepingTaskType, GuaranteeType, GuaranteeStatus } from '@pms/db';
+import {
+  Prisma,
+  ReservationSource,
+  ReservationStatus as PrismaReservationStatus,
+  RoomStatus,
+  HousekeepingTaskStatus,
+  HousekeepingTaskType,
+  GuaranteeType,
+  GuaranteeStatus,
+} from '@pms/db';
 import { ChannelManagerService } from '../channel-manager';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
@@ -134,7 +143,8 @@ export class ReservationsService {
       // y el pago se cobra en folio). Si reserva remota sin guarantee
       // explícita, marcar PENDING con deadline 2h — operador completa luego.
       const guaranteeInput = input.guarantee;
-      const guaranteeType: GuaranteeType = (guaranteeInput?.type as GuaranteeType | undefined) ??
+      const guaranteeType: GuaranteeType =
+        (guaranteeInput?.type as GuaranteeType | undefined) ??
         (walkIn ? GuaranteeType.NONE : GuaranteeType.CARD_ON_FILE);
       const guaranteeStatus: GuaranteeStatus =
         guaranteeType === GuaranteeType.NONE
@@ -169,7 +179,9 @@ export class ReservationsService {
           checkedInAt: walkIn ? new Date() : null,
           guaranteeType,
           guaranteeStatus,
-          guaranteeAmount: guaranteeInput?.amount ? new Prisma.Decimal(guaranteeInput.amount) : null,
+          guaranteeAmount: guaranteeInput?.amount
+            ? new Prisma.Decimal(guaranteeInput.amount)
+            : null,
           guaranteeReference: guaranteeInput?.reference ?? null,
           guaranteeDeadline,
           guaranteeSecuredAt: guaranteeStatus === GuaranteeStatus.SECURED ? new Date() : null,
@@ -195,10 +207,12 @@ export class ReservationsService {
 
     // Push delta al CM si está configurado (no-op silencioso).
     void this.channelManager
-      .pushDelta({ propertyId: result.propertyId, arrival: input.arrival, departure: input.departure })
-      .catch((err) =>
-        this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`),
-      );
+      .pushDelta({
+        propertyId: result.propertyId,
+        arrival: input.arrival,
+        departure: input.departure,
+      })
+      .catch((err) => this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`));
 
     await this.events.publish('reservation.created', ctx, {
       reservationId: result.reservation.id,
@@ -430,7 +444,8 @@ export class ReservationsService {
       where.source = { in: tokens.map((t) => ReservationSource[t]) };
     }
     if (query.guaranteeStatus) {
-      where.guaranteeStatus = query.guaranteeStatus as Prisma.ReservationWhereInput['guaranteeStatus'];
+      where.guaranteeStatus =
+        query.guaranteeStatus as Prisma.ReservationWhereInput['guaranteeStatus'];
     }
     if (query.unassigned === 'true') {
       where.roomId = null;
@@ -532,9 +547,7 @@ export class ReservationsService {
       }),
     );
     if (!found) {
-      throw new NotFoundException(
-        `Reservation ${code} not found in property ${propertyId}`,
-      );
+      throw new NotFoundException(`Reservation ${code} not found in property ${propertyId}`);
     }
     return {
       ...toDetail(found),
@@ -599,9 +612,7 @@ export class ReservationsService {
         arrival: cancelled.arrivalDate.toISOString().slice(0, 10),
         departure: cancelled.departureDate.toISOString().slice(0, 10),
       })
-      .catch((err) =>
-        this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`),
-      );
+      .catch((err) => this.log.warn(`channelManager.pushDelta failed: ${(err as Error).message}`));
 
     await this.events.publish('reservation.cancelled', ctx, {
       reservationId: cancelled.id,
@@ -900,9 +911,7 @@ export class ReservationsService {
         },
       });
 
-      const balance = existing.folio?.balance
-        ? Number(existing.folio.balance.toString())
-        : 0;
+      const balance = existing.folio?.balance ? Number(existing.folio.balance.toString()) : 0;
 
       return { updated, roomId: existing.roomId, checkedOutAt, balance };
     });
@@ -1017,8 +1026,7 @@ export class ReservationsService {
           guaranteeAmount:
             input.amount !== undefined ? new Prisma.Decimal(input.amount) : undefined,
           guaranteeReference: input.reference ?? undefined,
-          guaranteeSecuredAt:
-            nextStatus === GuaranteeStatus.SECURED ? new Date() : undefined,
+          guaranteeSecuredAt: nextStatus === GuaranteeStatus.SECURED ? new Date() : undefined,
           guaranteeDeadline:
             nextStatus === GuaranteeStatus.SECURED || nextStatus === GuaranteeStatus.RELEASED
               ? null
@@ -1221,8 +1229,12 @@ export class ReservationsService {
       // overlapping en el rango completo del grupo.
       const groupRange = pending.reduce(
         (acc, r) => ({
-          minArrival: !acc.minArrival || r.arrivalDate < acc.minArrival ? r.arrivalDate : acc.minArrival,
-          maxDeparture: !acc.maxDeparture || r.departureDate > acc.maxDeparture ? r.departureDate : acc.maxDeparture,
+          minArrival:
+            !acc.minArrival || r.arrivalDate < acc.minArrival ? r.arrivalDate : acc.minArrival,
+          maxDeparture:
+            !acc.maxDeparture || r.departureDate > acc.maxDeparture
+              ? r.departureDate
+              : acc.maxDeparture,
         }),
         { minArrival: undefined as Date | undefined, maxDeparture: undefined as Date | undefined },
       );

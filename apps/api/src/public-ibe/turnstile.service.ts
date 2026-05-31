@@ -41,7 +41,11 @@ export class TurnstileService {
     return Boolean(this.secret);
   }
 
-  async verify(token: string | undefined, ip: string, slug: string): Promise<TurnstileVerification> {
+  async verify(
+    token: string | undefined,
+    ip: string,
+    slug: string,
+  ): Promise<TurnstileVerification> {
     if (!this.secret) {
       this.metrics.turnstileVerifications.add(1, { slug, outcome: 'success' });
       return { ok: true, reason: 'disabled' };

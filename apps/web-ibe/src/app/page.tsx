@@ -11,10 +11,7 @@ export default function HomePage() {
       <p className="text-sm text-aubergine-700/70">
         Cada hotel tiene su propia página. Si conoces el código, ve directamente:
       </p>
-      <form
-        action="/h"
-        className="flex w-full flex-col gap-3 sm:flex-row"
-      >
+      <form action="/h" className="flex w-full flex-col gap-3 sm:flex-row">
         <input
           name="slug"
           required

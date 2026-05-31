@@ -52,11 +52,15 @@ export default async function AvailabilityPage({ params, searchParams }: Props) 
     <>
       <header className="border-b border-aubergine-100 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <Link href={`/h/${slug}?lang=${lang}`} className="text-sm text-aubergine-700 hover:underline">
+          <Link
+            href={`/h/${slug}?lang=${lang}`}
+            className="text-sm text-aubergine-700 hover:underline"
+          >
             ← {data.property.name}
           </Link>
           <span className="text-[11px] text-aubergine-700/60">
-            {arrival} → {departure} · {nights} {t(lang, 'avail.nights')} · {adults + children} {t(lang, 'avail.pax')}
+            {arrival} → {departure} · {nights} {t(lang, 'avail.nights')} · {adults + children}{' '}
+            {t(lang, 'avail.pax')}
           </span>
         </div>
       </header>
@@ -186,10 +190,20 @@ function RateOptions({
   );
 }
 
-function ErrorScreen({ slug, lang, message }: { slug: string; lang: 'es' | 'en'; message: string }) {
+function ErrorScreen({
+  slug,
+  lang,
+  message,
+}: {
+  slug: string;
+  lang: 'es' | 'en';
+  message: string;
+}) {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center gap-4 px-6 py-12 text-center">
-      <p className="rounded-xl bg-rose-50 px-4 py-6 text-sm text-rose-800 ring-1 ring-rose-200">{message}</p>
+      <p className="rounded-xl bg-rose-50 px-4 py-6 text-sm text-rose-800 ring-1 ring-rose-200">
+        {message}
+      </p>
       <Link href={`/h/${slug}?lang=${lang}`} className="text-sm text-aubergine-700 underline">
         ← {t(lang, 'search.title')}
       </Link>

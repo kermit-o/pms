@@ -46,7 +46,7 @@ Modules (current state):
 - **Front Office** — reservations (individual + group), check-in/out, folio,
   cardex, walk-ins. ✅ Sprint 2.
 - **Night Audit** — daily close, posting, reports, snapshot. ✅ Sprint 3.
-  *One module among many. Do not over-invest in it.*
+  _One module among many. Do not over-invest in it._
 - **Housekeeping** — task board, mobile PWA, lost & found. ✅ Sprint 4.
 - **Payments** — Stripe SetupIntent (guarantee), client-side fallback. ✅ recent.
 - **Compliance** — SES.HOSPEDAJES sender + DLQ. ✅ Sprint 2.
@@ -61,20 +61,20 @@ have X" or "X is missing".
 
 ## 3 · Tech stack (immutable without ADR)
 
-| Layer | Tech | Notes |
-|---|---|---|
-| Monorepo | pnpm 9 + Turbo | `pnpm <task>` at root, or `pnpm --filter @pms/<pkg> <task>` |
-| Backend | NestJS + Fastify | `apps/api` |
-| Frontend FO | Next.js 15 (App Router, RSC) | `apps/web-fo` |
-| Frontend HSK | Next.js PWA | `apps/web-hsk` |
-| DB | Postgres + Prisma | `packages/db`, RLS by `tenant_id` |
-| Auth | Keycloak (OIDC) | per-tenant realm |
-| Events | NATS JetStream | `packages/eventbus` |
-| AI | Anthropic Claude (Sonnet 4.6 default) | tool calling + MCP |
-| Payments | Stripe (Elements + SetupIntent) | PCI SAQ A |
-| Compliance | SES.HOSPEDAJES (Spain) | mandatory |
-| Cloud | Fly.io, region `cdg` primary, `fra` DR | ADR-023 |
-| Observability | OpenTelemetry → Grafana | dashboards in `infra/grafana` |
+| Layer         | Tech                                   | Notes                                                       |
+| ------------- | -------------------------------------- | ----------------------------------------------------------- |
+| Monorepo      | pnpm 9 + Turbo                         | `pnpm <task>` at root, or `pnpm --filter @pms/<pkg> <task>` |
+| Backend       | NestJS + Fastify                       | `apps/api`                                                  |
+| Frontend FO   | Next.js 15 (App Router, RSC)           | `apps/web-fo`                                               |
+| Frontend HSK  | Next.js PWA                            | `apps/web-hsk`                                              |
+| DB            | Postgres + Prisma                      | `packages/db`, RLS by `tenant_id`                           |
+| Auth          | Keycloak (OIDC)                        | per-tenant realm                                            |
+| Events        | NATS JetStream                         | `packages/eventbus`                                         |
+| AI            | Anthropic Claude (Sonnet 4.6 default)  | tool calling + MCP                                          |
+| Payments      | Stripe (Elements + SetupIntent)        | PCI SAQ A                                                   |
+| Compliance    | SES.HOSPEDAJES (Spain)                 | mandatory                                                   |
+| Cloud         | Fly.io, region `cdg` primary, `fra` DR | ADR-023                                                     |
+| Observability | OpenTelemetry → Grafana                | dashboards in `infra/grafana`                               |
 
 ---
 
@@ -114,28 +114,28 @@ infra/             Grafana, alerts, IaC bits
 
 ## 5 · Domain glossary (use these terms, not invented ones)
 
-| Term | Meaning |
-|---|---|
-| PAX | Total people in a reservation (adults + children) |
-| ADR | Average Daily Rate |
-| RevPAR | Revenue Per Available Room |
-| BAR | Best Available Rate |
-| MLOS / CTA / CTD | Min length of stay / Closed to arrival / Closed to departure |
-| Walk-in | Guest checks in without prior reservation |
-| No-show | Guarantee should be charged; reservation closes as no-show |
-| Allotment | Block of rooms held for an agency/TO at agreed rate |
-| Block | Internal group hold (e.g. wedding) |
-| Rooming list | Names + room assignments inside a group reservation |
-| Master folio | Charges that route to the group payer, not individual guest |
-| Routing rule | Rules mapping which charges go to which folio |
-| OOO / OOS | Out of order / out of service rooms |
-| HSK | Housekeeping |
-| NA | Night Audit |
-| FO | Front Office |
-| Cardex | Guest profile + stay history |
-| SECURED / PENDING / FAILED (guarantee) | Guarantee status; SECURED means card on file is valid |
-| CARD\_ON\_FILE (CCG) | Guarantee type: tokenized card via Stripe |
-| Business day | Hotel operating day; rolls over at NA, not at midnight |
+| Term                                   | Meaning                                                      |
+| -------------------------------------- | ------------------------------------------------------------ |
+| PAX                                    | Total people in a reservation (adults + children)            |
+| ADR                                    | Average Daily Rate                                           |
+| RevPAR                                 | Revenue Per Available Room                                   |
+| BAR                                    | Best Available Rate                                          |
+| MLOS / CTA / CTD                       | Min length of stay / Closed to arrival / Closed to departure |
+| Walk-in                                | Guest checks in without prior reservation                    |
+| No-show                                | Guarantee should be charged; reservation closes as no-show   |
+| Allotment                              | Block of rooms held for an agency/TO at agreed rate          |
+| Block                                  | Internal group hold (e.g. wedding)                           |
+| Rooming list                           | Names + room assignments inside a group reservation          |
+| Master folio                           | Charges that route to the group payer, not individual guest  |
+| Routing rule                           | Rules mapping which charges go to which folio                |
+| OOO / OOS                              | Out of order / out of service rooms                          |
+| HSK                                    | Housekeeping                                                 |
+| NA                                     | Night Audit                                                  |
+| FO                                     | Front Office                                                 |
+| Cardex                                 | Guest profile + stay history                                 |
+| SECURED / PENDING / FAILED (guarantee) | Guarantee status; SECURED means card on file is valid        |
+| CARD_ON_FILE (CCG)                     | Guarantee type: tokenized card via Stripe                    |
+| Business day                           | Hotel operating day; rolls over at NA, not at midnight       |
 
 Use Spanish UI labels but English code identifiers. Mixing is a smell — fix it.
 
@@ -212,7 +212,7 @@ Green light — proceed without asking, but explain succinctly what you did:
 
 - ✅ Read any file in the repo.
 - ✅ Create / edit / delete files inside `apps/`, `packages/`, `docs/`,
-     `scripts/`, `infra/`.
+  `scripts/`, `infra/`.
 - ✅ Add or modify Prisma models and generate migrations.
 - ✅ Write tests (unit, integration, e2e specs).
 - ✅ Refactor within a single module if it lowers complexity (and tests cover).
@@ -234,26 +234,26 @@ Red light — STOP and ask the human first:
 - 🛑 Push to `main`, `develop`, or any protected branch.
 - 🛑 Force-push (`--force`, `--force-with-lease`) on any shared branch.
 - 🛑 `git reset --hard`, `git clean -fd`, or any operation that drops
-     uncommitted work the human did.
+  uncommitted work the human did.
 - 🛑 Delete branches.
 - 🛑 Run any `flyctl deploy`, `flyctl secrets set`, `flyctl postgres ...`, or
-     any other command that mutates production infra. **Provide commands for
-     the human to run; do not run them yourself.**
+  any other command that mutates production infra. **Provide commands for
+  the human to run; do not run them yourself.**
 - 🛑 Rotate or read production secrets.
 - 🛑 Touch the live Postgres (psql against prod DSNs).
 - 🛑 Send emails, SMS, or webhooks to real third parties (Stripe live keys,
-     Twilio prod, SES.HOSPEDAJES prod).
+  Twilio prod, SES.HOSPEDAJES prod).
 - 🛑 Create or close GitHub issues unsolicited.
 - 🛑 Approve or merge PRs.
 - 🛑 Modify the Stripe Dashboard, Keycloak realm config, DNS, Fly secrets, or
-     any third-party admin console.
+  any third-party admin console.
 - 🛑 Add new external dependencies (new npm packages) without explaining cost,
-     license, maintenance and getting a yes.
+  license, maintenance and getting a yes.
 - 🛑 Change the tech stack defined in §3.
 - 🛑 Disable security checks, hooks, signature verification, or auth guards to
-     "make something work".
+  "make something work".
 - 🛑 Bypass tests with `.skip`, `xdescribe`, `--no-verify`, or commenting out
-     assertions.
+  assertions.
 - 🛑 Hardcode credentials, API keys, tenant ids, or hotel-specific data.
 
 When in doubt: **ask**. The cost of asking is low; the cost of an undone
@@ -375,7 +375,7 @@ When escalating, provide:
   Zod, then trust downstream.
 - **Errors as Nest exceptions** in API (`NotFoundException`,
   `BadRequestException`, `ServiceUnavailableException`, etc.). No `throw new
-  Error(...)` in controllers.
+Error(...)` in controllers.
 - **Idempotency keys** in any state-mutating endpoint that the client can
   retry (payments, postings, check-in).
 - **Server actions** in Next.js for forms; minimize client components.

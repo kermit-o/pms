@@ -72,10 +72,7 @@ export function extractWidgetFromTool(
   }
 }
 
-function buildAvailabilityWidget(
-  toolInput: unknown,
-  toolResult: unknown,
-): CopilotWidget | null {
+function buildAvailabilityWidget(toolInput: unknown, toolResult: unknown): CopilotWidget | null {
   if (!Array.isArray(toolResult)) return null;
   const input = toolInput as Record<string, unknown> | null | undefined;
   const arrival = typeof input?.arrival === 'string' ? input.arrival : '';
@@ -198,17 +195,12 @@ function buildReservationWidget(toolResult: unknown): CopilotWidget | null {
   // serializadas como ISO de toDetail()).
   const arrival = new Date(r.arrivalDate);
   const departure = new Date(r.departureDate);
-  const nights = Math.max(
-    1,
-    Math.round((departure.getTime() - arrival.getTime()) / 86_400_000),
-  );
+  const nights = Math.max(1, Math.round((departure.getTime() - arrival.getTime()) / 86_400_000));
 
   // Primary guest del array `guests` (lo serializa toDetail).
   let primaryGuest: ReservationWidgetData['guest'] = null;
   if (Array.isArray(r.guests)) {
-    const primary = (r.guests as Array<Record<string, unknown>>).find(
-      (g) => g.isPrimary === true,
-    );
+    const primary = (r.guests as Array<Record<string, unknown>>).find((g) => g.isPrimary === true);
     const g = primary?.guest as Record<string, unknown> | undefined;
     if (g && typeof g.firstName === 'string' && typeof g.lastName === 'string') {
       primaryGuest = {
@@ -259,14 +251,11 @@ function buildReservationWidget(toolResult: unknown): CopilotWidget | null {
   };
 }
 
-function buildHskTasksWidget(
-  toolInput: unknown,
-  toolResult: unknown,
-): CopilotWidget | null {
+function buildHskTasksWidget(toolInput: unknown, toolResult: unknown): CopilotWidget | null {
   if (!Array.isArray(toolResult)) return null;
   const inputDate =
     typeof (toolInput as Record<string, unknown>)?.businessDate === 'string'
-      ? ((toolInput as { businessDate: string }).businessDate)
+      ? (toolInput as { businessDate: string }).businessDate
       : new Date().toISOString().slice(0, 10);
 
   const rows: HskTaskRow[] = [];
@@ -320,11 +309,7 @@ function buildMovementsWidget(toolResult: unknown): CopilotWidget | null {
   const rows: MovementRow[] = [];
   for (const raw of r.items) {
     const it = raw as Record<string, unknown>;
-    if (
-      typeof it.id !== 'string' ||
-      typeof it.code !== 'string' ||
-      typeof it.status !== 'string'
-    ) {
+    if (typeof it.id !== 'string' || typeof it.code !== 'string' || typeof it.status !== 'string') {
       return null;
     }
     const guest = it.primaryGuest as Record<string, unknown> | null | undefined;

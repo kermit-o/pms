@@ -124,15 +124,28 @@ export default async function BookPage({ params, searchParams }: Props) {
 
         {sp.error && (
           <div className="mt-3 rounded-xl bg-rose-50 px-4 py-3 text-xs text-rose-800 ring-1 ring-rose-200">
-            {sp.error === 'gdpr' && (lang === 'es' ? 'Necesitamos tu consentimiento RGPD para procesar la reserva.' : 'We need your GDPR consent to process the booking.')}
-            {sp.error === 'fields' && (lang === 'es' ? 'Faltan campos obligatorios.' : 'Required fields are missing.')}
-            {sp.error === 'captcha' && (lang === 'es' ? 'Completa la verificación anti-spam antes de continuar.' : 'Please complete the anti-spam check before continuing.')}
-            {sp.error === 'rate' && (lang === 'es' ? 'Demasiados intentos. Espera unos minutos.' : 'Too many attempts. Try again in a few minutes.')}
+            {sp.error === 'gdpr' &&
+              (lang === 'es'
+                ? 'Necesitamos tu consentimiento RGPD para procesar la reserva.'
+                : 'We need your GDPR consent to process the booking.')}
+            {sp.error === 'fields' &&
+              (lang === 'es' ? 'Faltan campos obligatorios.' : 'Required fields are missing.')}
+            {sp.error === 'captcha' &&
+              (lang === 'es'
+                ? 'Completa la verificación anti-spam antes de continuar.'
+                : 'Please complete the anti-spam check before continuing.')}
+            {sp.error === 'rate' &&
+              (lang === 'es'
+                ? 'Demasiados intentos. Espera unos minutos.'
+                : 'Too many attempts. Try again in a few minutes.')}
             {sp.error === 'api' && t(lang, 'errors.fetch')}
           </div>
         )}
 
-        <form action={submit} className="mt-4 space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100">
+        <form
+          action={submit}
+          className="mt-4 space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-aubergine-100"
+        >
           <div className="grid gap-3 sm:grid-cols-2">
             <Field name="firstName" label={lang === 'es' ? 'Nombre' : 'First name'} required />
             <Field name="lastName" label={lang === 'es' ? 'Apellido' : 'Last name'} required />

@@ -42,9 +42,7 @@ export function CopilotAvailabilityWidget({ widget }: { widget: CopilotAvailabil
                   <span className="truncate font-medium">{row.name}</span>
                   <span
                     className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                      soldOut
-                        ? 'bg-rose-50 text-rose-700'
-                        : 'bg-emerald-50 text-emerald-700'
+                      soldOut ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'
                     }`}
                   >
                     {row.available}/{row.totalRooms}
@@ -61,9 +59,7 @@ export function CopilotAvailabilityWidget({ widget }: { widget: CopilotAvailabil
                   <p className="font-semibold text-aubergine-700">
                     {Number(row.totalForStay).toFixed(0)} {row.currency}
                   </p>
-                  <p className="text-[10px] text-aubergine-700/60">
-                    {row.pricePerNight}/noche
-                  </p>
+                  <p className="text-[10px] text-aubergine-700/60">{row.pricePerNight}/noche</p>
                 </div>
                 {!soldOut && (
                   <a

@@ -37,7 +37,9 @@
         }
       },
       "targets": [
-        { "expr": "sum(increase(channel_manager_sync_total{job=\"pms-api\",status=\"FAILED\"}[1h]))" }
+        {
+          "expr": "sum(increase(channel_manager_sync_total{job=\"pms-api\",status=\"FAILED\"}[1h]))"
+        }
       ]
     },
     {
@@ -47,9 +49,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
       "description": "Bookings OTA recibidos via webhook.",
-      "targets": [
-        { "expr": "sum(increase(channel_manager_inbound_total{job=\"pms-api\"}[24h]))" }
-      ]
+      "targets": [{ "expr": "sum(increase(channel_manager_inbound_total{job=\"pms-api\"}[24h]))" }]
     },
     {
       "id": 4,

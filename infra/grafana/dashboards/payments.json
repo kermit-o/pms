@@ -14,7 +14,9 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
       "targets": [
-        { "expr": "sum(increase(stripe_webhook_events_total{job=\"pms-api\",outcome=\"handled\"}[5m]))" }
+        {
+          "expr": "sum(increase(stripe_webhook_events_total{job=\"pms-api\",outcome=\"handled\"}[5m]))"
+        }
       ]
     },
     {

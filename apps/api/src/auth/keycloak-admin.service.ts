@@ -44,10 +44,11 @@ export class KeycloakAdminService implements OnModuleInit {
   constructor(private readonly config: ConfigService<Env, true>) {}
 
   onModuleInit(): void {
-    this.baseUrl =
-      (this.config.get('KEYCLOAK_ADMIN_BASE_URL', { infer: true }) ??
-        this.config.get('KEYCLOAK_URL', { infer: true }) ??
-        '').replace(/\/$/, '');
+    this.baseUrl = (
+      this.config.get('KEYCLOAK_ADMIN_BASE_URL', { infer: true }) ??
+      this.config.get('KEYCLOAK_URL', { infer: true }) ??
+      ''
+    ).replace(/\/$/, '');
     this.clientId = this.config.get('KEYCLOAK_ADMIN_CLIENT_ID', { infer: true }) ?? '';
     this.clientSecret = this.config.get('KEYCLOAK_ADMIN_CLIENT_SECRET', { infer: true }) ?? '';
     this.foRedirectBase =

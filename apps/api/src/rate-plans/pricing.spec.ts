@@ -42,7 +42,10 @@ describe('resolveDailyRate', () => {
       resolveDailyRate(100, { attributes: { dailyRate: 'NaN' }, discountPct: null }).toString(),
     ).toBe('100');
     expect(
-      resolveDailyRate(100, { attributes: 'string-not-object' as never, discountPct: null }).toString(),
+      resolveDailyRate(100, {
+        attributes: 'string-not-object' as never,
+        discountPct: null,
+      }).toString(),
     ).toBe('100');
   });
 });

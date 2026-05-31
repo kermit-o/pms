@@ -5,11 +5,13 @@ import type { EmailSuppressionsService } from './email-suppressions.service';
 import type { NotificationsService } from './notifications.service';
 import type { EventbusService } from '../eventbus';
 
-function buildConsumer(opts: {
-  existing?: { status: NotificationOutboxStatus; attempts?: number; id?: string } | null;
-  suppressed?: { suppressed: true; reason: string };
-  send?: { ok: true; messageId: string } | { ok: false; error: string };
-} = {}) {
+function buildConsumer(
+  opts: {
+    existing?: { status: NotificationOutboxStatus; attempts?: number; id?: string } | null;
+    suppressed?: { suppressed: true; reason: string };
+    send?: { ok: true; messageId: string } | { ok: false; error: string };
+  } = {},
+) {
   const outbox = {
     findUnique: vi.fn().mockResolvedValue(opts.existing ?? null),
     upsert: vi.fn().mockResolvedValue({ id: 'outbox-1', attempts: 1 }),
@@ -18,9 +20,7 @@ function buildConsumer(opts: {
   const prisma = { notificationOutbox: outbox } as never;
   const bus = { subscribe: vi.fn(), isHealthy: () => true } as unknown as EventbusService;
   const notifications = {
-    sendEmail: vi
-      .fn()
-      .mockResolvedValue(opts.send ?? { ok: true, messageId: 'pm-1' }),
+    sendEmail: vi.fn().mockResolvedValue(opts.send ?? { ok: true, messageId: 'pm-1' }),
   } as unknown as NotificationsService;
   const suppressions = {
     isSuppressed: vi.fn().mockResolvedValue(opts.suppressed ?? { suppressed: false }),
@@ -109,9 +109,7 @@ describe('NotificationsConsumer.handle', () => {
 
   it('handler exception: nak + lastError captured', async () => {
     const { consumer, notifications, outbox } = buildConsumer();
-    (notifications.sendEmail as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new Error('boom'),
-    );
+    (notifications.sendEmail as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('boom'));
     const out = await consumer.handle(payload, 'env-1');
     expect(out).toBe('nak');
     const lastUpdate = outbox.update.mock.calls.at(-1)![0]!;

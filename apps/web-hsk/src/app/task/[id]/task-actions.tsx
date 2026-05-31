@@ -119,61 +119,61 @@ export function TaskActions({ task }: Props) {
             onTranscript={(text) => setNotes((prev) => (prev ? `${prev} ${text}` : text))}
             onStatusKeyword={(status: RoomStatusKeyword) => setResultingRoomStatus(status)}
           />
-        <form
-          className="space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void run(`/api/proxy/tasks/${task.id}/complete`, {
-              resultingRoomStatus,
-              notes: notes.trim() || undefined,
-            });
-          }}
-        >
-          <div>
-            <label className="block text-xs font-medium uppercase tracking-wide text-aubergine-500">
-              Estado de la habitación
-            </label>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {ROOM_STATUSES.map((s) => (
-                <label
-                  key={s.value}
-                  className={`flex cursor-pointer items-center justify-center rounded-lg border px-3 py-3 text-sm font-medium ${
-                    resultingRoomStatus === s.value
-                      ? 'border-aubergine-600 bg-aubergine-600 text-white'
-                      : 'border-aubergine-100 bg-white text-aubergine-700'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="status"
-                    value={s.value}
-                    checked={resultingRoomStatus === s.value}
-                    onChange={() => setResultingRoomStatus(s.value)}
-                    className="sr-only"
-                  />
-                  {s.label}
-                </label>
-              ))}
-            </div>
-          </div>
-          <label className="block text-xs font-medium uppercase tracking-wide text-aubergine-500">
-            Notas (opcional)
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              className="mt-1 block w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-base focus:border-aubergine-500 focus:outline-none"
-              placeholder="Discrepancias, avisos…"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-xl bg-aubergine-700 py-4 text-base font-semibold text-white disabled:opacity-50"
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run(`/api/proxy/tasks/${task.id}/complete`, {
+                resultingRoomStatus,
+                notes: notes.trim() || undefined,
+              });
+            }}
           >
-            Finalizar y reportar
-          </button>
-        </form>
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wide text-aubergine-500">
+                Estado de la habitación
+              </label>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {ROOM_STATUSES.map((s) => (
+                  <label
+                    key={s.value}
+                    className={`flex cursor-pointer items-center justify-center rounded-lg border px-3 py-3 text-sm font-medium ${
+                      resultingRoomStatus === s.value
+                        ? 'border-aubergine-600 bg-aubergine-600 text-white'
+                        : 'border-aubergine-100 bg-white text-aubergine-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="status"
+                      value={s.value}
+                      checked={resultingRoomStatus === s.value}
+                      onChange={() => setResultingRoomStatus(s.value)}
+                      className="sr-only"
+                    />
+                    {s.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <label className="block text-xs font-medium uppercase tracking-wide text-aubergine-500">
+              Notas (opcional)
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                className="mt-1 block w-full rounded-lg border border-aubergine-100 bg-white px-3 py-2 text-base focus:border-aubergine-500 focus:outline-none"
+                placeholder="Discrepancias, avisos…"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={busy}
+              className="w-full rounded-xl bg-aubergine-700 py-4 text-base font-semibold text-white disabled:opacity-50"
+            >
+              Finalizar y reportar
+            </button>
+          </form>
         </>
       )}
 

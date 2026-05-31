@@ -24,7 +24,7 @@ sea defendible vs Mews/Cloudbeds en demo y operación diaria:**
 1. **Voice-first en Front Office**, no solo en housekeeping. La recepcionista
    dicta `"carga 35€ al folio de la 305"` y el sistema lo ejecuta.
 2. **Memoria semántica del huésped**. El copilot responde a `"qué pidió Pérez
-   la última vez"` mirando histórico (pgvector + RAG sobre cardex + folios).
+la última vez"` mirando histórico (pgvector + RAG sobre cardex + folios).
 3. **Visión por computadora en HSK** para inspección post-limpieza.
 4. **Onboarding escalado a varios hoteles**, incluido el creador de datos
    sintéticos para validar sin esperar al piloto real.
@@ -39,7 +39,7 @@ vía seed.
 1. **Voice-first FO** funciona en `/folio/[id]` y `/reservations/new`. La
    recepción puede dictar cargos y crear reservas walk-in con frases en
    español (`"carga 35 a la 305"`, `"reserva walk-in para Pérez del 20 al 22
-   en una doble"`). Audio nunca sale del browser.
+en una doble"`). Audio nunca sale del browser.
 2. **Memoria semántica huésped**: pgvector activo, embeddings de cardex +
    stays generados, nueva tool `recall_guest_history(guestId)` en el catalog,
    copilot la usa cuando el operador pregunta por un huésped.
@@ -124,15 +124,15 @@ W1 generaliza el patrón a `apps/web-fo`:
 `apps/web-fo/src/lib/voice-fo-grammar.ts`: parser regex puro (sin LLM) que
 mapea frases a intents. Cobertura V1:
 
-| Frase                                            | Intent                          |
-|--------------------------------------------------|---------------------------------|
-| `carga 35€ a la 305`                             | `add_charge(amount, room)`      |
-| `cobra 50 en efectivo a la reserva BBM01-XYZ`    | `add_payment(amount, code)`     |
-| `reserva walk-in Pérez del 20 al 22 doble`       | `create_walk_in`                |
-| `marca la 305 como sucia`                        | `set_room_status` (existe)      |
-| `qué tarifa tengo para mañana en doble`          | `query_availability`            |
+| Frase                                         | Intent                      |
+| --------------------------------------------- | --------------------------- |
+| `carga 35€ a la 305`                          | `add_charge(amount, room)`  |
+| `cobra 50 en efectivo a la reserva BBM01-XYZ` | `add_payment(amount, code)` |
+| `reserva walk-in Pérez del 20 al 22 doble`    | `create_walk_in`            |
+| `marca la 305 como sucia`                     | `set_room_status` (existe)  |
+| `qué tarifa tengo para mañana en doble`       | `query_availability`        |
 
-Para las mutating: el parser produce un *intent draft* que el operador
+Para las mutating: el parser produce un _intent draft_ que el operador
 confirma con un mini-form (mismo patrón que `PendingToolCard` del copilot).
 
 ### 2.3 Integración
@@ -219,11 +219,12 @@ con prompt corto en español:
 
 > Eres un inspector de housekeeping de hotel. Mira la foto y responde
 > SOLO con JSON: `{"verdict": "clean"|"dirty"|"damaged", "issues": [string],
-> "confidence": 0..1}`.
+"confidence": 0..1}`.
 
 ### 4.2 Persistencia
 
 `housekeeping_tasks.attributes.inspection`:
+
 ```ts
 {
   verdict: 'clean' | 'dirty' | 'damaged',
@@ -293,9 +294,9 @@ límites: NO correr en prod (verificación por env var).
 
 ## 6. Datos y migraciones nuevas
 
-| Migración                              | Contenido                                       |
-|---------------------------------------|-------------------------------------------------|
-| `2026MMDD_pgvector_guest_embeddings`  | `CREATE EXTENSION vector;` + `guest_embeddings` |
+| Migración                            | Contenido                                       |
+| ------------------------------------ | ----------------------------------------------- |
+| `2026MMDD_pgvector_guest_embeddings` | `CREATE EXTENSION vector;` + `guest_embeddings` |
 
 CV no necesita migración (campo `attributes` JSONB existe en `housekeeping_tasks`).
 

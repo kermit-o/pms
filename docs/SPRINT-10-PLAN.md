@@ -33,7 +33,7 @@ Cuatro bloques:
    - publicar/despublicar el IBE (`property.publishedAt` toggle),
    - configurar el channel manager (provider + ids),
    - gestionar IPs bloqueadas (`property.attributes.blockedIps`).
-   Hoy todo se hace por SQL — frágil y no operable por el hotel.
+     Hoy todo se hace por SQL — frágil y no operable por el hotel.
 
 **Definition of Done de Sprint 10:**
 
@@ -240,12 +240,12 @@ Reusar el guard de roles existente (Keycloak roles). En el endpoint:
 
 ## 6. Datos y migraciones nuevas
 
-| Migración | Contenido |
-|-----------|-----------|
-| — | W1 no necesita migración. |
-| — | W2 no toca DB. |
-| — | W3 reusa columnas existentes (`tenants.deleted_at`, `onboarding_status`). |
-| — | W4 reusa columnas que ya añadió S9 (`properties.attributes`, etc.). |
+| Migración | Contenido                                                                 |
+| --------- | ------------------------------------------------------------------------- |
+| —         | W1 no necesita migración.                                                 |
+| —         | W2 no toca DB.                                                            |
+| —         | W3 reusa columnas existentes (`tenants.deleted_at`, `onboarding_status`). |
+| —         | W4 reusa columnas que ya añadió S9 (`properties.attributes`, etc.).       |
 
 Sprint 10 es 100% código + UI — cero migraciones.
 

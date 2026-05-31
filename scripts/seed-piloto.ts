@@ -182,7 +182,11 @@ const USERS: UserDef[] = [
   { id: USER_IDS.fo2, email: 'recepcion2@berenjena-demo.local', fullName: 'Carlos Recepcion' },
   { id: USER_IDS.fo3, email: 'recepcion3@berenjena-demo.local', fullName: 'Ana Recepcion' },
   { id: USER_IDS.na, email: 'nightaudit@berenjena-demo.local', fullName: 'Luis Night Auditor' },
-  { id: USER_IDS.hskSup, email: 'hsk-supervisor@berenjena-demo.local', fullName: 'Pilar Supervisor HSK' },
+  {
+    id: USER_IDS.hskSup,
+    email: 'hsk-supervisor@berenjena-demo.local',
+    fullName: 'Pilar Supervisor HSK',
+  },
   { id: USER_IDS.hsk1, email: 'hsk1@berenjena-demo.local', fullName: 'Rosa Housekeeper' },
   { id: USER_IDS.hsk2, email: 'hsk2@berenjena-demo.local', fullName: 'Ines Housekeeper' },
   { id: USER_IDS.hsk3, email: 'hsk3@berenjena-demo.local', fullName: 'Miguel Housekeeper' },

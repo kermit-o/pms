@@ -12,20 +12,22 @@ const USER: AuthUser = {
   roles: ['tenant_admin'],
 };
 
-function buildService(opts: {
-  property?: {
-    id: string;
-    code?: string;
-    name?: string;
-    publicSlug?: string | null;
-    publishedAt?: Date | null;
-    channelManagerProvider?: string | null;
-    channelManagerPropertyId?: string | null;
-    channelManagerCredentialsRef?: string | null;
-    attributes?: Record<string, unknown> | null;
-  } | null;
-  slugCollision?: { id: string } | null;
-} = {}) {
+function buildService(
+  opts: {
+    property?: {
+      id: string;
+      code?: string;
+      name?: string;
+      publicSlug?: string | null;
+      publishedAt?: Date | null;
+      channelManagerProvider?: string | null;
+      channelManagerPropertyId?: string | null;
+      channelManagerCredentialsRef?: string | null;
+      attributes?: Record<string, unknown> | null;
+    } | null;
+    slugCollision?: { id: string } | null;
+  } = {},
+) {
   const property =
     opts.property === undefined
       ? {
@@ -43,10 +45,13 @@ function buildService(opts: {
 
   const txStub = {
     property: {
-      findFirst: vi.fn().mockImplementation((args: { where: { publicSlug?: unknown; id?: string } }) => {
-        if (args.where.publicSlug !== undefined) return Promise.resolve(opts.slugCollision ?? null);
-        return Promise.resolve(property);
-      }),
+      findFirst: vi
+        .fn()
+        .mockImplementation((args: { where: { publicSlug?: unknown; id?: string } }) => {
+          if (args.where.publicSlug !== undefined)
+            return Promise.resolve(opts.slugCollision ?? null);
+          return Promise.resolve(property);
+        }),
       update: vi.fn().mockImplementation((args: { data: Record<string, unknown> }) =>
         Promise.resolve({
           publishedAt: args.data.publishedAt ?? null,

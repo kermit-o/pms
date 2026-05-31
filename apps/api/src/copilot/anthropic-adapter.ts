@@ -6,10 +6,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { AuthUser } from '../auth';
 import type { Env } from '../config/env.schema';
 import { type AnyToolName, ToolResolver } from './tool-resolver';
-import {
-  SANITIZED_WARNING,
-  validateAssistantText,
-} from './response-validator';
+import { SANITIZED_WARNING, validateAssistantText } from './response-validator';
 import { extractWidgetFromTool, type CopilotWidget } from './widgets';
 import type {
   AdapterCallbacks,
@@ -110,7 +107,13 @@ export class AnthropicAdapter implements CopilotAdapter {
         );
         return {
           proposal: { kind: 'text', text: friendly },
-          telemetry: this.telemetry(start, totalInput, totalOutput, totalCacheRead, totalCacheWrite),
+          telemetry: this.telemetry(
+            start,
+            totalInput,
+            totalOutput,
+            totalCacheRead,
+            totalCacheWrite,
+          ),
         };
       }
 
@@ -136,7 +139,13 @@ export class AnthropicAdapter implements CopilotAdapter {
             text: finalText || '…',
             ...(widgets.length > 0 ? { widgets } : {}),
           },
-          telemetry: this.telemetry(start, totalInput, totalOutput, totalCacheRead, totalCacheWrite),
+          telemetry: this.telemetry(
+            start,
+            totalInput,
+            totalOutput,
+            totalCacheRead,
+            totalCacheWrite,
+          ),
         };
       }
 
@@ -147,7 +156,13 @@ export class AnthropicAdapter implements CopilotAdapter {
             kind: 'text',
             text: `Quise usar el tool ${toolUse.name} pero no existe. ¿Puedes reformular?`,
           },
-          telemetry: this.telemetry(start, totalInput, totalOutput, totalCacheRead, totalCacheWrite),
+          telemetry: this.telemetry(
+            start,
+            totalInput,
+            totalOutput,
+            totalCacheRead,
+            totalCacheWrite,
+          ),
         };
       }
 
@@ -173,7 +188,13 @@ export class AnthropicAdapter implements CopilotAdapter {
         }
         return {
           proposal: { kind: 'tool', tool: toolName, input: toolUse.input },
-          telemetry: this.telemetry(start, totalInput, totalOutput, totalCacheRead, totalCacheWrite),
+          telemetry: this.telemetry(
+            start,
+            totalInput,
+            totalOutput,
+            totalCacheRead,
+            totalCacheWrite,
+          ),
         };
       }
 
@@ -390,10 +411,7 @@ function extractStatus(err: unknown): number | undefined {
  * operador. Nunca devolvemos JSON crudo (request_id, x-api-key…) a la
  * UI — eso es operacionalmente embarazoso y filtra detalles internos.
  */
-export function friendlyAnthropicError(
-  status: number | undefined,
-  rawMessage: string,
-): string {
+export function friendlyAnthropicError(status: number | undefined, rawMessage: string): string {
   if (status === 401 || status === 403) {
     return 'El asistente está temporalmente fuera de servicio (credencial de IA inválida). El equipo de Aubergine ya está al tanto. Prueba en unos minutos.';
   }

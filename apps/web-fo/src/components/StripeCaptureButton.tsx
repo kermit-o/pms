@@ -47,8 +47,8 @@ export function StripeCaptureButton({ reservationId }: { reservationId: string }
           {error}
           {error.includes('STRIPE') && (
             <>
-              {' '}— marca manual abajo o configura{' '}
-              <code>STRIPE_SECRET_KEY</code> en el servidor.
+              {' '}
+              — marca manual abajo o configura <code>STRIPE_SECRET_KEY</code> en el servidor.
             </>
           )}
         </p>

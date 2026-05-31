@@ -78,9 +78,9 @@ function buildService(
 describe('StripeService.chargeNoShow', () => {
   it('rejects amount <= 0', async () => {
     const { service } = buildService();
-    await expect(
-      service.chargeNoShow(user, 'cid', RES_ID, { amount: 0 }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.chargeNoShow(user, 'cid', RES_ID, { amount: 0 })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('returns already_charged when an entry with the idempotency key exists', async () => {
@@ -151,9 +151,9 @@ describe('StripeService.chargeNoShow', () => {
         folio: { id: 'f', status: 'OPEN', currency: 'EUR' },
       },
     });
-    await expect(
-      service.chargeNoShow(user, 'cid', RES_ID, { amount: 10 }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.chargeNoShow(user, 'cid', RES_ID, { amount: 10 })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 });
 
@@ -190,16 +190,16 @@ function buildServiceForWebhook(opts: { secret?: string } = {}) {
 describe('StripeService.handleWebhook (S11 W3 hardening)', () => {
   it('throws 503 when webhook secret missing', async () => {
     const { service } = buildServiceForWebhook({ secret: '' });
-    await expect(
-      service.handleWebhook(Buffer.from('{}'), 'sig'),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.handleWebhook(Buffer.from('{}'), 'sig')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('throws 403 when signature header is absent (no longer 400)', async () => {
     const { service } = buildServiceForWebhook();
-    await expect(
-      service.handleWebhook(Buffer.from('{}'), undefined),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.handleWebhook(Buffer.from('{}'), undefined)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it('throws 403 when signature does not verify', async () => {
@@ -207,9 +207,9 @@ describe('StripeService.handleWebhook (S11 W3 hardening)', () => {
     stripeMock.webhooks.constructEvent.mockImplementationOnce(() => {
       throw new Error('No signatures found matching');
     });
-    await expect(
-      service.handleWebhook(Buffer.from('{}'), 'sig'),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.handleWebhook(Buffer.from('{}'), 'sig')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it('handles setup_intent.succeeded and updates the reservation', async () => {

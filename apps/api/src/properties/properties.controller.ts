@@ -1,20 +1,9 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Put,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Put, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
 import { PrismaService } from '../db';
-import {
-  BlockedIpsDto,
-  ChannelManagerConfigDto,
-  PublishPropertyDto,
-} from './properties.dto';
+import { BlockedIpsDto, ChannelManagerConfigDto, PublishPropertyDto } from './properties.dto';
 import { PropertiesService } from './properties.service';
 
 @Controller('properties')

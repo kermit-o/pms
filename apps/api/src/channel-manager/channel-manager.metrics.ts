@@ -35,7 +35,8 @@ export class ChannelManagerMetrics {
       description: 'Reservas entrantes por webhook OTA. outcome ∈ {created, updated}.',
     });
     this.webhookRejections = this.meter.createCounter('channel_manager_webhook_rejections', {
-      description: 'Webhooks rechazados. reason ∈ {bad_signature, no_provider, parse_error, unknown_property}.',
+      description:
+        'Webhooks rechazados. reason ∈ {bad_signature, no_provider, parse_error, unknown_property}.',
     });
   }
 }

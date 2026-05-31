@@ -52,10 +52,7 @@ describe('ForecastService', () => {
     // y producir bandas finitas (sigma > 0).
     const series = Array.from({ length: 30 }, (_, i) => {
       const noise = ((i * 7) % 5) * 0.002 - 0.004;
-      return snapshot(
-        `2026-04-${(i + 1).toString().padStart(2, '0')}`,
-        0.5 + 0.01 * i + noise,
-      );
+      return snapshot(`2026-04-${(i + 1).toString().padStart(2, '0')}`, 0.5 + 0.01 * i + noise);
     });
     const { service } = buildService(series);
     const out = await service.forecast(user, 'cid', {

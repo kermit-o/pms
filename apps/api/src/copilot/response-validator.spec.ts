@@ -8,9 +8,7 @@ describe('validateAssistantText', () => {
   // ---------------------------------------------------------------------------
 
   it('flags "desde más €" — el caso exacto del incidente BBM01', () => {
-    const out = validateAssistantText(
-      '| Junior Suite | Mayor confort | **desde más €** |',
-    );
+    const out = validateAssistantText('| Junior Suite | Mayor confort | **desde más €** |');
     expect(out.ok).toBe(false);
     expect(out.violations[0]).toMatch(/desde más/);
     expect(out.sanitized).toContain('[precio no consultado]');
@@ -41,9 +39,7 @@ describe('validateAssistantText', () => {
   });
 
   it('sustituye en TODAS las ocurrencias, no sólo la primera', () => {
-    const out = validateAssistantText(
-      '| Doble | desde más € | | Twin | desde más € |',
-    );
+    const out = validateAssistantText('| Doble | desde más € | | Twin | desde más € |');
     expect(out.ok).toBe(false);
     expect(out.sanitized.match(/\[precio no consultado\]/g)).toHaveLength(2);
   });

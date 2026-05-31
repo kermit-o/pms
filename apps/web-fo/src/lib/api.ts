@@ -41,9 +41,7 @@ export async function fetchDashboardKpis(
       (r.status === 'CONFIRMED' || r.status === 'PENDING' || r.status === 'CHECKED_IN'),
   ).length;
   const departuresToday = items.filter(
-    (r) =>
-      r.departureDate === today &&
-      (r.status === 'CHECKED_IN' || r.status === 'CHECKED_OUT'),
+    (r) => r.departureDate === today && (r.status === 'CHECKED_IN' || r.status === 'CHECKED_OUT'),
   ).length;
   const inHouse = items.filter((r) => r.status === 'CHECKED_IN').length;
   const totalRooms = rooms.filter((r) => !r.isOutOfOrder).length || 1;
@@ -147,7 +145,9 @@ export interface ReservationGroupDetail {
   propertyId: string;
   createdAt: string;
   updatedAt: string;
-  reservations: Array<ReservationListItem & { roomNumber: string | null; roomFloor: string | null }>;
+  reservations: Array<
+    ReservationListItem & { roomNumber: string | null; roomFloor: string | null }
+  >;
 }
 
 export async function getReservationGroup(
@@ -354,9 +354,7 @@ export interface PropertySummary {
   locale: string;
 }
 
-export async function listProperties(
-  accessToken: string | undefined,
-): Promise<PropertySummary[]> {
+export async function listProperties(accessToken: string | undefined): Promise<PropertySummary[]> {
   return apiFetch(`/properties`, { accessToken });
 }
 
@@ -1334,9 +1332,7 @@ export interface PublicOnboardingSetupInput {
   acceptTerms: true;
 }
 
-export async function publicOnboardingSetup(
-  input: PublicOnboardingSetupInput,
-): Promise<{
+export async function publicOnboardingSetup(input: PublicOnboardingSetupInput): Promise<{
   tenantId: string;
   propertyId: string;
   propertySlug: string;

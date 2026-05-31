@@ -45,11 +45,7 @@ export const ReassignTaskDto = z.object({
 export type ReassignTaskDto = z.infer<typeof ReassignTaskDto>;
 
 export const InspectTaskDto = z.object({
-  imageBase64: z
-    .string()
-    .startsWith('data:image/')
-    .min(50)
-    .max(8_000_000), // ~6 MB binary tras decode
+  imageBase64: z.string().startsWith('data:image/').min(50).max(8_000_000), // ~6 MB binary tras decode
 });
 export type InspectTaskDto = z.infer<typeof InspectTaskDto>;
 
