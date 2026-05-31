@@ -25,6 +25,12 @@ model Tenant {
   slug             String       @unique
   name             String
   status           TenantStatus @default(TRIAL)
+  // Verifactu (ADR-030, ADR-032 §5.a): NIF + razón social del emisor de
+  // facturas. Modelo "un IDEmisor por tenant" — un único NIF emisor para
+  // toda la organización. Nullable porque hay tenants pre-Verifactu; el
+  // onboarding debe bloquear la emisión hasta que estén poblados.
+  nif              String?      @map("nif")
+  razonSocial      String?      @map("razon_social")
   // Onboarding wizard (Sprint 9 W3): rastrea el estado del self-service.
   // NULL en tenants creados manualmente / seeded. Para hoteles activos en
   // producción, esto se ignora — solo describe el origen.
@@ -33,31 +39,34 @@ model Tenant {
   updatedAt        DateTime     @updatedAt @map("updated_at")
   deletedAt        DateTime?    @map("deleted_at")
 
-  users              User[]
-  properties         Property[]
-  roomTypes          RoomType[]
-  rooms              Room[]
-  guests             Guest[]
-  reservations       Reservation[]
-  reservationGroups  ReservationGroup[]
-  reservationGuests  ReservationGuest[]
-  ratePlans          RatePlan[]
-  folios             Folio[]
-  folioEntries       FolioEntry[]
-  businessDays        BusinessDayState[]
-  sesSubmissions      SesHospedajesSubmission[]
-  nightAuditRuns      NightAuditRun[]
-  nightAuditRunSteps  NightAuditRunStep[]
-  nightAuditSnapshots NightAuditSnapshot[]
-  nightAuditAnomalies NightAuditAnomaly[]
-  cashReconciliations CashDrawerReconciliation[]
-  housekeepingTasks   HousekeepingTask[]
-  lostFoundItems      LostFoundItem[]
-  devicePairings      DevicePairing[]
+  users                User[]
+  properties           Property[]
+  roomTypes            RoomType[]
+  rooms                Room[]
+  guests               Guest[]
+  reservations         Reservation[]
+  reservationGroups    ReservationGroup[]
+  reservationGuests    ReservationGuest[]
+  ratePlans            RatePlan[]
+  folios               Folio[]
+  folioEntries         FolioEntry[]
+  businessDays         BusinessDayState[]
+  sesSubmissions       SesHospedajesSubmission[]
+  nightAuditRuns       NightAuditRun[]
+  nightAuditRunSteps   NightAuditRunStep[]
+  nightAuditSnapshots  NightAuditSnapshot[]
+  nightAuditAnomalies  NightAuditAnomaly[]
+  cashReconciliations  CashDrawerReconciliation[]
+  housekeepingTasks    HousekeepingTask[]
+  lostFoundItems       LostFoundItem[]
+  devicePairings       DevicePairing[]
   cancellationPolicies CancellationPolicy[]
-  copilotMessages     CopilotMessage[]
-  copilotSessions     CopilotSession[]
-  guestMemoryChunks   GuestMemoryChunk[]
+  copilotMessages      CopilotMessage[]
+  copilotSessions      CopilotSession[]
+  guestMemoryChunks    GuestMemoryChunk[]
+  invoices             Invoice[]
+  invoiceSubmissions   InvoiceSubmission[]
+  verifactuCertificate VerifactuCertificate?
 
   @@map("tenants")
 }
@@ -106,48 +115,49 @@ enum UserStatus {
 // ----------------------------------------------------------------------------
 
 model Property {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String    @map("tenant_id") @db.Uuid
-  code        String
-  name        String
-  timezone    String    @default("Europe/Madrid")
-  currency    String    @default("EUR")
-  locale      String    @default("es-ES")
+  id                           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                     String    @map("tenant_id") @db.Uuid
+  code                         String
+  name                         String
+  timezone                     String    @default("Europe/Madrid")
+  currency                     String    @default("EUR")
+  locale                       String    @default("es-ES")
   // IBE (Sprint 8): slug opaco para venta directa. unique cuando no es null.
   // publishedAt = NULL significa "no expuesto al IBE público".
-  publicSlug  String?   @unique @map("public_slug")
-  publishedAt DateTime? @map("published_at")
+  publicSlug                   String?   @unique @map("public_slug")
+  publishedAt                  DateTime? @map("published_at")
   // Atributos extensibles. Sprint 9 W4 introduce `blockedIps: string[]` para
   // bloqueo manual de IPs abusivas en el IBE. Otros usos futuros: branding
   // de email, configuración de channel manager, etc.
-  attributes  Json?
+  attributes                   Json?
   // Channel manager (Sprint 9 W2). `provider` = identificador del CM ("siteminder",
   // "roomcloud", etc). `propertyId` = id que el CM asigna a este hotel.
   // `credentialsRef` = nombre del secret (Fly) que almacena el API key del CM —
   // nunca el secret en sí mismo en DB.
-  channelManagerProvider       String? @map("channel_manager_provider")
-  channelManagerPropertyId     String? @map("channel_manager_property_id")
-  channelManagerCredentialsRef String? @map("channel_manager_credentials_ref")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
+  channelManagerProvider       String?   @map("channel_manager_provider")
+  channelManagerPropertyId     String?   @map("channel_manager_property_id")
+  channelManagerCredentialsRef String?   @map("channel_manager_credentials_ref")
+  createdAt                    DateTime  @default(now()) @map("created_at")
+  updatedAt                    DateTime  @updatedAt @map("updated_at")
+  deletedAt                    DateTime? @map("deleted_at")
 
-  tenant              Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  roomTypes           RoomType[]
-  rooms               Room[]
-  reservations        Reservation[]
-  reservationGroups   ReservationGroup[]
-  ratePlans           RatePlan[]
-  businessDays        BusinessDayState[]
-  sesSubmissions      SesHospedajesSubmission[]
-  nightAuditRuns      NightAuditRun[]
-  nightAuditSnapshots NightAuditSnapshot[]
-  nightAuditAnomalies NightAuditAnomaly[]
-  cashReconciliations CashDrawerReconciliation[]
-  housekeepingTasks   HousekeepingTask[]
-  lostFoundItems      LostFoundItem[]
+  tenant               Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roomTypes            RoomType[]
+  rooms                Room[]
+  reservations         Reservation[]
+  reservationGroups    ReservationGroup[]
+  ratePlans            RatePlan[]
+  businessDays         BusinessDayState[]
+  sesSubmissions       SesHospedajesSubmission[]
+  nightAuditRuns       NightAuditRun[]
+  nightAuditSnapshots  NightAuditSnapshot[]
+  nightAuditAnomalies  NightAuditAnomaly[]
+  cashReconciliations  CashDrawerReconciliation[]
+  housekeepingTasks    HousekeepingTask[]
+  lostFoundItems       LostFoundItem[]
   cancellationPolicies CancellationPolicy[]
-  channelSyncRuns     ChannelSyncRun[]
+  channelSyncRuns      ChannelSyncRun[]
+  invoices             Invoice[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -160,19 +170,19 @@ model Property {
 // ----------------------------------------------------------------------------
 
 model ChannelSyncRun {
-  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String                 @map("tenant_id") @db.Uuid
-  propertyId  String                 @map("property_id") @db.Uuid
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String            @map("tenant_id") @db.Uuid
+  propertyId  String            @map("property_id") @db.Uuid
   provider    String
   kind        ChannelSyncKind
-  status      ChannelSyncStatus      @default(IN_PROGRESS)
-  startedAt   DateTime               @default(now()) @map("started_at")
-  completedAt DateTime?              @map("completed_at")
+  status      ChannelSyncStatus @default(IN_PROGRESS)
+  startedAt   DateTime          @default(now()) @map("started_at")
+  completedAt DateTime?         @map("completed_at")
   error       String?
   // {pushed, received, skipped, idempotent} — totales libres por kind.
   totals      Json?
   // Para inbound: id que el provider asigna a la reserva original (idempotency).
-  externalRef String?                @map("external_ref")
+  externalRef String?           @map("external_ref")
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
@@ -377,24 +387,24 @@ enum DocumentType {
 // ----------------------------------------------------------------------------
 
 model RatePlan {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId       String    @map("tenant_id") @db.Uuid
-  propertyId     String    @map("property_id") @db.Uuid
-  code           String // "BAR", "NRF", "ADV"
-  name           String
-  description    String?
-  isPublic       Boolean   @default(true) @map("is_public")
-  currency       String    @default("EUR") @db.Char(3)
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  propertyId    String    @map("property_id") @db.Uuid
+  code          String // "BAR", "NRF", "ADV"
+  name          String
+  description   String?
+  isPublic      Boolean   @default(true) @map("is_public")
+  currency      String    @default("EUR") @db.Char(3)
   // Sprint 13 W1 — tarifa "no reembolsable" con descuento sobre el rate
   // base del RoomType. nonRefundable obliga paymentMode=charge en el IBE
   // y bloquea la cancelación gratuita. discountPct (0-100) se aplica
   // sobre RoomType.defaultRate; null = usar el rate base sin modificar.
-  nonRefundable  Boolean   @default(false) @map("non_refundable")
-  discountPct    Decimal?  @map("discount_pct") @db.Decimal(5, 2)
-  attributes     Json?
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  deletedAt      DateTime? @map("deleted_at")
+  nonRefundable Boolean   @default(false) @map("non_refundable")
+  discountPct   Decimal?  @map("discount_pct") @db.Decimal(5, 2)
+  attributes    Json?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -414,19 +424,19 @@ model RatePlan {
 // Las reservas hijas comparten organizador, fechas y politicas; cada una
 // mantiene su propio folio y huesped principal.
 model ReservationGroup {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String    @map("tenant_id") @db.Uuid
-  propertyId   String    @map("property_id") @db.Uuid
-  code         String // "GRP-WEDDING01"
-  name         String
-  organizerName  String? @map("organizer_name")
-  organizerEmail String? @map("organizer_email")
-  organizerPhone String? @map("organizer_phone")
-  notes        String?
-  attributes   Json?
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  deletedAt    DateTime? @map("deleted_at")
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  propertyId     String    @map("property_id") @db.Uuid
+  code           String // "GRP-WEDDING01"
+  name           String
+  organizerName  String?   @map("organizer_name")
+  organizerEmail String?   @map("organizer_email")
+  organizerPhone String?   @map("organizer_phone")
+  notes          String?
+  attributes     Json?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -438,71 +448,71 @@ model ReservationGroup {
 }
 
 model Reservation {
-  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId           String            @map("tenant_id") @db.Uuid
-  propertyId         String            @map("property_id") @db.Uuid
+  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String            @map("tenant_id") @db.Uuid
+  propertyId            String            @map("property_id") @db.Uuid
   // Codigo legible humano ("BCN-A1B2C3")
-  code               String
-  status             ReservationStatus @default(PENDING)
+  code                  String
+  status                ReservationStatus @default(PENDING)
   // Grupo opcional (Sprint 2 W2)
-  groupId            String?           @map("group_id") @db.Uuid
+  groupId               String?           @map("group_id") @db.Uuid
   // Estancia
-  arrivalDate        DateTime          @map("arrival_date") @db.Date
-  departureDate      DateTime          @map("departure_date") @db.Date
-  adults             Int               @default(2)
-  children           Int               @default(0)
+  arrivalDate           DateTime          @map("arrival_date") @db.Date
+  departureDate         DateTime          @map("departure_date") @db.Date
+  adults                Int               @default(2)
+  children              Int               @default(0)
   // Inventario
-  roomTypeId         String            @map("room_type_id") @db.Uuid
-  roomId             String?           @map("room_id") @db.Uuid
+  roomTypeId            String            @map("room_type_id") @db.Uuid
+  roomId                String?           @map("room_id") @db.Uuid
   // Precio
-  ratePlanId         String?           @map("rate_plan_id") @db.Uuid
-  totalAmount        Decimal           @default(0) @map("total_amount") @db.Decimal(12, 2)
-  currency           String            @default("EUR") @db.Char(3)
+  ratePlanId            String?           @map("rate_plan_id") @db.Uuid
+  totalAmount           Decimal           @default(0) @map("total_amount") @db.Decimal(12, 2)
+  currency              String            @default("EUR") @db.Char(3)
   // Origen
-  source             ReservationSource @default(DIRECT)
-  externalRef        String?           @map("external_ref")
+  source                ReservationSource @default(DIRECT)
+  externalRef           String?           @map("external_ref")
   // Especiales
-  specialRequests    String?           @map("special_requests")
-  notes              String?
+  specialRequests       String?           @map("special_requests")
+  notes                 String?
   // Comercial (Iter B): agencia y empresa del booking, string denormalizado.
   // Catalogo con FK llegara cuando el revenue manager lo justifique.
-  agencyName         String?           @map("agency_name")
-  companyName        String?           @map("company_name")
+  agencyName            String?           @map("agency_name")
+  companyName           String?           @map("company_name")
   // Lifecycle timestamps
-  checkedInAt        DateTime?         @map("checked_in_at")
-  checkedOutAt       DateTime?         @map("checked_out_at")
-  cancelledAt        DateTime?         @map("cancelled_at")
-  cancellationReason String?           @map("cancellation_reason")
+  checkedInAt           DateTime?         @map("checked_in_at")
+  checkedOutAt          DateTime?         @map("checked_out_at")
+  cancelledAt           DateTime?         @map("cancelled_at")
+  cancellationReason    String?           @map("cancellation_reason")
   // Garantía comercial (Corte A modelo; gateway Stripe llega en Corte B)
-  guaranteeType        GuaranteeType   @default(NONE)            @map("guarantee_type")
-  guaranteeStatus      GuaranteeStatus @default(PENDING)         @map("guarantee_status")
-  guaranteeAmount      Decimal?        @map("guarantee_amount")  @db.Decimal(12, 2)
-  guaranteeReference   String?         @map("guarantee_reference")
-  guaranteeDeadline    DateTime?       @map("guarantee_deadline")
-  guaranteeSecuredAt   DateTime?       @map("guarantee_secured_at")
-  cancellationPolicyId String?         @map("cancellation_policy_id") @db.Uuid
+  guaranteeType         GuaranteeType     @default(NONE) @map("guarantee_type")
+  guaranteeStatus       GuaranteeStatus   @default(PENDING) @map("guarantee_status")
+  guaranteeAmount       Decimal?          @map("guarantee_amount") @db.Decimal(12, 2)
+  guaranteeReference    String?           @map("guarantee_reference")
+  guaranteeDeadline     DateTime?         @map("guarantee_deadline")
+  guaranteeSecuredAt    DateTime?         @map("guarantee_secured_at")
+  cancellationPolicyId  String?           @map("cancellation_policy_id") @db.Uuid
   // Stripe Setup Intent + tokenized payment method (Corte B garantía).
   // Solo guardamos referencias y últimos 4 — el PAN nunca toca nuestros
   // servidores (Stripe es el custodian PCI-compliant).
-  stripeCustomerId      String?  @map("stripe_customer_id")
-  stripeSetupIntentId   String?  @map("stripe_setup_intent_id")
-  stripePaymentMethodId String?  @map("stripe_payment_method_id")
-  stripeCardBrand       String?  @map("stripe_card_brand")
-  stripeCardLast4       String?  @map("stripe_card_last4") @db.Char(4)
-  stripeCardExpMonth    Int?     @map("stripe_card_exp_month") @db.SmallInt
-  stripeCardExpYear     Int?     @map("stripe_card_exp_year") @db.SmallInt
-  createdAt          DateTime          @default(now()) @map("created_at")
-  updatedAt          DateTime          @updatedAt @map("updated_at")
-  deletedAt          DateTime?         @map("deleted_at")
+  stripeCustomerId      String?           @map("stripe_customer_id")
+  stripeSetupIntentId   String?           @map("stripe_setup_intent_id")
+  stripePaymentMethodId String?           @map("stripe_payment_method_id")
+  stripeCardBrand       String?           @map("stripe_card_brand")
+  stripeCardLast4       String?           @map("stripe_card_last4") @db.Char(4)
+  stripeCardExpMonth    Int?              @map("stripe_card_exp_month") @db.SmallInt
+  stripeCardExpYear     Int?              @map("stripe_card_exp_year") @db.SmallInt
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+  deletedAt             DateTime?         @map("deleted_at")
 
-  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  property Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  roomType RoomType           @relation(fields: [roomTypeId], references: [id])
-  room     Room?              @relation(fields: [roomId], references: [id])
-  ratePlan RatePlan?          @relation(fields: [ratePlanId], references: [id])
-  group    ReservationGroup?  @relation(fields: [groupId], references: [id])
-  guests   ReservationGuest[]
-  folio    Folio?
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property           Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType           RoomType            @relation(fields: [roomTypeId], references: [id])
+  room               Room?               @relation(fields: [roomId], references: [id])
+  ratePlan           RatePlan?           @relation(fields: [ratePlanId], references: [id])
+  group              ReservationGroup?   @relation(fields: [groupId], references: [id])
+  guests             ReservationGuest[]
+  folio              Folio?
   cancellationPolicy CancellationPolicy? @relation(fields: [cancellationPolicyId], references: [id])
 
   @@unique([tenantId, code])
@@ -536,17 +546,17 @@ enum GuaranteeStatus {
 }
 
 model CancellationPolicy {
-  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId           String   @map("tenant_id") @db.Uuid
-  propertyId         String   @map("property_id") @db.Uuid
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  propertyId         String    @map("property_id") @db.Uuid
   code               String
   name               String
-  hoursBeforeArrival Int      @default(24) @map("hours_before_arrival")
-  penaltyPct         Decimal  @default(100) @map("penalty_pct") @db.Decimal(5, 2)
-  penaltyMinAmount   Decimal? @map("penalty_min_amount") @db.Decimal(12, 2)
-  currency           String   @default("EUR") @db.Char(3)
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  hoursBeforeArrival Int       @default(24) @map("hours_before_arrival")
+  penaltyPct         Decimal   @default(100) @map("penalty_pct") @db.Decimal(5, 2)
+  penaltyMinAmount   Decimal?  @map("penalty_min_amount") @db.Decimal(12, 2)
+  currency           String    @default("EUR") @db.Char(3)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
   deletedAt          DateTime? @map("deleted_at")
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -617,6 +627,7 @@ model Folio {
   tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   reservation Reservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   entries     FolioEntry[]
+  invoices    Invoice[]
 
   @@index([tenantId, reservationId])
   @@map("folios")
@@ -667,16 +678,16 @@ enum FolioEntryType {
 // ----------------------------------------------------------------------------
 
 model BusinessDayState {
-  tenantId        String            @map("tenant_id") @db.Uuid
-  propertyId      String            @map("property_id") @db.Uuid
-  businessDate    DateTime          @map("business_date") @db.Date
-  status          BusinessDayStatus @default(OPEN)
-  closedAt        DateTime?         @map("closed_at")
-  closedByUserId  String?           @map("closed_by_user_id") @db.Uuid
-  reopenedAt      DateTime?         @map("reopened_at")
-  reopenedReason  String?           @map("reopened_reason")
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
+  tenantId       String            @map("tenant_id") @db.Uuid
+  propertyId     String            @map("property_id") @db.Uuid
+  businessDate   DateTime          @map("business_date") @db.Date
+  status         BusinessDayStatus @default(OPEN)
+  closedAt       DateTime?         @map("closed_at")
+  closedByUserId String?           @map("closed_by_user_id") @db.Uuid
+  reopenedAt     DateTime?         @map("reopened_at")
+  reopenedReason String?           @map("reopened_reason")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -737,24 +748,24 @@ enum SesSubmissionStatus {
 // ----------------------------------------------------------------------------
 
 model NightAuditRun {
-  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId            String              @map("tenant_id") @db.Uuid
-  propertyId          String              @map("property_id") @db.Uuid
-  businessDate        DateTime            @map("business_date") @db.Date
-  status              NightAuditRunStatus @default(PENDING)
-  startedAt           DateTime?           @map("started_at")
-  completedAt         DateTime?           @map("completed_at")
-  lastFailedStep      NightAuditStep?     @map("last_failed_step")
-  lastError           String?             @map("last_error")
-  startedByUserId     String?             @map("started_by_user_id") @db.Uuid
-  completedByUserId   String?             @map("completed_by_user_id") @db.Uuid
-  totals              Json?
-  attributes          Json?
-  createdAt           DateTime            @default(now()) @map("created_at")
-  updatedAt           DateTime            @updatedAt @map("updated_at")
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String              @map("tenant_id") @db.Uuid
+  propertyId        String              @map("property_id") @db.Uuid
+  businessDate      DateTime            @map("business_date") @db.Date
+  status            NightAuditRunStatus @default(PENDING)
+  startedAt         DateTime?           @map("started_at")
+  completedAt       DateTime?           @map("completed_at")
+  lastFailedStep    NightAuditStep?     @map("last_failed_step")
+  lastError         String?             @map("last_error")
+  startedByUserId   String?             @map("started_by_user_id") @db.Uuid
+  completedByUserId String?             @map("completed_by_user_id") @db.Uuid
+  totals            Json?
+  attributes        Json?
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
 
-  tenant    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  property  Property                @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant    Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property  Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   steps     NightAuditRunStep[]
   snapshots NightAuditSnapshot[]
   anomalies NightAuditAnomaly[]
@@ -788,21 +799,21 @@ enum NightAuditStep {
 }
 
 model NightAuditRunStep {
-  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String                 @map("tenant_id") @db.Uuid
-  runId       String                 @map("run_id") @db.Uuid
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String               @map("tenant_id") @db.Uuid
+  runId       String               @map("run_id") @db.Uuid
   step        NightAuditStep
-  status      NightAuditStepStatus   @default(PENDING)
-  startedAt   DateTime?              @map("started_at")
-  completedAt DateTime?              @map("completed_at")
-  durationMs  Int?                   @map("duration_ms")
+  status      NightAuditStepStatus @default(PENDING)
+  startedAt   DateTime?            @map("started_at")
+  completedAt DateTime?            @map("completed_at")
+  durationMs  Int?                 @map("duration_ms")
   error       String?
   result      Json?
-  createdAt   DateTime               @default(now()) @map("created_at")
-  updatedAt   DateTime               @updatedAt @map("updated_at")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
 
-  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  run    NightAuditRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  run    NightAuditRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@unique([runId, step])
   @@index([tenantId, runId])
@@ -820,14 +831,14 @@ enum NightAuditStepStatus {
 }
 
 model NightAuditSnapshot {
-  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String                @map("tenant_id") @db.Uuid
-  propertyId   String                @map("property_id") @db.Uuid
-  businessDate DateTime              @map("business_date") @db.Date
-  reportType   NightAuditReportType  @map("report_type")
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String               @map("tenant_id") @db.Uuid
+  propertyId   String               @map("property_id") @db.Uuid
+  businessDate DateTime             @map("business_date") @db.Date
+  reportType   NightAuditReportType @map("report_type")
   payload      Json
-  generatedAt  DateTime              @default(now()) @map("generated_at")
-  runId        String?               @map("run_id") @db.Uuid
+  generatedAt  DateTime             @default(now()) @map("generated_at")
+  runId        String?              @map("run_id") @db.Uuid
 
   tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -855,21 +866,21 @@ enum NightAuditReportType {
 // ----------------------------------------------------------------------------
 
 model NightAuditAnomaly {
-  id               String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId         String                       @map("tenant_id") @db.Uuid
-  propertyId       String                       @map("property_id") @db.Uuid
-  runId            String                       @map("run_id") @db.Uuid
-  businessDate     DateTime                     @map("business_date") @db.Date
+  id               String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String                    @map("tenant_id") @db.Uuid
+  propertyId       String                    @map("property_id") @db.Uuid
+  runId            String                    @map("run_id") @db.Uuid
+  businessDate     DateTime                  @map("business_date") @db.Date
   kind             NightAuditAnomalyKind
   severity         NightAuditAnomalySeverity
   details          Json
-  reviewedAt       DateTime?                    @map("reviewed_at")
-  reviewedByUserId String?                      @map("reviewed_by_user_id") @db.Uuid
-  reviewNotes      String?                      @map("review_notes")
-  createdAt        DateTime                     @default(now()) @map("created_at")
+  reviewedAt       DateTime?                 @map("reviewed_at")
+  reviewedByUserId String?                   @map("reviewed_by_user_id") @db.Uuid
+  reviewNotes      String?                   @map("review_notes")
+  createdAt        DateTime                  @default(now()) @map("created_at")
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   run      NightAuditRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, propertyId, businessDate])
@@ -901,19 +912,19 @@ enum NightAuditAnomalySeverity {
 // ----------------------------------------------------------------------------
 
 model CashDrawerReconciliation {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId         String   @map("tenant_id") @db.Uuid
-  propertyId       String   @map("property_id") @db.Uuid
-  businessDate     DateTime @map("business_date") @db.Date
-  currency         String   @default("EUR") @db.Char(3)
-  expectedAmount   Decimal  @default(0) @map("expected_amount") @db.Decimal(12, 2)
-  countedAmount    Decimal  @default(0) @map("counted_amount") @db.Decimal(12, 2)
-  discrepancy      Decimal  @default(0) @db.Decimal(12, 2)
-  toleranceCents   Int      @default(0) @map("tolerance_cents")
-  countedByUserId  String?  @map("counted_by_user_id") @db.Uuid
-  notes            String?
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  propertyId      String   @map("property_id") @db.Uuid
+  businessDate    DateTime @map("business_date") @db.Date
+  currency        String   @default("EUR") @db.Char(3)
+  expectedAmount  Decimal  @default(0) @map("expected_amount") @db.Decimal(12, 2)
+  countedAmount   Decimal  @default(0) @map("counted_amount") @db.Decimal(12, 2)
+  discrepancy     Decimal  @default(0) @db.Decimal(12, 2)
+  toleranceCents  Int      @default(0) @map("tolerance_cents")
+  countedByUserId String?  @map("counted_by_user_id") @db.Uuid
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -928,25 +939,25 @@ model CashDrawerReconciliation {
 // ----------------------------------------------------------------------------
 
 model HousekeepingTask {
-  id                String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String                 @map("tenant_id") @db.Uuid
-  propertyId        String                 @map("property_id") @db.Uuid
-  roomId            String                 @map("room_id") @db.Uuid
-  businessDate      DateTime               @map("business_date") @db.Date
-  taskType          HousekeepingTaskType   @default(CHECKOUT_CLEAN) @map("task_type")
-  status            HousekeepingTaskStatus @default(PENDING)
-  assignedToUserId  String?                @map("assigned_to_user_id") @db.Uuid
-  assignedAt        DateTime?              @map("assigned_at")
-  startedAt         DateTime?              @map("started_at")
-  completedAt       DateTime?              @map("completed_at")
-  durationMin       Int?                   @map("duration_min")
-  scheduledFor      DateTime?              @map("scheduled_for")
-  notes             String?
-  result            Json?
-  attributes        Json?
-  createdAt         DateTime               @default(now()) @map("created_at")
-  updatedAt         DateTime               @updatedAt @map("updated_at")
-  deletedAt         DateTime?              @map("deleted_at")
+  id               String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String                 @map("tenant_id") @db.Uuid
+  propertyId       String                 @map("property_id") @db.Uuid
+  roomId           String                 @map("room_id") @db.Uuid
+  businessDate     DateTime               @map("business_date") @db.Date
+  taskType         HousekeepingTaskType   @default(CHECKOUT_CLEAN) @map("task_type")
+  status           HousekeepingTaskStatus @default(PENDING)
+  assignedToUserId String?                @map("assigned_to_user_id") @db.Uuid
+  assignedAt       DateTime?              @map("assigned_at")
+  startedAt        DateTime?              @map("started_at")
+  completedAt      DateTime?              @map("completed_at")
+  durationMin      Int?                   @map("duration_min")
+  scheduledFor     DateTime?              @map("scheduled_for")
+  notes            String?
+  result           Json?
+  attributes       Json?
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  deletedAt        DateTime?              @map("deleted_at")
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -982,25 +993,25 @@ enum HousekeepingTaskType {
 // ----------------------------------------------------------------------------
 
 model LostFoundItem {
-  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId           String          @map("tenant_id") @db.Uuid
-  propertyId         String          @map("property_id") @db.Uuid
-  roomId             String?         @map("room_id") @db.Uuid
-  foundByUserId      String          @map("found_by_user_id") @db.Uuid
-  foundAt            DateTime        @default(now()) @map("found_at")
-  description        String
-  photoBase64        String?         @map("photo_base64")
-  photoUrl           String?         @map("photo_url")
-  status             LostFoundStatus @default(FOUND)
-  claimedByGuestId   String?         @map("claimed_by_guest_id") @db.Uuid
-  claimedAt          DateTime?       @map("claimed_at")
-  claimedNotes       String?         @map("claimed_notes")
-  disposedAt         DateTime?       @map("disposed_at")
-  disposedNotes      String?         @map("disposed_notes")
-  notes              String?
-  createdAt          DateTime        @default(now()) @map("created_at")
-  updatedAt          DateTime        @updatedAt @map("updated_at")
-  deletedAt          DateTime?       @map("deleted_at")
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String          @map("tenant_id") @db.Uuid
+  propertyId       String          @map("property_id") @db.Uuid
+  roomId           String?         @map("room_id") @db.Uuid
+  foundByUserId    String          @map("found_by_user_id") @db.Uuid
+  foundAt          DateTime        @default(now()) @map("found_at")
+  description      String
+  photoBase64      String?         @map("photo_base64")
+  photoUrl         String?         @map("photo_url")
+  status           LostFoundStatus @default(FOUND)
+  claimedByGuestId String?         @map("claimed_by_guest_id") @db.Uuid
+  claimedAt        DateTime?       @map("claimed_at")
+  claimedNotes     String?         @map("claimed_notes")
+  disposedAt       DateTime?       @map("disposed_at")
+  disposedNotes    String?         @map("disposed_notes")
+  notes            String?
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  deletedAt        DateTime?       @map("deleted_at")
 
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property       Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -1061,14 +1072,14 @@ model DevicePairing {
 /// No hay FK física a `copilot_sessions.id` para no atar el insert
 /// path a la persistencia de la session shell.
 model CopilotPendingTool {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  sessionId  String    @map("session_id") @db.Uuid
-  toolName   String    @map("tool_name")
-  input      Json
-  financial  Boolean   @default(false)
-  status     String    @default("pending")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  decidedAt  DateTime? @map("decided_at")
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId String    @map("session_id") @db.Uuid
+  toolName  String    @map("tool_name")
+  input     Json
+  financial Boolean   @default(false)
+  status    String    @default("pending")
+  createdAt DateTime  @default(now()) @map("created_at")
+  decidedAt DateTime? @map("decided_at")
 
   @@index([sessionId, status])
   @@map("copilot_pending_tools")
@@ -1186,11 +1197,11 @@ enum GuestMemorySourceKind {
 // ============================================================================
 
 model EmailSuppression {
-  email     String              @id @db.Citext
+  email     String                 @id @db.Citext
   reason    EmailSuppressionReason
   detail    String?
-  source    String              @default("postmark")
-  createdAt DateTime            @default(now()) @map("created_at")
+  source    String                 @default("postmark")
+  createdAt DateTime               @default(now()) @map("created_at")
 
   @@map("email_suppressions")
 }
@@ -1214,19 +1225,19 @@ enum EmailSuppressionReason {
 // ============================================================================
 
 model NotificationOutbox {
-  id          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  dedupKey    String                @unique @map("dedup_key")
+  id          String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dedupKey    String                   @unique @map("dedup_key")
   template    String
-  recipient   String                @db.Citext
-  locale      String                @default("es")
+  recipient   String                   @db.Citext
+  locale      String                   @default("es")
   params      Json
   status      NotificationOutboxStatus @default(PENDING)
-  attempts    Int                   @default(0)
-  lastError   String?               @map("last_error")
-  messageId   String?               @map("message_id")
-  createdAt   DateTime              @default(now()) @map("created_at")
-  deliveredAt DateTime?             @map("delivered_at")
-  failedAt    DateTime?             @map("failed_at")
+  attempts    Int                      @default(0)
+  lastError   String?                  @map("last_error")
+  messageId   String?                  @map("message_id")
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  deliveredAt DateTime?                @map("delivered_at")
+  failedAt    DateTime?                @map("failed_at")
 
   @@index([status, createdAt])
   @@map("notification_outbox")
@@ -1239,4 +1250,141 @@ enum NotificationOutboxStatus {
   SUPPRESSED
 
   @@map("notification_outbox_status")
+}
+
+// ----------------------------------------------------------------------------
+// Verifactu (Sprint 14 W2) — e-invoicing AEAT.
+//
+// Tres tablas:
+//   - invoices                — la factura inmutable emitida (datos legales).
+//   - invoice_submissions     — cada intento de envío a AEAT (auditoría/retries).
+//   - verifactu_certificates  — metadata del .p12 cifrado en disco
+//                               (/data/verifactu/<tenant>.p12.enc).
+//
+// Ver ADR-030 para arquitectura, modos de AeatClient y rotación de claves.
+// ----------------------------------------------------------------------------
+
+model Invoice {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  propertyId      String           @map("property_id") @db.Uuid
+  folioId         String?          @map("folio_id") @db.Uuid
+  series          String           @default("A")
+  number          Int
+  invoiceDate     DateTime         @map("invoice_date") @db.Date
+  currency        String           @default("EUR") @db.Char(3)
+  subtotal        Decimal          @db.Decimal(12, 2)
+  taxAmount       Decimal          @map("tax_amount") @db.Decimal(12, 2)
+  totalAmount     Decimal          @map("total_amount") @db.Decimal(12, 2)
+  status          InvoiceStatus    @default(DRAFT)
+  // Verifactu (ADR-032 §3): tipo de factura. F1 = completa (cliente con
+  // NIF), F2 = simplificada (sin NIF, total ≤ 3.000 € hostelería).
+  // R1-R5 rectificativas no se emiten en MVP (BadRequest en service).
+  tipoFactura     VerifactuTipoFactura @default(F1) @map("tipo_factura")
+  customerName    String           @map("customer_name")
+  customerNif     String?          @map("customer_nif")
+  customerAddress String?          @map("customer_address")
+  lines           Json
+  xmlPayload      String?          @map("xml_payload")
+  xmlHash         String?          @map("xml_hash")
+  aeatCsv         String?          @map("aeat_csv")
+  pdfStorageKey   String?          @map("pdf_storage_key")
+  // Verifactu (ADR-032 §4): encadenamiento de huellas SHA-256.
+  // `huella` = SHA-256 hex de (huella_anterior || campos identificativos
+  // del registro actual). `huellaAnterior` = NULL para el primer registro
+  // del emisor (PrimerRegistro). Llenas durante issue(), serializado por
+  // emisor (tenantId) bajo lock para garantizar cadena estable.
+  huella          String?          @map("huella") @db.Char(64)
+  huellaAnterior  String?          @map("huella_anterior") @db.Char(64)
+  voidedAt        DateTime?        @map("voided_at")
+  voidedReason    String?          @map("voided_reason")
+  issuedAt        DateTime?        @map("issued_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property    Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  folio       Folio?              @relation(fields: [folioId], references: [id], onDelete: SetNull)
+  submissions InvoiceSubmission[]
+
+  @@unique([tenantId, series, number])
+  @@index([tenantId, propertyId, invoiceDate])
+  @@index([tenantId, status])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  VOIDED
+
+  @@map("invoice_status")
+}
+
+/// Verifactu — tipo de factura según RD 1007/2023. F1 / F2 cubren MVP;
+/// rectificativas (R1-R5) se añadirán en Sprint posterior.
+enum VerifactuTipoFactura {
+  F1
+  F2
+
+  @@map("verifactu_tipo_factura")
+}
+
+model InvoiceSubmission {
+  id              String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String                  @map("tenant_id") @db.Uuid
+  invoiceId       String                  @map("invoice_id") @db.Uuid
+  attemptNumber   Int                     @map("attempt_number")
+  status          InvoiceSubmissionStatus @default(PENDING)
+  requestPayload  String?                 @map("request_payload")
+  responsePayload String?                 @map("response_payload")
+  responseCode    Int?                    @map("response_code")
+  aeatCsv         String?                 @map("aeat_csv")
+  errorMessage    String?                 @map("error_message")
+  queuedAt        DateTime                @default(now()) @map("queued_at")
+  startedAt       DateTime?               @map("started_at")
+  completedAt     DateTime?               @map("completed_at")
+  nextAttemptAt   DateTime?               @map("next_attempt_at")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([invoiceId, attemptNumber])
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, invoiceId])
+  @@map("invoice_submissions")
+}
+
+enum InvoiceSubmissionStatus {
+  PENDING
+  IN_PROGRESS
+  ACCEPTED
+  REJECTED
+  DEAD_LETTER
+
+  @@map("invoice_submission_status")
+}
+
+model VerifactuCertificate {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String    @unique @map("tenant_id") @db.Uuid
+  subjectCn         String    @map("subject_cn")
+  serialNumber      String    @map("serial_number")
+  fingerprintSha256 String    @map("fingerprint_sha256")
+  notBefore         DateTime  @map("not_before")
+  notAfter          DateTime  @map("not_after")
+  encryptedBlobPath String    @map("encrypted_blob_path")
+  uploadedBy        String?   @map("uploaded_by") @db.Uuid
+  uploadedAt        DateTime  @default(now()) @map("uploaded_at")
+  revokedAt         DateTime? @map("revoked_at")
+  revokedReason     String?   @map("revoked_reason")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("verifactu_certificates")
 }

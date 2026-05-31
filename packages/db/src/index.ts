@@ -27,6 +27,9 @@ export {
   ChannelSyncStatus,
   EmailSuppressionReason,
   NotificationOutboxStatus,
+  InvoiceStatus,
+  InvoiceSubmissionStatus,
+  VerifactuTipoFactura,
 } from '@prisma/client';
 
 export type {
@@ -58,6 +61,9 @@ export type {
   ChannelSyncRun,
   EmailSuppression,
   NotificationOutbox,
+  Invoice,
+  InvoiceSubmission,
+  VerifactuCertificate,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';

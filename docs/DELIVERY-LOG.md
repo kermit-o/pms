@@ -80,6 +80,1393 @@ Una o dos frases.
 
 ---
 
+## 2026-05-31 · [DOC] · Sprint 14 W2 — RUNBOOK §3.3 verificar bootstrap con health-check
+
+**Scope:** `docs/RUNBOOK-verifactu.md` (sección §3.3 nueva).
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+Nueva sección §3.3 que documenta cómo usar `scripts/verifactu-health-check.ts`
+(creado en commit `033b905`) para validar el bootstrap de un tenant
+antes de uso real o para diagnóstico desde soporte.
+
+Cubre:
+
+- Comandos con/sin `--tenant`, con/sin `--json`.
+- Tabla de los 6 estados 🔴 que reporta y la acción para cada uno
+  (con cross-refs a §5.x del propio runbook).
+- Exit codes (0/1/2) y sugerencia de cron diario en producción para
+  alertar si exit ≠ 0.
+
+Cierra el bucle entre las dos piezas añadidas en esta sesión
+(health-check + RUNBOOK) — el script estaba creado pero no descubrible
+desde la documentación operativa.
+
+**Sin código.**
+
+---
+
+## 2026-05-31 · [TEST] · Sprint 14 W2 — Verifactu: test de integración issue → submit
+
+**Scope:** `apps/api/src/verifactu/integration.spec.ts` (nuevo).
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+Test de integración que cierra la brecha de cobertura entre el
+publisher (`InvoiceService.issue`) y el consumer (`SubmitWorker.handle`).
+Hasta ahora cada uno tenía su unit test con mocks distintos — esto
+verifica que el evento publicado por uno encaja con la firma esperada
+por el otro **y** que el estado compartido (huella encadenada) se
+mantiene consistente entre dos facturas sucesivas.
+
+Setup:
+
+- `InMemoryStore` con tenants, folios, invoices, submissions y
+  generador determinista de UUIDs.
+- `prisma` mock que opera contra el store y respeta los `where`/
+  `orderBy` que cada servicio espera (filter folioId/tenantId/series,
+  status not, huella not null, orderBy number/issuedAt desc).
+- `EventbusService.publish` captura eventos en memoria — el test los
+  alimenta manualmente al `worker.handle()` (no NATS).
+- `SignerService.sign` devuelve `${xml}<signed/>` (el signing real ya
+  está cubierto en `signer.service.spec.ts`).
+- `AeatClient` = `StubAeatClient` real (determinista).
+- `InvoiceService` + `SubmitWorker` son los **reales** sin mockear.
+
+**Tests (ambos verdes a la primera).**
+
+1. **Happy path**: `issue()` publica `submit_requested` con payload
+   `{invoiceId, invoiceNumber}` → `worker.handle()` lo procesa →
+   invoice queda `ACCEPTED`, huella set, huellaAnterior=null,
+   evento `verifactu.invoice.submitted` publicado.
+
+2. **Cadena de huellas**: dos facturas sucesivas → la segunda lleva
+   `huellaAnterior = primera.huella`; las dos huellas son distintas;
+   ambas terminan `ACCEPTED`.
+
+Verifactu suite: **94/94** verde (+2 nuevos). Typecheck + lint
+`@pms/api` verdes.
+
+**Por qué.**
+
+Las piezas individuales tenían cobertura, pero el contrato entre ellas
+no se testeaba. Ahora cualquier cambio en el schema del evento, en
+los campos que el worker lee del invoice (tenant join, huella, etc.),
+o en el orden de las operaciones del issue, se detecta antes del
+runtime real.
+
+---
+
+## 2026-05-31 · [FEAT] · Sprint 14 W2 — Verifactu: script health-check operativo
+
+**Scope:** `scripts/verifactu-health-check.ts` (nuevo).
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+Script operativo para diagnóstico Verifactu por tenant. Útil antes del
+primer envío real a AEAT y como herramienta SRE en producción para
+detectar tenants que no podrán emitir.
+
+Reporta por tenant:
+
+- **Emisor**: NIF + razón social poblados (rojo si no).
+- **Certificado**: existe, no revocado, días hasta caducidad
+  (verde ≥90d, amarillo <90d, rojo <30d o caducado o revocado).
+- **Invoices** (últimas 10): cuenta por estado.
+- **DLQ**: submissions DEAD_LETTER en los últimos 30 días (rojo si > 0).
+- **Overall**: 🟢 ok / 🟡 warn / 🔴 fail.
+
+Uso:
+
+```
+DIRECT_URL=postgres://... \
+  pnpm tsx scripts/verifactu-health-check.ts [--tenant <uuid>] [--json]
+```
+
+Exit codes:
+
+- 0 — todos OK.
+- 1 — al menos un tenant en fail (cualquier 🔴).
+- 2 — error conexión / DB.
+
+`--json` para integrar en monitoring (Prometheus textfile collector,
+alertmanager script, lo que sea). `--tenant <uuid>` filtra a uno solo
+(útil debuggeando soporte).
+
+**Sin cambios de código de runtime — solo script.** Typecheck OK,
+imports resuelven.
+
+---
+
+## 2026-05-31 · [FEAT] · Sprint 14 W2 — Verifactu: hardening (cert validity + key rotation + métricas)
+
+**Scope:** `apps/api/src/verifactu/{certificate-vault.service.ts,submit.worker.ts}`,
+`scripts/rotate-verifactu-master-key.ts` (nuevo),
+`docs/RUNBOOK-verifactu.md`
+**Branch:** `claude/s14-w2-verifactu`
+
+Tres mejoras de robustez/operativa sin dependencias externas, en commits
+separados (`48edec9`, `65ddd7e`, este):
+
+### F · Validación temporal del cert al subir
+
+`parseAndRepackP12` rechaza ahora:
+
+- `notBefore > now` → BadRequest "Certificate not yet valid".
+- `notAfter <= now` → BadRequest "Certificate already expired".
+
+Los certs cercanos a caducar siguen aceptándose — la UI ya muestra
+badge ámbar/rojo. Esto bloquea solo casos absurdos. +2 tests.
+
+### D · Script `scripts/rotate-verifactu-master-key.ts`
+
+Cubre la deuda marcada en RUNBOOK §6.2. Lee blob → descifra con clave
+vieja → re-cifra con nueva → escritura atómica (.tmp + rename).
+Garantías: idempotente, salta certs revocados, exit 2 si cualquier
+blob falla. Modo `--dry-run`.
+
+### E · Métricas OpenTelemetry del SubmitWorker
+
+Meter `pms-api/verifactu`:
+
+- `verifactu_submit_total` (Counter) con labels `outcome` (9 valores) +
+  `mode` (stub/preprod/production).
+- `verifactu_submit_duration_ms` (Histogram) — handler completo.
+
+RUNBOOK §8 actualizado con la lista de outcomes y 3 alertas sugeridas
+para Grafana.
+
+**Tests.**
+
+- Verifactu suite: **92/92** verde (+2 nuevos en vault validity).
+- Typecheck + lint `@pms/api` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+Bloqueado en input PO:
+
+- mTLS en PreprodAeatClient (espera cert FNMT pruebas).
+- Verificación nombres XSD ⚠ (espera XSD vigente).
+- Smoke test AEAT preprod.
+- `VERIFACTU_SISTEMA_*` con valores reales.
+
+No bloqueado pero fuera de scope W2:
+
+- IVA por línea (sprint dedicado).
+- Rectificativas R1-R5 (sprint dedicado).
+- Dashboard Grafana `infra/grafana/dashboards/verifactu.json`.
+
+---
+
+## 2026-05-31 · [DOC] · Sprint 14 W2 — RUNBOOK Verifactu
+
+**Scope:** `docs/RUNBOOK-verifactu.md` (nuevo).
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+Runbook operativo del módulo Verifactu. Cubre:
+
+- §1 Mapa rápido del bucle end-to-end (operador → backend → AEAT).
+- §2 Tabla completa de env vars + cuándo son obligatorias + guards
+  del bootstrap.
+- §3 Bootstrap por roles: módulo (admin sistema) + tenant (operador).
+- §4 Operaciones diarias del operador: emitir, reintentar, revocar.
+- §5 Troubleshooting con 8 escenarios concretos (errores + acción).
+- §6 Operaciones admin: renovación cert, rotación master key, bump
+  versión SIF, alta inicial AEAT.
+- §7 Snapshot del estado: ✅ implementado / ⚠ por verificar XSD /
+  ⏳ pendiente (mTLS, IVA por línea, rectificativas).
+- §8 Health + métricas (con TODOs marcados).
+
+Idioma: español (consistente con el resto del repo). Tono operativo
+— cada sección dice "qué pasa", "por qué" y "qué hacer".
+
+**Sin cambios de código.**
+
+---
+
+## 2026-05-31 · [FEAT] · Sprint 14 W2 — Verifactu: histórico envíos + reintento manual
+
+**Scope:** `apps/api/src/verifactu/{invoice.service.ts,verifactu.controller.ts}`,
+`apps/web-fo/src/{lib/api.ts,app/api/verifactu/invoices/[invoiceId]/submissions/route.ts,app/reservations/[id]/page.tsx}`
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+### Backend
+
+- `InvoiceService.listSubmissions(user, corr, invoiceId)` — devuelve
+  los `InvoiceSubmission` ordenados por `attemptNumber desc`.
+- `InvoiceService.requeueSubmission(user, corr, invoiceId)` — valida
+  (`NotFound` si no existe, `Conflict` si ya `ACCEPTED`, `Conflict`
+  si hay attempt PENDING/IN_PROGRESS) y republica el evento NATS
+  `verifactu.invoice.submit_requested`. El `SubmitWorker.acquireAttempt`
+  crea un attempt nuevo con `attemptNumber++`.
+- Endpoints:
+  - `GET /verifactu/invoices/:invoiceId/submissions` (tenant_admin +
+    front_desk).
+  - `POST /verifactu/invoices/:invoiceId/submissions` (tenant_admin
+    only, HTTP 202).
+
+### Web-fo
+
+- Helpers `listInvoiceSubmissions` + `requeueInvoiceSubmission` y
+  type `InvoiceSubmissionView` en `lib/api.ts`.
+- Proxy `/api/verifactu/invoices/[invoiceId]/submissions` con GET +
+  POST.
+- `InvoicePanel` extendido con `SubmissionsHistory`:
+  - Tabla con `#`, badge estado coloreado, encolado, completado,
+    código HTTP, CSV (si ACCEPTED) o error (si REJECTED/DEAD_LETTER).
+  - Botón "Reintentar envío" visible **solo** cuando hay invoice + no
+    está `ACCEPTED` + último attempt no es `PENDING`/`IN_PROGRESS`.
+  - Server action `requeueInvoiceAction` llama al proxy.
+
+**Tests.**
+
+- Verifactu suite: **90/90** verde (+4 nuevos en `invoice.service.spec.ts`
+  para `requeueSubmission`: NotFound, Conflict si ACCEPTED, Conflict
+  si hay PENDING, publish OK).
+- Typecheck + lint `@pms/api` y `@pms/web-fo` verdes.
+
+**Por qué.**
+
+Cierra el bucle UX para el operador: cuando una factura queda en
+DEAD_LETTER por culpa de AEAT caído o un cert revocado entre intentos,
+el operador puede reintentar desde la misma pantalla en lugar de
+abrir un ticket técnico. Útil mientras llegan las credenciales AEAT
+para el primer smoke.
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: PreprodAeatClient (HTTP, mTLS pendiente)
+
+**Scope:** `apps/api/src/verifactu/aeat/{preprod-aeat-client.ts,aeat-client.factory.ts,index.ts}`,
+`apps/api/src/verifactu/verifactu.module.ts`,
+`apps/api/src/config/env.schema.ts`
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+### Env vars
+
+- `VERIFACTU_AEAT_ENDPOINT` — URL del endpoint AEAT (preprod o production).
+  Optional en `stub`; obligatorio en cualquier otro modo (guard en
+  `VerifactuModule.onModuleInit`).
+- `VERIFACTU_AEAT_TIMEOUT_MS` — timeout por intento, default 15s.
+
+### `PreprodAeatClient`
+
+Implementa `AeatClient` (modo `preprod`). Sustituye el `throw` que había
+en el factory para el modo.
+
+Pipeline:
+
+1. POST al endpoint con `Content-Type: application/xml; charset=utf-8`
+   y body = `signedXml`.
+2. `AbortController` para timeout configurable.
+3. Parsing de respuesta:
+   - HTTP 5xx → throw → SubmitWorker reintenta.
+   - HTTP 4xx → `REJECTED` con `errorMessage` extraído.
+   - HTTP 2xx + `<CSV>` (o `<*:Csv>` namespaced) → `ACCEPTED`.
+   - HTTP 2xx sin CSV (con `<CodigoErrorRegistro>` típicamente) →
+     `REJECTED`.
+   - Network error → throw → SubmitWorker reintenta.
+
+### Estado de autenticación: **mTLS pendiente**
+
+Documentado explícitamente en el JSDoc del cliente. AEAT exige mutual
+TLS con el cert del emisor (`.p12` del vault). Habilitarlo cuando el
+PO facilite el cert FNMT-RCM de pruebas + URL preprod (preguntas D y
+G del ADR-032): cargar el cert via `CertificateVaultService` por
+request, configurar `undici.Agent({ connect: { key, cert } })` y
+pasar como dispatcher al `fetch`. Resto del cliente (parsing, timeouts,
+worker integration) ya está listo.
+
+### Factory + module guards
+
+- `AeatClientFactory`: en `mode === 'preprod'` construye `PreprodAeatClient`
+  on-demand (ctor del cliente lanza si falta endpoint).
+- `VerifactuModule.onModuleInit`: nuevo guard — en modo no-stub, exige
+  `VERIFACTU_AEAT_ENDPOINT` poblado.
+
+### Extracción de campos de la respuesta
+
+- `extractCsv()` busca `<CSV>` o `<*:Csv>` (case-sensitive, según
+  convención AEAT en spec pública). Aproximación a verificar contra
+  el XSD de respuesta vigente.
+- `extractErrorMessage()` busca `<CodigoErrorRegistro>` +
+  `<DescripcionErrorRegistro>`.
+
+Estas regex son aproximaciones — cuando AEAT preprod responda, el
+mapping exacto se cierra con un golden test del XML real.
+
+**Tests.**
+
+- Verifactu suite: **86/86** verde (+10 nuevos: 9 cliente + 1 guard module).
+- `preprod-aeat-client.spec.ts`:
+  - Ctor throw sin endpoint.
+  - ACCEPTED con `<CSV>` y con `<ns:Csv>` namespaced.
+  - REJECTED en 422 con `CodigoErrorRegistro + DescripcionErrorRegistro`.
+  - REJECTED en 200 sin CSV (rechazo de negocio).
+  - Throw en 5xx (transitorio → worker reintenta).
+  - Throw en network error.
+  - Timeout vía AbortController.
+  - `mode === 'preprod'`.
+- `verifactu.module.spec.ts`: nuevo test guard endpoint + el de prod
+  añade `VERIFACTU_AEAT_ENDPOINT` al payload.
+- Typecheck + lint `@pms/api` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+1. **Habilitar mTLS** en `PreprodAeatClient` cuando lleguen credenciales.
+2. **Verificación nombres XSD ⚠** (generador + cliente — pregunta G ADR-032).
+3. **Smoke test contra AEAT preprod** con cert FNMT pruebas.
+4. **IVA por línea** (sprint dedicado).
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: SignerService → XAdES-BES (xadesjs)
+
+**Scope:** `apps/api/src/verifactu/signer.service.ts`,
+`apps/api/package.json`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-031 opción 1 firmada PO.
+
+**Qué cambió.**
+
+### Nuevas dependencias (autorizadas en ADR-031)
+
+- `xadesjs` 2.6.7 (MIT, PeculiarVentures) — purpose-built XAdES.
+- `@xmldom/xmldom` 0.8.x (peer dep de xml-core) — DOM en Node.
+- `xpath` 0.0.34 (peer dep) — XPath en Node.
+
+Total +11 paquetes (xadesjs y sus transitives). En línea con la
+estimación del ADR-031 (~12 deps).
+
+### `SignerService`
+
+Refactor completo: deja de construir `<ds:Signature>` a mano y delega
+en `xadesjs.SignedXml.Sign()`. Pipeline:
+
+1. Carga `.p12` del vault → forge → key + cert.
+2. `forge.pki.wrapRsaPrivateKey()` → PKCS#8 DER → `crypto.subtle.importKey()`
+   → CryptoKey (RSASSA-PKCS1-v1_5 / SHA-256).
+3. Parsea XML con `@xmldom/xmldom`.
+4. `signedXml.Sign(algorithm, key, doc, options)` con:
+   - `references: [{ hash: 'SHA-256', transforms: ['enveloped', 'c14n'], uri: '' }]`
+   - `signingCertificate: certDerB64` → `<xades:SigningCertificate>`
+   - `x509: [certDerB64]` → `<ds:KeyInfo>/<ds:X509Data>/<ds:X509Certificate>`
+   - `signingTime: { value: new Date() }` → `<xades:SigningTime>`
+5. Inyecta `<ds:Signature>` como último hijo del raíz (enveloped).
+6. Serializa con `XMLSerializer` y devuelve.
+
+Bootstrap en `onModuleInit()` (idempotente): inyecta
+`globalThis.crypto` como engine WebCrypto y `{DOMParser, XMLSerializer, xpath}`
+como dependencias node de xml-core.
+
+### Estructura del XML firmado
+
+Ahora el output incluye:
+
+- `<ds:Signature>` con DOS `<ds:Reference>`: la del doc (URI="") y la
+  de `SignedProperties` (URI="#xades-…").
+- `<ds:KeyInfo>` con `<ds:X509Data>/<ds:X509Certificate>` (cert completo).
+- `<ds:Object>/<xades:QualifyingProperties>` con:
+  - `<xades:SignedProperties>` con:
+    - `<xades:SignedSignatureProperties>` con:
+      - `<xades:SigningTime>`
+      - `<xades:SigningCertificate>` con CertDigest + IssuerSerial.
+
+Es **XAdES-BES completo según ETSI TS 101 903**. AEAT acepta este perfil
+
+- con la verificación de canonicalización exacta que hace xml-core.
+
+**Tests.**
+
+- Verifactu suite: **76/76** verde.
+- `signer.service.spec.ts` reescrito: el primer test verifica la
+  presencia de los elementos XAdES-BES (≥2 References, QualifyingProperties,
+  SignedProperties, SigningTime, SigningCertificate, KeyInfo con X509,
+  SignatureValue). Los otros dos validan errores (sin cert, XML inválido).
+- Test cert pasa de RSA-1024 a RSA-2048 — WebCrypto.importKey rechaza
+  claves cortas con RSASSA-PKCS1-v1_5 + SHA-256.
+- Typecheck + lint `@pms/api` verdes.
+
+**Lo que NO verifica el test (pero el output cumple por construcción):**
+firma criptográficamente válida — xadesjs hace la firma con WebCrypto
+nativo de Node 20, que es el mismo motor que usaría un verificador.
+
+**Sigue pendiente (en esta rama).**
+
+1. **Verificación nombres ⚠** del generador XML contra el XSD vigente
+   AEAT (pregunta G del ADR-032).
+2. **PreprodAeatClient** HTTP + credenciales (pregunta D del ADR-032).
+3. **Smoke test contra AEAT preprod** con cert FNMT de pruebas.
+4. **IVA por línea** (sprint dedicado).
+5. **Onboarding** que pida `Tenant.nif/razonSocial` en alta de tenant.
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: generador XML `RegistroAlta`
+
+**Scope:** `apps/api/src/verifactu/{invoice-xml.ts,submit.worker.ts}`,
+`apps/api/src/config/env.schema.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-032 §2 (estructura), §3 (F1/F2), §4 (encadenamiento),
+§6 (SistemaInformatico).
+
+**Qué cambió.**
+
+### `buildVerifactuRegistroAlta()` (reemplaza el stub `buildInvoiceXml`)
+
+Generador del XML conforme al `RegistroAlta` Verifactu. Estructura:
+
+- `<RegFactuSistemaFacturacion xmlns="…SuministroLR.xsd">` (root)
+- `<RegistroAlta>` con:
+  - `<IDVersion>1.0</IDVersion>`
+  - `<IDFactura>` (`IDEmisorFactura` con NIF+NombreRazon, `NumSerieFactura`
+    `A-42`, `FechaExpedicionFactura` `DD-MM-YYYY`).
+  - `<NombreRazonEmisor>`, `<TipoFactura>` (F1/F2), `<DescripcionOperacion>`.
+  - `<Destinatarios>` solo si hay NIF cliente (F1); omitido en F2.
+  - `<Desglose>` con un `DetalleDesglose` único al 10 % de alojamiento
+    (ADR-032 pregunta F pendiente — IVA por línea queda para sprint
+    dedicado).
+  - `<CuotaTotal>`, `<ImporteTotal>` con 2 decimales.
+  - `<Encadenamiento>` con `<PrimerRegistro>S</PrimerRegistro>` o
+    `<RegistroAnterior>` (con NIF emisor + huella anterior).
+  - `<SistemaInformatico>` con 6 campos desde env vars.
+  - `<FechaHoraHusoGenRegistro>` ISO 8601.
+  - `<TipoHuella>01</TipoHuella>` (SHA-256) + `<Huella>`.
+
+**Honestidad sobre nombres XSD (CLAUDE.md §9):** cada elemento lleva
+marcador inline:
+
+- ✅ confirmado por texto regulatorio del RD/Orden.
+- ⚠ por verificar contra el XSD vigente. Coincide con la guía
+  técnica pública pero el nombre exacto puede variar entre
+  versiones — **antes de envío real a preprod/producción hay que
+  validar contra el XSD activo**.
+
+### Env vars `SistemaInformatico`
+
+Cinco vars nuevas en `env.schema.ts` con defaults razonables para dev:
+
+- `VERIFACTU_SISTEMA_NOMBRE_RAZON` (default "Aubergine PMS S.L.")
+- `VERIFACTU_SISTEMA_NIF` (default "B00000000" placeholder)
+- `VERIFACTU_SISTEMA_NOMBRE` (default "Aubergine PMS")
+- `VERIFACTU_SISTEMA_ID` (default "01" — placeholder hasta el alta
+  AEAT del PMS, pregunta D del ADR-032)
+- `VERIFACTU_SISTEMA_VERSION` (default "0.1.0")
+
+`NumeroInstalacion` = `tenantId` (decisión E del ADR-032).
+
+### `SubmitWorker`
+
+- `findUnique` ahora trae también `tipoFactura`, `huella`, `huellaAnterior`
+  y el `tenant.{nif,razonSocial}`.
+- Guard "invariant violated" si el invoice llega sin emisor o huella
+  (no debería pasar — `issue()` lo valida —, pero si pasa va directo a
+  DEAD_LETTER en lugar de reintentar indefinidamente).
+- Llamada al nuevo generador con todos los campos.
+
+**Tests.**
+
+- Verifactu suite: **76/76** verde (+8 nuevos en `invoice-xml.spec.ts`).
+  - Root + estructura básica.
+  - IDFactura con NIF + serie-número + DD-MM-YYYY.
+  - Destinatarios presente solo con NIF cliente.
+  - PrimerRegistro vs RegistroAnterior según `huellaAnterior`.
+  - SistemaInformatico con los 6 campos.
+  - TipoHuella=01 + Huella.
+  - CuotaTotal + ImporteTotal con 2 decimales.
+  - FechaHoraHusoGenRegistro ISO.
+  - Escape XML de caracteres especiales.
+- `submit.worker.spec.ts` adaptado (invoice ahora trae tenant + huella).
+- Typecheck + lint `@pms/api` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+1. **xadesjs** + refactor `SignerService` a XAdES-BES.
+2. **Verificación nombres XSD ⚠** marcados en el generador contra el
+   schema vigente (input PO: pregunta G del ADR-032).
+3. **IVA por línea** (decisión F del ADR-032 — sprint dedicado).
+4. **PreprodAeatClient** HTTP + credenciales (decisión D del ADR-032).
+5. **Onboarding wizard**: que pida `Tenant.nif/razonSocial` para
+   nuevos tenants (UI ya existe en `/admin/billing/emisor`; falta
+   integrar en el flow inicial).
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: UI emisor (NIF + razón social)
+
+**Scope:** `apps/api/src/verifactu/{dto.ts,emisor.service.ts,verifactu.controller.ts,verifactu.module.ts}`,
+`apps/web-fo/src/{lib/api.ts,app/api/verifactu/emisor/route.ts,app/admin/billing/emisor/page.tsx,app/layout.tsx}`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-032 §5.a (un IDEmisor por tenant).
+
+**Por qué (importante).**
+
+El commit anterior añadió `BadRequest` en `InvoiceService.issue()` cuando
+el tenant no tiene NIF/razón social — efecto secundario: rompe el botón
+"Emitir factura" para todos los tenants existentes (todos en estado
+post-migración: campos `NULL`). Esta pieza restaura el flow stub
+end-to-end y construye una pantalla que el operador iba a necesitar
+sí o sí. Reordenado con autorización del PO frente a la lista original.
+
+**Qué cambió.**
+
+### Backend
+
+- `UpdateEmisorDto` (Zod): NIF 9 chars alfanuméricos (uppercase via
+  `.toUpperCase()`), razón social trim + min 1.
+  Validación NIF MVP intencionalmente lasa (cubre NIF/CIF/NIE sin
+  comprobar dígito de control — pendiente cuando AEAT preprod rechace
+  con test contra spec real). Documentado en JSDoc.
+- `EmisorService` con `get()` y `update()` — operaciones tenant-scope
+  vía `withTenant`.
+- Endpoints `tenant_admin`:
+  - `GET /verifactu/emisor` → `{nif, razonSocial}` (puede ser nulls).
+  - `PUT /verifactu/emisor` body `{nif, razonSocial}` → datos guardados.
+
+### Web-fo
+
+- Helpers `getEmisor`, `updateEmisor` en `lib/api.ts`.
+- Proxy `/api/verifactu/emisor` GET/PUT.
+- Página `/admin/billing/emisor` (RSC + server action):
+  - Aviso ámbar "Emisor sin configurar" si vacío.
+  - Form con pattern HTML5 `[A-Za-z0-9]{9}` (validación cliente),
+    server action repite validación.
+  - Cross-link a `/admin/billing/certificate` y viceversa (pendiente
+    de añadir el cross-link en cert; por ahora la nav del header
+    cubre ambos).
+- Nav header: nuevo enlace "Admin · Emisor" antes de "Admin · Certificado",
+  ambos visibles sólo para `tenant_admin`.
+
+**Tests.**
+
+- Verifactu suite: **68/68** verde (+5 nuevos en
+  `verifactu.controller.spec.ts`):
+  - GET emisor delega al service.
+  - PUT rechaza NIF longitud incorrecta.
+  - PUT rechaza NIF con espacios / no alfanumérico.
+  - PUT rechaza razón social vacía.
+  - PUT trim + uppercase + forward correcto al service.
+- Typecheck + lint `@pms/api` y `@pms/web-fo` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+1. **`buildVerifactuRegistroAlta()`** sustituyendo el stub.
+2. **xadesjs** + refactor `SignerService` a XAdES-BES.
+3. **Env config** `SistemaInformatico`.
+4. **PreprodAeatClient** HTTP + credenciales.
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: huella SHA-256 + heurística F1/F2
+
+**Scope:** `apps/api/src/verifactu/{huella.ts,invoice.service.ts}`,
+`packages/db/src/index.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-032 §3 (F1/F2) y §4 (encadenamiento).
+
+**Qué cambió.**
+
+### `huella.ts` (helper puro)
+
+- `computeHuella(input, previousHuella)` — SHA-256 hex sobre la
+  concatenación canónica de campos identificativos + huella anterior.
+  Formato `clave=valor` separado por `&` (aproximación a la fórmula
+  AEAT publicada; nombres exactos pendientes de verificación contra
+  guía técnica vigente — documentado en JSDoc).
+- `formatFechaExpedicion(date)` — DD-MM-YYYY en UTC, formato AEAT.
+- 4 tests pure: determinismo, dependencia de huella anterior,
+  sensibilidad a cambios de cualquier campo identificativo.
+
+### `InvoiceService.issue()`
+
+- **Validación tenant**: `BadRequest` si `Tenant.nif` o `razonSocial`
+  están vacíos. Mensaje guía al operador hacia `/admin/billing`
+  (la UI de configuración se construye en commit siguiente).
+- **Heurística F1/F2 (ADR-032 §3)**:
+  - F1 (default) si el cliente tiene NIF, **o** si el total supera
+    3.000 € (umbral hostelería simplificada).
+  - F2 si no hay NIF y total ≤ 3.000 €.
+- **Lock secuencial doble** (`pg_advisory_xact_lock`):
+  - Namespace `verifactu-invoice` por `(tenant, series)` —
+    asignación del número (ya existía).
+  - Namespace `verifactu-chain` por tenant — serializa la lectura
+    de `huellaAnterior` para garantizar cadena estable bajo
+    emisiones concurrentes en series distintas.
+- **Encadenamiento**: lee la última factura del emisor con
+  `huella IS NOT NULL` ordenada por `issuedAt DESC` (usa el índice
+  filtrado de la migración previa). Calcula `huella` con
+  `computeHuella()` y persiste `huella + huellaAnterior` en el
+  registro.
+
+### `packages/db`
+
+- Re-export del enum `VerifactuTipoFactura` desde `@pms/db`.
+
+**Tests.**
+
+- Verifactu suite: **63/63** verde (+8 nuevos).
+  - `huella.spec.ts` (4): determinismo + chain dependency + cambio
+    de campos + formato fecha.
+  - `invoice.service.spec.ts · Verifactu wiring` (4): rechaza tenant
+    sin NIF, persiste F1 + huella, clasifica F2 cuando no hay NIF,
+    encadena correctamente cuando hay huella anterior.
+- Typecheck + lint `@pms/api` verdes. `@pms/db` rebuilt.
+
+**Sigue pendiente (en esta rama).**
+
+1. **`buildVerifactuRegistroAlta()`** sustituyendo el stub
+   `buildInvoiceXml()`.
+2. **xadesjs** + refactor `SignerService` a XAdES-BES.
+3. **Env config** `SistemaInformatico` (NIF Aubergine PMS + Id AEAT +
+   Version) — input PO para los valores reales.
+4. **UI onboarding** para `Tenant.nif/razonSocial` (necesaria — sin
+   ella, ningún tenant nuevo puede emitir facturas).
+5. **PreprodAeatClient** HTTP + credenciales.
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: schema emisor + huellas
+
+**Scope:** `packages/db/prisma/schema.prisma`,
+`packages/db/prisma/migrations/20260630000000_verifactu_tenant_emisor_huellas`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-032 firmada PO (§5.a modelo emisor, §4 encadenamiento, §3 tipo factura).
+
+**Qué cambió.**
+
+Migración Prisma forward-only que abre el modelo de datos para el
+payload Verifactu real. Tres cambios:
+
+1. **`tenants.nif` + `tenants.razon_social`** (nullable). Modelo
+   §5.a: un IDEmisor por tenant. Nullable porque hay tenants
+   pre-Verifactu; el `InvoiceService.issue()` los validará no-null
+   antes de emitir (en commit siguiente).
+2. **`invoices.tipo_factura`** (enum `VerifactuTipoFactura` = F1/F2,
+   default F1). Rectificativas R1-R5 no van en MVP — bloqueadas en
+   service.
+3. **`invoices.huella`** + **`invoices.huella_anterior`** (CHAR(64)
+   hex SHA-256). El encadenamiento se llena durante `issue()`
+   serializado por emisor.
+
+Más un índice secundario filtrado
+`invoices(tenant_id, issued_at DESC) WHERE huella IS NOT NULL` para
+localizar la última factura encadenada del emisor bajo lock en el
+siguiente commit. El `WHERE` excluye los registros pre-Verifactu
+que nunca participan en la cadena.
+
+**Por qué.**
+
+Sin estas columnas, el siguiente commit (generador real +
+encadenamiento) no tiene dónde escribir. Cambio aislado y reversible
+en términos de aplicación: ninguna lógica nueva todavía depende de
+los campos.
+
+**Tests.**
+
+- Verifactu suite: **55/55** verde (sin tests nuevos — pura
+  migración de schema).
+- Typecheck `@pms/api` verde tras `prisma generate`.
+
+**Sigue pendiente (en esta rama).**
+
+1. **`computeHuella()`** + lock secuencial + integración en
+   `InvoiceService.issue()`.
+2. **`buildVerifactuRegistroAlta()`** sustituyendo el stub
+   `buildInvoiceXml()`.
+3. **xadesjs** + refactor `SignerService` a XAdES-BES.
+4. **Env config** `SistemaInformatico` (NIF Aubergine PMS S.L. + Id
+   AEAT + Version) — input PO para los valores reales.
+5. **UI onboarding** para `Tenant.nif/razonSocial`.
+6. **PreprodAeatClient** HTTP + credenciales.
+
+---
+
+## 2026-05-30 · [DOC] · Sprint 14 W2 — ADR-032 payload XML Verifactu
+
+**Scope:** `docs/adr/032-verifactu-xml-payload.md`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030, ADR-031. RD 1007/2023, Orden HAC/1177/2024.
+
+**Qué cambió.**
+
+Nuevo ADR (status: **Proposed**) que cierra el gap real más profundo
+para envío AEAT: el payload XML conforme al schema oficial. El generador
+actual (`buildInvoiceXml()` en `invoice-xml.ts`) produce
+`<AubergineVerifactuInvoiceStub>` — etiqueta inventada. Sin esta ADR,
+ninguna firma (por buena que sea) pasará el validador AEAT.
+
+**Contenido del ADR:**
+
+- §1 Contexto + las 4 cosas que AEAT valida (estructura, firma,
+  encadenamiento, SistemaInformatico).
+- §2 Estructura del `RegistroAlta` con marcadores explícitos
+  ✅ confirmado / ⚠ por verificar contra XSD vigente. **No alucino
+  nombres exactos** — los marco para review antes de codificar.
+- §3 Tipos de factura (F1 / F2 / R) + heurística MVP propuesta.
+- §4 Encadenamiento de huellas (SHA-256 + cálculo + concurrencia).
+- §5 Tres modelos para IDEmisor (por tenant / por property / mixto).
+  Recomendación MVP: por tenant.
+- §6 SistemaInformatico (NombreRazon, NIF, IdSistemaInformatico,
+  Version, NumeroInstalacion) — incluye trámite AEAT a hacer por PO.
+- §7 Schema gaps Prisma que hay que cerrar: `Tenant.nif/razonSocial`,
+  `Invoice.huella/huellaAnterior`, líneas con desglose IVA.
+- §8 Plan de implementación (1.5-2 días + 0.5d XAdES en paralelo).
+- §9 Tabla resumen de decisiones pendientes para el PO (A-G).
+
+**7 decisiones pendientes del PO** (resumen §9):
+A. Heurística F1/F2.
+B. IDEmisor: por tenant vs property.
+C. NIF de Aubergine PMS S.L.
+D. Estado registro PMS ante AEAT.
+E. `NumeroInstalacion = tenantId`?
+F. IVA por línea: ¿W2 o sprint dedicado?
+G. URL/versión XSD vigente confirmada.
+
+**Tests.**
+
+Ninguno — es documentación. Typecheck + lint sin cambios.
+
+**Sigue pendiente (en esta rama).**
+
+- Firma PO ADR-031 (librería XAdES) y ADR-032 (este).
+- Implementación payload real + huellas + (posiblemente) IVA por
+  línea + (posiblemente) split de `nif/razonSocial` en Tenant.
+- PreprodAeatClient HTTP + credenciales AEAT preprod.
+
+---
+
+## 2026-05-30 · [DOC] · Sprint 14 W2 — ADR-031 librería XAdES-BES
+
+**Scope:** `docs/adr/031-verifactu-xades-library.md`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 §3, §5; CLAUDE.md §8 (nuevas deps requieren aprobación PO).
+
+**Qué cambió.**
+
+Nuevo ADR (status: **Proposed**) que cierra el último blocker para envío
+real a AEAT: cómo emitir XAdES-BES en lugar del XMLDSig actual.
+
+Tres opciones comparadas con datos npm reales (tamaño, deps, mantenedores,
+estimación de LOC y tiempo a preprod verde):
+
+1. **`xadesjs`** (PeculiarVentures, MIT, ~12 deps transitivas, ~50 LOC
+   propio, time-to-green ~0.5d).
+2. **`xml-crypto` + wrapper XAdES manual** (node-saml org, 3 deps, ~200
+   LOC propio, time-to-green ~2d).
+3. **Implementación propia con node-forge** (0 deps nuevas, ~400 LOC
+   propio, time-to-green 3-5d).
+
+**Recomendación:** opción 1 (`xadesjs`). Razonamiento detallado en §4:
+el blocker real frente al validador AEAT es C14N exacta + estructura
+XAdES exacta — problema resuelto por xadesjs, abierto por las otras.
+
+**Decisiones pendientes para el PO** (§6):
+
+1. ¿Apruebas `xadesjs`?
+2. Cuándo facilitas credenciales AEAT preprod + cert FNMT-RCM de
+   pruebas.
+3. ¿Vendor lock-in tolerable? (opción 2 minimiza riesgo de salida).
+
+Cuando el PO firme, el commit siguiente implementa el plan §5 (~0.5d
+de código + tests).
+
+**Tests.**
+
+Ninguno — es documentación. Typecheck + lint no se ven afectados; no
+he tocado código.
+
+**Sigue pendiente (en esta rama).**
+
+- Firma del PO en ADR-031 → implementación XAdES-BES.
+- PreprodAeatClient HTTP real (sin lo anterior, no tiene payload válido).
+- UI histórico de envíos (nice-to-have, no bloqueante para producción).
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: SubmitWorker + eventos submitted/rejected
+
+**Scope:** `apps/api/src/verifactu/{submit.worker.ts,invoice-xml.ts}`,
+`packages/eventbus/src/catalog/verifactu.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 §4 (submit + retries)
+
+**Qué cambió.**
+
+### Catálogo de eventos
+
+Añadidos al catálogo de eventos:
+
+- `verifactu.invoice.submitted` — `{invoiceId, invoiceNumber, csv, attemptNumber}`.
+- `verifactu.invoice.rejected` — `{..., errorMessage, attemptNumber, isDeadLetter}`.
+
+### `buildInvoiceXml`
+
+Generador de payload XML mínimo y bien formado. **STUB explícito** —
+documentado en JSDoc: cuando exista el XSD Verifactu real (W3+) este
+helper se reemplaza por el generador conforme al schema oficial. Por
+ahora suficiente para alimentar al signer + StubAeatClient.
+
+### `SubmitWorker`
+
+Consumer durable de `verifactu.invoice.submit_requested`. Por evento:
+
+1. Carga la factura. Si ya `ACCEPTED` → ack idempotente.
+2. Adquiere la attempt (promociona PENDING/IN_PROGRESS, o crea una
+   nueva con `attemptNumber++`).
+3. Genera XML, lo firma con `SignerService`, persiste `request_payload`.
+4. Llama `AeatClient.submit()`.
+5. Decide:
+   - **ACCEPTED**: marca submission + invoice como ACCEPTED, guarda
+     `aeat_csv`, publica `verifactu.invoice.submitted`. ack.
+   - **REJECTED**: marca submission + invoice como REJECTED, publica
+     `verifactu.invoice.rejected` con `isDeadLetter=true`. term (no
+     reintentamos validaciones AEAT).
+   - **Excepción transitoria** (signer falla, AEAT 5xx/red): submission
+     vuelve a PENDING con `next_attempt_at`, nak; si era el último
+     intento (`deliveryCount == maxDeliver=5`), DEAD_LETTER + publica
+     rejected + term.
+
+`deliveryCount` se extrae de `msg.info.deliveryCount` del JsMsg.
+
+`maxDeliver=5`, `ackWaitMs=60_000`, `batchSize=4`. Desactivado en
+`NODE_ENV=test` (los tests llaman `handle()` directamente).
+
+**Por qué.**
+
+Sin worker, el evento `submit_requested` que `InvoiceService.issue()`
+publica desde W1 quedaba huérfano. Ahora el bucle end-to-end queda
+cerrado en modo `stub`: el operador emite factura → worker la firma y
+"envía" al StubAeatClient → la factura queda ACCEPTED + se publica el
+evento downstream.
+
+Para envío real a AEAT preprod faltan dos piezas, ambas documentadas:
+
+1. **XAdES-BES qualifying properties** (pendiente ADR sobre librería).
+2. **`PreprodAeatClient` HTTP real** (próximo commit, ya es viable
+   porque el contrato `AeatClient` está fijo).
+
+**Tests.**
+
+- Verifactu suite: **55/55** verde (+10 nuevos).
+  - `submit.worker.spec.ts` (7 tests):
+    - invoice no existe → term.
+    - invoice ya ACCEPTED → ack idempotente.
+    - AEAT ACCEPTED → invoice ACCEPTED + submission ACCEPTED + publish.
+    - AEAT REJECTED → REJECTED + publish (isDeadLetter=true) + term.
+    - signer throw + intentos restantes → nak.
+    - signer throw en último intento → DEAD_LETTER + publish + term.
+    - AEAT throw transitorio → nak.
+  - `invoice-xml.spec.ts` (3 tests): canonical XML estable, omisión de
+    Nif/Address opcionales, escape XML de caracteres especiales.
+- Typecheck + lint `@pms/api` verdes.
+- `@pms/eventbus` rebuilt para que los nuevos eventos del catálogo se
+  vean en typecheck del consumer.
+
+**Sigue pendiente (en esta rama).**
+
+- ADR + signer XAdES-BES completo.
+- PreprodAeatClient HTTP real.
+- UI "histórico de envíos" / reintento manual desde back-office (nice
+  to have, no bloqueante).
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: signer XMLDSig + repackage del vault
+
+**Scope:** `apps/api/src/verifactu/{signer.service.ts,certificate-vault.service.ts}`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 §3 (vault), §5 (firma)
+
+**Qué cambió.**
+
+### Refactor del vault (consistencia con la intención documentada)
+
+El comentario del `upload()` previo decía "la passphrase nunca se persiste —
+el wrapper AES es el único secreto necesario", pero el código almacenaba
+el `.p12` con su passphrase PKCS#12 original todavía dentro: el signer no
+podía extraer la clave sin pedírsela al usuario en cada firma.
+
+**Fix:** `upload()` ahora valida con la passphrase del usuario, extrae la
+clave + cert, y re-empaqueta como un **nuevo** `.p12` SIN passphrase
+antes de cifrar con AES-GCM. El vault pasa a ser el único límite de
+confidencialidad — el modelo de seguridad pretendido desde el principio.
+
+### `SignerService` (XMLDSig enveloped, RSA-SHA256)
+
+- Carga el `.p12` desencriptado desde el vault, parsea con node-forge,
+  extrae clave privada + cert.
+- Calcula SHA-256 del XML de entrada → `<ds:Reference DigestValue>`.
+- Construye `<ds:SignedInfo>` con CanonicalizationMethod=C14N,
+  SignatureMethod=RSA-SHA256, transformaciones enveloped + C14N.
+- Firma SignedInfo con RSA-SHA256.
+- Empaqueta `<ds:Signature>` con `<ds:SignatureValue>` y `<ds:KeyInfo>`
+  (X509Certificate base64).
+- Inserta la firma como último hijo del raíz del XML (enveloped).
+
+### **Alcance acotado — leer con atención**
+
+Este signer emite **XMLDSig estándar válido y verificable**, pero **NO**
+es XAdES-BES completo. Falta:
+
+- `<xades:QualifyingProperties>` con `<xades:SignedProperties>`.
+- Una segunda `<ds:Reference>` a SignedProperties.
+- `<xades:SigningCertificate>` con CertDigest + IssuerSerial.
+- `<xades:SigningTime>`.
+
+El envío real a AEAT requiere XAdES-BES completo. La elección de librería
+para la capa XAdES (xadesjs / xml-crypto + wrapper / propio) merece su
+propio ADR — pendiente. Documentado en el JSDoc de `SignerService` con
+"PENDIENTE".
+
+Con este alcance, el signer es **suficiente para que el SubmitWorker y el
+StubAeatClient funcionen end-to-end en dev/test**, y para escribir el
+PreprodAeatClient HTTP con un payload firmado plausible.
+
+**Por qué.**
+
+Sin signer, el SubmitWorker no tiene XML que enviar. El refactor del vault
+era prerrequisito: sin re-empaquetado, cada firma exigiría pedir la
+passphrase de nuevo, lo que rompe el flujo automático del worker.
+
+**Tests.**
+
+- Verifactu suite: **45/45** verde (+3 nuevos en `signer.service.spec.ts`)
+  - Round-trip criptográfico real: se firma un XML de prueba, se extrae
+    `<ds:SignedInfo>`, se recomputa SHA-256, se verifica la
+    SignatureValue con la clave pública del cert declarado. Si la firma
+    falla, el test falla.
+  - Throws cuando no hay cert subido.
+  - Rechaza XML sin etiqueta de cierre (insertEnvelopedSignature).
+- Test del vault adaptado: el blob descifrado ya no es idéntico al
+  original, pero parsea como PKCS#12 sin passphrase con el mismo CN.
+- Typecheck + lint `@pms/api` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+- **ADR sobre librería XAdES-BES** + implementación completa.
+- SubmitWorker JetStream + DLQ (puede empezar ya contra este signer).
+- PreprodAeatClient HTTP real.
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: emisión de facturas desde el folio
+
+**Scope:** `apps/api/src/verifactu`, `apps/web-fo/src/lib/api.ts`,
+`apps/web-fo/src/app/api/verifactu/invoices/by-folio/[folioId]`,
+`apps/web-fo/src/app/reservations/[id]/page.tsx`
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+- **`InvoiceService.findByFolio()`** — devuelve la factura activa de un
+  folio (cualquier estado != VOIDED) o `null`. La UI lo usa para decidir
+  si renderiza el formulario de emisión o el visor de factura existente.
+- **`GET /verifactu/invoices/by-folio/:folioId`** — endpoint nuevo.
+  Roles: `tenant_admin`, `front_desk`. 404 si no hay factura.
+- **Proxy back-office** `app/api/verifactu/invoices/by-folio/[folioId]`
+  con `GET` (traduce 404 → null vía el helper de lib/api).
+- **`InvoicePanel`** en `/reservations/[id]`:
+  - Si hay factura: badge de estado (draft/issued/submitted/accepted/
+    rejected/voided), número, total, ID.
+  - Si folio OPEN: aviso ámbar "Cierra el folio antes de emitir factura".
+  - Si folio CLOSED/SETTLED y sin factura: formulario con
+    `customerName` (pre-rellenado con el primary guest), `customerNif`,
+    `series`, `customerAddress`, botón "Emitir factura".
+  - Server action `issueInvoiceAction` que valida y llama al proxy.
+
+**Por qué.**
+
+Sin este panel, la única forma de invocar `POST /verifactu/invoices/issue`
+era curl. Esto cierra el bucle desde el lado FO: el recepcionista cierra
+el folio y emite la factura desde la misma pantalla de reserva.
+
+El helper `findByFolio` también es una primitiva natural que reaprovecharán
+otras vistas (export contable, búsqueda por factura, etc.).
+
+**Tests.**
+
+- Verifactu suite: **42/42** verde (+4 nuevos)
+  - `InvoiceService.findByFolio` 2 tests (null path + invoice path con
+    `alreadyExisted=true` y formato `invoiceNumber=A-99`).
+  - `VerifactuController` 2 tests para el nuevo endpoint (200 + 404).
+- Typecheck + lint `@pms/api` y `@pms/web-fo` verdes.
+
+**Sigue pendiente (en esta rama).**
+
+- Signer XAdES-BES (bloqueante para producción real).
+- SubmitWorker JetStream + DLQ.
+- PreprodAeatClient HTTP real.
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: UI back-office del certificado
+
+**Scope:** `apps/web-fo/src/app/admin/billing/certificate`,
+`apps/web-fo/src/app/layout.tsx`
+**Branch:** `claude/s14-w2-verifactu`
+
+**Qué cambió.**
+
+- **Página** `/admin/billing/certificate` (RSC + server actions, patrón
+  idéntico a `/compliance/ses`):
+  - Visor metadata: sujeto, número de serie, validez, huella SHA-256,
+    fecha de subida.
+  - Badge de estado con código de color:
+    - revocado → slate (banner superior)
+    - caducado → rojo (banner superior)
+    - <30 días para caducar → badge rojo
+    - <90 días → badge ámbar
+    - resto → badge verde
+  - Form de subida: file picker (`.p12,.pfx,application/x-pkcs12`) +
+    passphrase. Server action lee el `File` con `arrayBuffer()`, codifica
+    a base64 y llama al proxy. Límite client-side de 1.5 MB (el server
+    aplica su propio límite de 2 MiB).
+  - Form de revocación: input motivo (≥3 chars) + botón rojo.
+  - Estado vacío con CTA cuando no hay cert.
+- **Navegación**: nuevo enlace `Admin · Certificado` en el header (sólo
+  visible para `tenant_admin`), junto al de Admin · Copilot.
+
+**Por qué.**
+
+Sin UI, el vault y los endpoints HTTP del commit anterior obligan al
+operador (o al PO) a usar curl + base64 a mano para subir el certificado.
+Esta pantalla cierra la experiencia end-to-end del lado humano. Los
+operadores boutique no son técnicos.
+
+**Tests.**
+
+- Typecheck + lint `@pms/web-fo` verdes. No hay tests automatizados nuevos
+  para esta página — es un RSC fino que sólo coordina helpers de
+  `lib/api.ts` (cubiertos en el commit anterior) y server actions con
+  validación trivial. La verificación funcional debe hacerse manualmente
+  en `pnpm --filter @pms/web-fo dev` (queda pendiente smoke con PO).
+
+**Sigue pendiente (en esta rama).**
+
+- Signer XAdES-BES.
+- SubmitWorker JetStream + DLQ.
+- PreprodAeatClient HTTP real.
+- UI botón "Emitir factura" en `/folios/[id]`.
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: certificate HTTP API + back-office proxy
+
+**Scope:** `apps/api/src/verifactu`, `apps/web-fo/src/app/api/verifactu`,
+`apps/web-fo/src/lib/api.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 §3
+
+**Qué cambió.**
+
+- **DTOs Zod** `UploadCertificateDto`, `RevokeCertificateDto` (apps/api/src/verifactu/dto.ts).
+- **Endpoints API** (`tenant_admin` only):
+  - `POST /verifactu/certificate` — body `{p12Base64, passphrase}` → 201 +
+    metadata. Decodifica base64, valida tamaño mínimo del payload, delega
+    al vault.
+  - `GET /verifactu/certificate` — metadata pública o 404.
+  - `DELETE /verifactu/certificate` — body `{reason}` (≥3 chars), soft revoke.
+- **Decisión: base64+JSON en lugar de multipart.** Justificación: endpoint
+  invocado ~1 vez/año por tenant, .p12 típico <10 KB → ~13 KB en base64,
+  holgadamente bajo el bodyLimit Fastify por defecto (1 MB). Evita
+  registrar `@fastify/multipart` globalmente. Documentado en el JSDoc del
+  DTO.
+- **Proxy back-office** `apps/web-fo/src/app/api/verifactu/certificate/route.ts`
+  con `GET` / `POST` / `DELETE`. Helpers tipados en `lib/api.ts`:
+  `getCertificate`, `uploadCertificate`, `revokeCertificate`. El 404 del
+  API se traduce a `null` en `getCertificate` para simplificar consumo.
+
+**Por qué.**
+
+Sin endpoints, el vault del commit anterior está inerte: ningún operador
+puede subir un .p12 desde la UI. Con esto, ya queda toda la base — la
+única pieza que falta antes de poder firmar end-to-end es el signer XAdES.
+
+**Tests.**
+
+- Verifactu suite: **38/38** verde (+9 nuevos en
+  `verifactu.controller.spec.ts`): validación de body (3 casos rechazo),
+  forwarding al servicio (3 casos), `GET` con/sin certificado, `DELETE`
+  rechaza reason corta y forwardea correctamente.
+- Typecheck + lint `@pms/api` verdes. Typecheck `@pms/web-fo` verde.
+
+**Sigue pendiente (en esta rama).**
+
+- Signer XAdES-BES (consume `loadDecryptedP12()` del vault).
+- `SubmitWorker` JetStream consumer + backoff + DLQ.
+- `PreprodAeatClient` HTTP real.
+- UI back-office `/admin/billing/certificate` (form + visor metadata).
+- UI botón "Emitir factura" en `/folios/[id]`.
+
+---
+
+## 2026-05-30 · [FEAT] · Sprint 14 W2 — Verifactu: certificate vault (AES-256-GCM + PKCS#12)
+
+**Scope:** `apps/api/src/verifactu`, `apps/api/package.json`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 §3 (cert vault)
+
+**Qué cambió.**
+
+- **Dependencia nueva** `node-forge` (MIT, dep aprobada por PO el 2026-05-30
+  para parseo PKCS#12). + `@types/node-forge` en dev.
+- **`certificate-crypto.ts`** — helpers puros AES-256-GCM:
+  - Clave derivada con PBKDF2-HMAC-SHA256 (100k iters, OWASP 2024 baseline)
+    a partir de `VERIFACTU_MASTER_KEY` con `tenantId` como salt.
+  - Layout del blob: `[12B IV][16B authTag][N B ciphertext]`. Round-trip
+    cubierto por 5 tests (incluye fallo en wrong key / wrong tenant /
+    truncated blob).
+- **`CertificateVaultService`**:
+  - `upload(user, corr, p12Buffer, passphrase)` — parsea con node-forge
+    (rechaza p12 inválido o passphrase incorrecta como `BadRequest`),
+    extrae subject CN, serial, fingerprint SHA-256, validez. Cifra el
+    .p12 y escribe a `${VERIFACTU_CERT_DIR}/${tenantId}.p12.enc` con
+    `mode=0o600`. Upsert en `verifactu_certificates` (1 row por tenant).
+  - `getMetadata(user, corr)` — devuelve metadata pública (sin payload).
+  - `revoke(user, corr, reason)` — soft revoke (`revoked_at`/`revoked_reason`).
+    Idempotente.
+  - `loadDecryptedP12(tenantId)` — lectura interna **NO expuesta vía
+    HTTP** para el futuro signer. Rechaza si cert revocado.
+- **Guards de configuración**: cualquier método que use crypto exige
+  `VERIFACTU_MASTER_KEY`; ausente → `ServiceUnavailableException` claro.
+
+**Por qué.**
+
+Sin vault, no hay forma legal de firmar facturas: el `.p12` AEAT no puede
+sentarse en disco sin cifrar (auditoría) ni en variable de entorno
+(rotación impracticable). Este servicio cierra el invariante "el .p12 sólo
+existe en claro en memoria durante la firma".
+
+**Archivos clave.**
+
+- `apps/api/src/verifactu/certificate-crypto.ts` (helpers puros + tests)
+- `apps/api/src/verifactu/certificate-vault.service.ts` (servicio)
+- `apps/api/src/verifactu/certificate-vault.service.spec.ts`
+  (round-trip con .p12 auto-firmado generado en test)
+
+**Tests.**
+
+- Verifactu suite: **29/29** verde
+  - certificate-crypto 5 tests (round-trip, IV aleatorio, fallo wrong key/tenant)
+  - certificate-vault 6 tests (upload, revoke, load, fallos config)
+  - invoice-totals 4 tests
+  - invoice.service 6 tests
+  - stub-aeat-client 3 tests
+  - verifactu.module guards 5 tests
+- Typecheck + lint `@pms/api` verdes.
+
+**Sigue pendiente (commits sucesivos en esta misma rama).**
+
+- Controller HTTP del vault: `POST /verifactu/certificate` (multipart),
+  `GET /verifactu/certificate`, `DELETE /verifactu/certificate`.
+- Signer XAdES-BES consumiendo `loadDecryptedP12()`.
+- `SubmitWorker` consumer JetStream + retries + DLQ.
+- `PreprodAeatClient` HTTP real.
+- UI back-office `/admin/billing/certificate`.
+
+---
+
+## 2026-05-29 · [FEAT] · Sprint 14 W2 — Verifactu: HTTP API + proxy back-office
+
+**Scope:** `apps/api/src/verifactu`, `apps/web-fo/src/lib/api.ts`,
+`apps/web-fo/src/app/api/verifactu/invoices/issue`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** continúa la cadena del W2 (último commit del servicio: `4900314`)
+
+**Qué cambió.**
+
+- **`VerifactuController`** (`apps/api/src/verifactu/verifactu.controller.ts`):
+  expone `POST /verifactu/invoices/issue`. RBAC vía `@Roles('tenant_admin',
+'front_desk')` (los guards globales `JwtAuthGuard` + `RolesGuard` se
+  aplican automáticamente). DTO Zod (`IssueInvoiceDto`) con `safeParse` →
+  `BadRequestException` con detalle de issues.
+- **Proxy Next.js** en `apps/web-fo/src/app/api/verifactu/invoices/issue/route.ts`:
+  inyecta `accessToken` desde la sesión NextAuth y reenvía al API.
+  Traduce `ApiError` → `Response` con el status original.
+- **Helper `lib/api.ts`** (`issueInvoice` + tipos `IssueInvoiceInput`,
+  `IssuedInvoice`) — listo para consumir desde server actions.
+
+**Por qué.**
+
+Sin controller, `InvoiceService.issue()` solo era invocable desde código.
+Con esto, el back-office (y cualquier integración futura: copilot tool,
+script de migración, tests e2e) puede emitir facturas atómicas con la
+misma garantía de idempotencia y RBAC del resto del PMS.
+
+**Archivos clave.**
+
+- `apps/api/src/verifactu/verifactu.controller.ts`
+- `apps/api/src/verifactu/dto.ts` (Zod)
+- `apps/api/src/verifactu/verifactu.module.ts` (controllers registry)
+- `apps/web-fo/src/app/api/verifactu/invoices/issue/route.ts` (proxy)
+- `apps/web-fo/src/lib/api.ts` (helper)
+
+**Tests.**
+
+- Verifactu suite sigue 18/18 verde (la lógica testeada — DTO Zod + service
+  — no cambia). Sin controller spec: el controller es un thin wrapper sin
+  ramas adicionales; Zod y el service ya están cubiertos.
+- Typecheck `@pms/api`, `@pms/web-fo` y lint `@pms/api`: verdes.
+
+**Sigue pendiente (commits sucesivos en esta misma rama).**
+
+- UI server action en `apps/web-fo/src/app/folios/[id]` (botón "Emitir
+  factura") que invoque la ruta proxy nueva.
+- Signer XAdES-BES + descifrado on-demand del `.p12`.
+- `SubmitWorker` consumer JetStream + retries + DLQ tras 6 fallos.
+- `PreprodAeatClient` HTTP real.
+- UI `/admin/billing/certificate` (subida del `.p12`).
+
+---
+
+## 2026-05-29 · [FEAT] · Sprint 14 W2 — Verifactu: InvoiceService.issue() emite la factura legal
+
+**Scope:** `apps/api/src/verifactu`, `packages/eventbus/src/catalog`,
+`packages/db/src/index.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** commit `4900314` · continúa el scaffolding registrado más abajo (ADR-030 §3)
+
+**Qué cambió.**
+
+- **`InvoiceService.issue(user, correlationId, input)`** — emite la
+  factura inmutable a partir de un `Folio` cerrado. Dentro de
+  `withTenant`:
+  1. `pg_advisory_xact_lock(hashtext('verifactu-invoice'), hashtext(tenant:series))`
+     serializa la asignación del número (sin tabla de secuencia
+     adicional; el lock se libera al commit).
+  2. Carga el folio + entries; exige `status ∈ {CLOSED, SETTLED}`.
+  3. **Idempotencia.** Si ya hay una `Invoice` no-`VOIDED` para el
+     `folioId`, la retorna sin publicar evento ni crear duplicado.
+  4. Calcula `subtotal / taxAmount / totalAmount / lines` con el helper
+     puro `computeInvoiceTotals` (sum CHARGE+DISCOUNT+ADJUSTMENT = base
+     imponible; sum TAX = IVA; total = suma).
+  5. Allocate `number = MAX(number)+1` per `(tenant, series)`. Serie por
+     defecto `'A'` (validada con `/^[A-Z][A-Z0-9-]{0,7}$/`).
+  6. `INSERT invoice (status=ISSUED)` + `INSERT invoice_submission
+(attempt_number=1, status=PENDING)`. El worker se encarga del envío
+     real cuando exista.
+- Tras commit, publica `verifactu.invoice.submit_requested` con
+  `{invoiceId, invoiceNumber}` al stream NATS.
+- **Catálogo de eventos** (`packages/eventbus`): nuevo entry
+  `verifactu.invoice.submit_requested` (schema Zod + reexport tipo).
+  Solo añadimos el evento que ya consumimos; `submitted` y `rejected`
+  llegan con el `SubmitWorker`.
+- **`@pms/db`** re-exporta los tres enums + modelos nuevos (`InvoiceStatus`,
+  `InvoiceSubmissionStatus`, `Invoice`, `InvoiceSubmission`,
+  `VerifactuCertificate`).
+
+**Por qué.**
+
+Es la primera mitad útil del módulo: produce facturas legalmente válidas
+desde el folio, con número monotónico per (tenant, series) y
+idempotencia frente a doble-click del operador o reintentos del cliente.
+El envío real a AEAT queda desacoplado en cola — esa parte se valida
+contra el endpoint de pre-producción cuando el `.p12` esté cargado.
+
+**Archivos clave.**
+
+- `apps/api/src/verifactu/invoice.service.ts` (servicio + advisory lock)
+- `apps/api/src/verifactu/invoice-totals.ts` (helper puro de cálculo)
+- `apps/api/src/verifactu/invoice.service.spec.ts` (6 tests con mocks)
+- `apps/api/src/verifactu/invoice-totals.spec.ts` (4 tests)
+- `packages/eventbus/src/catalog/verifactu.ts` (Zod schema del evento)
+
+**Tests.**
+
+- Vitest verifactu suite: 18/18 verde (4 totals + 6 service + 3 stub-aeat
+  - 5 module-guards).
+- Typecheck (`@pms/api`, `@pms/web-fo`) y lint (`@pms/api`) verdes.
+
+**Sigue pendiente (commits sucesivos en esta misma rama).**
+
+- `VerifactuController` con `POST /verifactu/invoices/issue/:folioId`
+  (RBAC: `tenant_admin`) + DTO Zod.
+- Wiring opcional desde `FolioService.close()` para emitir factura
+  inmediatamente al cerrar — pendiente de decisión: ¿siempre, o sólo
+  cuando el operador lo solicite? (ver issue interno).
+- Signer XAdES-BES + descifrado on-demand del `.p12` (AES-256-GCM con
+  `VERIFACTU_MASTER_KEY`).
+- `SubmitWorker` consumer JetStream con backoff y DLQ tras 6 fallos.
+- `PreprodAeatClient` (HTTP real contra endpoint de pre-producción AEAT).
+- UI back-office `/admin/billing/certificate` (subida del `.p12`).
+
+---
+
+## 2026-05-29 · [FEAT] · Sprint 14 W2 — Verifactu scaffolding (ADR-030 + esquema + módulo)
+
+**Scope:** `docs/adr/030-verifactu-architecture.md`, `packages/db/prisma`,
+`apps/api/src/verifactu`, `apps/api/src/config/env.schema.ts`,
+`apps/api/src/app.module.ts`
+**Branch:** `claude/s14-w2-verifactu`
+**Refs:** ADR-030 (Accepted) · commits `bb95077`, `5c44003`, scaffolding posterior
+
+**Qué cambió.**
+
+- **ADR-030 aceptado.** Cuatro decisiones del PO: AEAT propio (no AGFA),
+  certificado cifrado en disco con `VERIFACTU_MASTER_KEY` (no Vault),
+  factura emitida al cierre de folio (no por cargo), retries con backoff
+  exponencial + DLQ tras 6 fallos.
+- **Esquema Prisma + migración** (`20260629000000_verifactu_invoices`):
+  tres tablas RLS-isolated por tenant, con triggers de auditoría y
+  `GRANT … TO pms_app` (mismo patrón que ses_hospedajes_submissions):
+  - `invoices` — factura inmutable, único por `(tenant, series, number)`.
+  - `invoice_submissions` — un row por intento de envío AEAT.
+  - `verifactu_certificates` — metadata del `.p12.enc` (1 por tenant).
+- **Módulo `apps/api/src/verifactu/`** — esqueleto:
+  - `AeatClient` interface + token `AEAT_CLIENT`.
+  - `StubAeatClient` (default; CSV determinista via SHA-256, sin red).
+  - `AeatClientFactory` resuelve por `VERIFACTU_MODE`.
+  - `VerifactuModule.onModuleInit` con tres guards de seguridad:
+    NODE_ENV=production exige MODE=production y viceversa; MODE!=stub
+    requiere `VERIFACTU_MASTER_KEY` (≥32 chars).
+- **Env vars** (`env.schema.ts`): `VERIFACTU_MODE` (stub|preprod|production,
+  default stub), `VERIFACTU_MASTER_KEY` (opcional), `VERIFACTU_CERT_DIR`
+  (default `/data/verifactu`).
+
+**Por qué.**
+
+Hotelero español necesita Verifactu para operar legalmente (deuda fiscal).
+Decisión post-Copilot: priorizar W2 (Verifactu) sobre W1 (housekeeping
+templates) y W3 (group reservations). Este commit cierra el esqueleto —
+sin lógica de servicio todavía — para descongelar trabajo paralelo
+(UI cert vault, pricing engine, signer XAdES) en commits sucesivos.
+
+**Archivos clave.**
+
+- `docs/adr/030-verifactu-architecture.md`
+- `packages/db/prisma/schema.prisma` (modelos Invoice/InvoiceSubmission/VerifactuCertificate)
+- `packages/db/prisma/migrations/20260629000000_verifactu_invoices/migration.sql`
+- `apps/api/src/verifactu/verifactu.module.ts` (guards prod/preprod/stub)
+- `apps/api/src/verifactu/aeat/{aeat-client.interface,stub-aeat-client,aeat-client.factory}.ts`
+- `apps/api/src/config/env.schema.ts` (3 nuevas vars)
+- `apps/api/src/app.module.ts` (registro)
+
+**Tests.**
+
+- `stub-aeat-client.spec.ts` — 3 tests (CSV determinista, force-reject, mode).
+- `verifactu.module.spec.ts` — 5 tests cubriendo los 3 guards + paths felices.
+- Typecheck + lint API: verdes. Vitest verifactu suite: 8/8 verde.
+
+**Sigue pendiente (commits sucesivos en esta misma rama).**
+
+- `InvoiceService.issue()` + secuencia per (tenant, series, year) con
+  `SELECT … FOR UPDATE`.
+- Signer XAdES-BES con descifrado on-demand del `.p12` (AES-256-GCM).
+- `SubmitWorker` NATS JetStream consumer + retries con backoff y DLQ.
+- `PreprodAeatClient` (HTTP real) y placeholder `ProductionAeatClient`.
+- UI back-office `/admin/billing/certificate` para subir el `.p12`.
+
+---
+
 ## 2026-05-21 · [FEAT] · Sprint 13 W2 — Admin UI de rate plans en web-fo
 
 **Scope:** `apps/web-fo/src/app/properties/[id]/rate-plans`,

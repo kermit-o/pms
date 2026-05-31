@@ -1492,3 +1492,138 @@ export async function updateRatePlan(
     body: JSON.stringify(input),
   });
 }
+
+export interface IssueInvoiceInput {
+  folioId: string;
+  customerName: string;
+  customerNif?: string;
+  customerAddress?: string;
+  series?: string;
+}
+
+export interface IssuedInvoice {
+  id: string;
+  series: string;
+  number: number;
+  invoiceNumber: string;
+  totalAmount: string;
+  status: 'DRAFT' | 'ISSUED' | 'SUBMITTED' | 'ACCEPTED' | 'REJECTED' | 'VOIDED';
+  alreadyExisted: boolean;
+}
+
+export async function issueInvoice(
+  accessToken: string | undefined,
+  input: IssueInvoiceInput,
+): Promise<IssuedInvoice> {
+  return apiFetch(`/verifactu/invoices/issue`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getInvoiceByFolio(
+  accessToken: string | undefined,
+  folioId: string,
+): Promise<IssuedInvoice | null> {
+  try {
+    return await apiFetch(`/verifactu/invoices/by-folio/${folioId}`, { accessToken });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export interface InvoiceSubmissionView {
+  id: string;
+  attemptNumber: number;
+  status: 'PENDING' | 'IN_PROGRESS' | 'ACCEPTED' | 'REJECTED' | 'DEAD_LETTER';
+  responseCode: number | null;
+  aeatCsv: string | null;
+  errorMessage: string | null;
+  queuedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  nextAttemptAt: string | null;
+}
+
+export async function listInvoiceSubmissions(
+  accessToken: string | undefined,
+  invoiceId: string,
+): Promise<InvoiceSubmissionView[]> {
+  return apiFetch(`/verifactu/invoices/${invoiceId}/submissions`, { accessToken });
+}
+
+export async function requeueInvoiceSubmission(
+  accessToken: string | undefined,
+  invoiceId: string,
+): Promise<{ invoiceId: string; invoiceNumber: string }> {
+  return apiFetch(`/verifactu/invoices/${invoiceId}/submissions`, {
+    method: 'POST',
+    accessToken,
+  });
+}
+
+export interface CertificateMetadata {
+  id: string;
+  subjectCn: string;
+  serialNumber: string;
+  fingerprintSha256: string;
+  notBefore: string;
+  notAfter: string;
+  uploadedAt: string;
+  revokedAt: string | null;
+}
+
+export async function uploadCertificate(
+  accessToken: string | undefined,
+  input: { p12Base64: string; passphrase: string },
+): Promise<CertificateMetadata> {
+  return apiFetch(`/verifactu/certificate`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getCertificate(
+  accessToken: string | undefined,
+): Promise<CertificateMetadata | null> {
+  try {
+    return await apiFetch(`/verifactu/certificate`, { accessToken });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function revokeCertificate(
+  accessToken: string | undefined,
+  reason: string,
+): Promise<{ id: string; revokedAt: string }> {
+  return apiFetch(`/verifactu/certificate`, {
+    method: 'DELETE',
+    accessToken,
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export interface EmisorData {
+  nif: string | null;
+  razonSocial: string | null;
+}
+
+export async function getEmisor(accessToken: string | undefined): Promise<EmisorData> {
+  return apiFetch(`/verifactu/emisor`, { accessToken });
+}
+
+export async function updateEmisor(
+  accessToken: string | undefined,
+  input: { nif: string; razonSocial: string },
+): Promise<EmisorData> {
+  return apiFetch(`/verifactu/emisor`, {
+    method: 'PUT',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
