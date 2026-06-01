@@ -25,15 +25,28 @@ Produces a standalone Next.js bundle in `.next/standalone/`.
 flyctl deploy -c apps/web-ibe/fly.toml --dockerfile apps/web-ibe/Dockerfile
 ```
 
-## Routes (V1, Sprint 8 W2)
+## Routes
 
-| Route                        | Description                         |
-| ---------------------------- | ----------------------------------- |
-| `/`                          | Landing — search by hotel slug      |
-| `/h/<slug>`                  | Hotel home + search form            |
-| `/h/<slug>/availability?...` | Availability results                |
-| `/h/<slug>/book?...`         | Booking flow + Stripe (W3, pending) |
-| `/h/<slug>/manage`           | Reservation lookup (W4, pending)    |
-| `/manage`                    | Generic redirect to hotel selector  |
+| Route                        | Description                                              |
+| ---------------------------- | -------------------------------------------------------- |
+| `/`                          | Landing — search by hotel slug                           |
+| `/h/<slug>`                  | Hotel home + search form                                 |
+| `/h/<slug>/availability?...` | Availability results                                     |
+| `/h/<slug>/book?...`         | Booking flow (form → POST reserva)                       |
+| `/h/<slug>/book/<code>`      | Confirmación de reserva + captura tarjeta Stripe (modal) |
+| `/h/<slug>/manage`           | Reservation lookup (code + lastName)                     |
+| `/manage`                    | Generic redirect to hotel selector                       |
 
-See `docs/SPRINT-8-PLAN.md` and `RUNBOOK.md` §20 for the full plan.
+### Probar el flujo Stripe en local
+
+Con `STRIPE_SECRET_KEY=sk_test_...` + `STRIPE_PUBLISHABLE_KEY=pk_test_...` en el `.env` del API, la captura de tarjeta funciona en modo test. Tarjetas de prueba habituales:
+
+| PAN                   | Caso                              |
+| --------------------- | --------------------------------- |
+| `4242 4242 4242 4242` | Éxito directo                     |
+| `4000 0025 0000 3155` | Requiere 3DS (modal de challenge) |
+| `4000 0000 0000 0002` | Rechazo (`card_declined`)         |
+
+CVC: cualquiera. Caducidad: cualquier fecha futura. ZIP: cualquiera.
+
+Sin `STRIPE_*` configurado, el endpoint `/api/setup-intent` responde 503 y el operador del hotel cae al flujo manual (marcar garantía con últimos 4 a mano).
