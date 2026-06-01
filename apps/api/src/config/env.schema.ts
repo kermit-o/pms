@@ -120,6 +120,15 @@ export const envSchema = z.object({
   // tenant; requerido cuando el modo no es stub. VERIFACTU_CERT_DIR es el
   // directorio donde viven los .p12.enc.
   VERIFACTU_MODE: z.enum(['stub', 'preprod', 'production']).default('stub'),
+  // Escape-hatch para piloto pre-facturación: permite que la API arranque en
+  // NODE_ENV=production con VERIFACTU_MODE=stub. Útil cuando el hotel aún
+  // no ha constituido SL / sin cert FNMT, pero queremos enseñar la app
+  // operativa en su dominio público. Por defecto NO se permite — Verifactu
+  // se desactiva silenciosamente en stub solo si esta bandera es 'true'.
+  VERIFACTU_ALLOW_STUB_IN_PROD: z
+    .union([z.literal('true'), z.literal('false')])
+    .default('false')
+    .transform((v) => v === 'true'),
   VERIFACTU_MASTER_KEY: z.string().min(32).optional(),
   VERIFACTU_CERT_DIR: z.string().default('/data/verifactu'),
   // Endpoint REST/SOAP AEAT (preprod o production). Optional porque en modo
