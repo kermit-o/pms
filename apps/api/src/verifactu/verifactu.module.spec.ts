@@ -51,6 +51,24 @@ describe('VerifactuModule.onModuleInit (guards)', () => {
     expect(() => m.onModuleInit()).toThrow(/VERIFACTU_AEAT_ENDPOINT/);
   });
 
+  it('permite stub en production cuando VERIFACTU_ALLOW_STUB_IN_PROD=true (escape-hatch piloto)', () => {
+    const m = makeModule({
+      VERIFACTU_MODE: 'stub',
+      NODE_ENV: 'production',
+      VERIFACTU_ALLOW_STUB_IN_PROD: true,
+    });
+    expect(() => m.onModuleInit()).not.toThrow();
+  });
+
+  it('sigue rechazando stub en production si VERIFACTU_ALLOW_STUB_IN_PROD=false', () => {
+    const m = makeModule({
+      VERIFACTU_MODE: 'stub',
+      NODE_ENV: 'production',
+      VERIFACTU_ALLOW_STUB_IN_PROD: false,
+    });
+    expect(() => m.onModuleInit()).toThrow(/VERIFACTU_ALLOW_STUB_IN_PROD=true/);
+  });
+
   it('boots in production + production mode with master key + endpoint', () => {
     const m = makeModule({
       VERIFACTU_MODE: 'production',

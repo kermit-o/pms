@@ -52,12 +52,27 @@ export class VerifactuModule implements OnModuleInit {
     const mode = this.config.get('VERIFACTU_MODE', { infer: true });
     const nodeEnv = this.config.get('NODE_ENV', { infer: true });
     const masterKey = this.config.get('VERIFACTU_MASTER_KEY', { infer: true });
+    const allowStubInProd = this.config.get('VERIFACTU_ALLOW_STUB_IN_PROD', { infer: true });
 
     if (nodeEnv === 'production' && mode !== 'production') {
-      throw new Error(
-        `VerifactuModule: NODE_ENV=production exige VERIFACTU_MODE=production (actual: ${mode}). ` +
-          `No se permiten facturas stub/preprod en producción.`,
-      );
+      if (mode === 'stub' && allowStubInProd) {
+        // Escape-hatch explícito para piloto pre-facturación. La API
+        // arranca y todo funciona EXCEPTO emisión de facturas
+        // (issue() falla porque el tenant no tendrá NIF/cert configurados;
+        // SubmitWorker recibe AeatStub determinista pero ningún evento
+        // submit_requested se publicará sin issue exitoso).
+        this.log.warn(
+          `Verifactu DEACTIVATED in production (VERIFACTU_ALLOW_STUB_IN_PROD=true). ` +
+            `Esto solo está pensado para piloto pre-facturación — recuerda activar mode=production ` +
+            `antes de emitir cualquier factura real.`,
+        );
+      } else {
+        throw new Error(
+          `VerifactuModule: NODE_ENV=production exige VERIFACTU_MODE=production (actual: ${mode}). ` +
+            `No se permiten facturas stub/preprod en producción. ` +
+            `Si esto es piloto pre-facturación, configura VERIFACTU_ALLOW_STUB_IN_PROD=true.`,
+        );
+      }
     }
     if (mode === 'production' && nodeEnv !== 'production') {
       throw new Error(
