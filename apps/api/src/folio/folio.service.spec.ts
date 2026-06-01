@@ -294,3 +294,101 @@ describe('FolioService.reopen', () => {
     );
   });
 });
+
+describe('FolioService.findOne + findByReservationCode (read paths)', () => {
+  const folioDetailRow = {
+    id: FOLIO_ID,
+    status: FolioStatus.OPEN,
+    balance: new Prisma.Decimal('110.00'),
+    currency: 'EUR',
+    closedAt: null,
+    reservationId: RESERVATION_ID,
+    createdAt: new Date('2026-06-10T08:00:00Z'),
+    updatedAt: new Date('2026-06-10T09:00:00Z'),
+    entries: [
+      {
+        id: 'entry-001',
+        type: 'CHARGE',
+        description: 'Habitación',
+        amount: new Prisma.Decimal('110.00'),
+        currency: 'EUR',
+        postedAt: new Date('2026-06-10T09:00:00Z'),
+        postedBy: USER_ID,
+        attributes: null,
+      },
+    ],
+  };
+
+  function buildReadService(opts: {
+    folio?: typeof folioDetailRow | null;
+    reservation?: { id: string; code: string; folio: typeof folioDetailRow | null } | null;
+  }) {
+    const tx = {
+      folio: { findFirst: vi.fn().mockResolvedValue(opts.folio ?? null) },
+      reservation: { findFirst: vi.fn().mockResolvedValue(opts.reservation ?? null) },
+    };
+    const prisma = {
+      withTenant: vi.fn(async (_ctx, fn: (t: typeof tx) => unknown) => fn(tx)),
+    };
+    const events = { publish: vi.fn() };
+    return {
+      service: new FolioService(
+        prisma as unknown as ConstructorParameters<typeof FolioService>[0],
+        events as unknown as ConstructorParameters<typeof FolioService>[1],
+      ),
+      tx,
+    };
+  }
+
+  it('findOne devuelve el folio + entries cuando existe', async () => {
+    const { service } = buildReadService({ folio: folioDetailRow });
+    const r = await service.findOne(user, 'corr', FOLIO_ID);
+    expect(r.id).toBe(FOLIO_ID);
+    expect(r.status).toBe(FolioStatus.OPEN);
+    expect(r.balance).toBe('110');
+    expect(r.entries).toHaveLength(1);
+    expect(r.entries[0]!.description).toBe('Habitación');
+  });
+
+  it('findOne lanza NotFoundException cuando el folio no existe (o pertenece a otro tenant)', async () => {
+    const { service } = buildReadService({ folio: null });
+    await expect(service.findOne(user, 'corr', FOLIO_ID)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('findByReservationCode devuelve folio + reservationCode cuando existe', async () => {
+    const { service } = buildReadService({
+      reservation: { id: RESERVATION_ID, code: 'BBM01-AB12', folio: folioDetailRow },
+    });
+    const r = await service.findByReservationCode(user, 'corr', PROPERTY_ID, 'BBM01-AB12');
+    expect(r.id).toBe(FOLIO_ID);
+    expect(r.reservationCode).toBe('BBM01-AB12');
+    expect(r.entries).toHaveLength(1);
+  });
+
+  it('findByReservationCode lanza NotFound si la reserva no existe', async () => {
+    const { service } = buildReadService({ reservation: null });
+    await expect(
+      service.findByReservationCode(user, 'corr', PROPERTY_ID, 'BBM01-NONE'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('findByReservationCode lanza NotFound si la reserva existe pero sin folio', async () => {
+    const { service } = buildReadService({
+      reservation: { id: RESERVATION_ID, code: 'BBM01-AB12', folio: null },
+    });
+    await expect(
+      service.findByReservationCode(user, 'corr', PROPERTY_ID, 'BBM01-AB12'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('findByReservationCode aísla por propertyId (no cross-property leakage)', async () => {
+    const { service, tx } = buildReadService({
+      reservation: { id: RESERVATION_ID, code: 'BBM01-AB12', folio: folioDetailRow },
+    });
+    await service.findByReservationCode(user, 'corr', PROPERTY_ID, 'BBM01-AB12');
+    const where = tx.reservation.findFirst.mock.calls[0]![0]!.where;
+    expect(where.propertyId).toBe(PROPERTY_ID);
+    expect(where.code).toBe('BBM01-AB12');
+    expect(where.deletedAt).toBeNull();
+  });
+});
