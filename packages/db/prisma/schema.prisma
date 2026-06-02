@@ -67,6 +67,8 @@ model Tenant {
   invoices             Invoice[]
   invoiceSubmissions   InvoiceSubmission[]
   verifactuCertificate VerifactuCertificate?
+  propertyTaxConfigs   PropertyTaxConfig[]
+  cityTaxRules         CityTaxRule[]
 
   @@map("tenants")
 }
@@ -158,6 +160,8 @@ model Property {
   cancellationPolicies CancellationPolicy[]
   channelSyncRuns      ChannelSyncRun[]
   invoices             Invoice[]
+  taxConfigs           PropertyTaxConfig[]
+  cityTaxRule          CityTaxRule?
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -649,6 +653,15 @@ model FolioEntry {
   description    String
   amount         Decimal        @db.Decimal(12, 2)
   currency       String         @default("EUR") @db.Char(3)
+  // RFC-001 §3.1 — desglose fiscal por línea.
+  // Nullable porque los entries pre-RFC-001 no tienen desglose ("legacy"
+  // en la UI). Todo entry creado bajo el flag FOLIO_TAX_BREAKDOWN_ENABLED
+  // los lleva siempre; el FolioService valida la invariante
+  // amount ≈ netAmount + taxAmount (tolerancia 0.01€).
+  netAmount      Decimal?       @map("net_amount") @db.Decimal(12, 2)
+  taxRate        Decimal?       @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount      Decimal?       @map("tax_amount") @db.Decimal(12, 2)
+  taxCategory    TaxCategory?   @map("tax_category")
   postedAt       DateTime       @default(now()) @map("posted_at")
   postedBy       String?        @map("posted_by") @db.Uuid
   idempotencyKey String?        @map("idempotency_key")
@@ -660,6 +673,7 @@ model FolioEntry {
   @@unique([folioId, idempotencyKey], map: "folio_entries_folio_id_idempotency_key_key")
   @@index([tenantId, folioId])
   @@index([tenantId, postedAt])
+  @@index([tenantId, taxCategory])
   @@map("folio_entries")
 }
 
@@ -671,6 +685,77 @@ enum FolioEntryType {
   ADJUSTMENT
 
   @@map("folio_entry_type")
+}
+
+// RFC-001 §3.1 — categorías fiscales por linea de folio.
+//   ROOM/BREAKFAST/EXTRA_FOOD → 10% IVA (España, régimen general 2026).
+//   EXTRA_OTHER               → 21% IVA (parking, lavandería, wellness).
+//   CITY_TAX                  → exento (impuesto autonómico, va separado).
+//   EXEMPT                    → operaciones exentas / sin sujetar (cortesía,
+//                               compensación, fanzine sin contraprestación).
+enum TaxCategory {
+  ROOM
+  BREAKFAST
+  EXTRA_FOOD
+  EXTRA_OTHER
+  CITY_TAX
+  EXEMPT
+
+  @@map("tax_category")
+}
+
+// RFC-001 §3.1 — matriz IVA por property y categoría.
+// Histórico no destructivo: cada cambio crea una fila nueva con
+// effectiveFrom = today. El servicio resuelve el rate vigente
+// buscando el más reciente <= ahora.
+model PropertyTaxConfig {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String      @map("tenant_id") @db.Uuid
+  propertyId    String      @map("property_id") @db.Uuid
+  category      TaxCategory
+  taxRate       Decimal     @map("tax_rate") @db.Decimal(5, 2)
+  effectiveFrom DateTime    @default(now()) @map("effective_from") @db.Date
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, category, effectiveFrom])
+  @@index([tenantId, propertyId])
+  @@map("property_tax_configs")
+}
+
+// RFC-001 §3.1 — regla de city tax por property.
+// Una fila por property. Updates son destructivos sobre la fila — el
+// histórico vive en el audit log (RLS trigger log_audit).
+model CityTaxRule {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String        @map("tenant_id") @db.Uuid
+  propertyId        String        @unique @map("property_id") @db.Uuid
+  region            CityTaxRegion @default(NONE)
+  amountPerNight    Decimal       @default(0) @map("amount_per_night") @db.Decimal(8, 2)
+  appliesToAdults   Boolean       @default(true) @map("applies_to_adults")
+  appliesToChildren Boolean       @default(false) @map("applies_to_children")
+  childAgeThreshold Int           @default(16) @map("child_age_threshold")
+  maxNights         Int           @default(7) @map("max_nights")
+  effectiveFrom     DateTime      @default(now()) @map("effective_from") @db.Date
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, propertyId])
+  @@map("city_tax_rules")
+}
+
+enum CityTaxRegion {
+  NONE
+  CATALUNYA
+  BALEARES
+  COMUNIDAD_VALENCIANA
+
+  @@map("city_tax_region")
 }
 
 // ----------------------------------------------------------------------------

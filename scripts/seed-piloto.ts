@@ -573,6 +573,48 @@ async function main() {
     });
   }
 
+  // ------------------------------------------------------------------
+  // Tax config (RFC-001 §3.1) — matriz IVA España 2026 + city tax NONE.
+  // El piloto Berenjena Madrid no aplica city tax (Madrid no lo tiene
+  // activado). Cataluña/Baleares/Valencia se configuran en su tenant.
+  // ------------------------------------------------------------------
+  const TAX_DEFAULTS: Array<{ category: 'ROOM' | 'BREAKFAST' | 'EXTRA_FOOD' | 'EXTRA_OTHER' | 'CITY_TAX' | 'EXEMPT'; rate: string }> = [
+    { category: 'ROOM', rate: '10.00' },
+    { category: 'BREAKFAST', rate: '10.00' },
+    { category: 'EXTRA_FOOD', rate: '10.00' },
+    { category: 'EXTRA_OTHER', rate: '21.00' },
+    { category: 'CITY_TAX', rate: '0.00' },
+    { category: 'EXEMPT', rate: '0.00' },
+  ];
+  for (const t of TAX_DEFAULTS) {
+    const exists = await prisma.propertyTaxConfig.findFirst({
+      where: { propertyId: property.id, category: t.category as never },
+    });
+    if (!exists) {
+      await prisma.propertyTaxConfig.create({
+        data: {
+          tenantId: tenant.id,
+          propertyId: property.id,
+          category: t.category as never,
+          taxRate: t.rate,
+        },
+      });
+    }
+  }
+  const cityTaxExists = await prisma.cityTaxRule.findUnique({
+    where: { propertyId: property.id },
+  });
+  if (!cityTaxExists) {
+    await prisma.cityTaxRule.create({
+      data: {
+        tenantId: tenant.id,
+        propertyId: property.id,
+        region: 'NONE',
+        amountPerNight: '0',
+      },
+    });
+  }
+
   // Mapa room.number → room.id (lo necesitamos para reservations + HSK tasks).
   const roomsByNumber = new Map<string, string>();
   for (const r of await prisma.room.findMany({

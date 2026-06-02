@@ -30,6 +30,8 @@ export {
   InvoiceStatus,
   InvoiceSubmissionStatus,
   VerifactuTipoFactura,
+  TaxCategory,
+  CityTaxRegion,
 } from '@prisma/client';
 
 export type {
@@ -64,6 +66,8 @@ export type {
   Invoice,
   InvoiceSubmission,
   VerifactuCertificate,
+  PropertyTaxConfig,
+  CityTaxRule,
 } from '@prisma/client';
 
 export { withTenant } from './tenant-context';
