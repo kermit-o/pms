@@ -80,6 +80,68 @@ Una o dos frases.
 
 ---
 
+## 2026-06-02 · [FEAT] · RFC-001 Shipped — IVA por línea + city tax (bloque B.6/B.7)
+
+**Scope:** `apps/api/src/folio/`, `apps/api/src/verifactu/`,
+`apps/api/src/night-audit/steps/post-city-tax.ts`,
+`apps/web-fo/src/app/reservations/[id]/page.tsx`,
+`apps/web-fo/src/app/properties/[id]/tax-config/`,
+`apps/web-fo/src/app/reports/fiscal/`,
+`packages/db/prisma/schema.prisma`,
+`packages/db/prisma/migrations/20260701000000_folio_tax_breakdown`,
+`packages/db/prisma/migrations/20260702000000_post_city_tax_step`,
+`packages/eventbus/src/catalog/folio.ts`,
+`docs/{prd,rfc,adr,RUNBOOK-folio-tax.md}`,
+`scripts/backfill-property-tax-config.ts`.
+
+**Branches:** `claude/rfc-001-pr{1..9}-*`.
+**Refs:** PRD-001, RFC-001, ADR-033, PRDs maestro slot B.6/B.7.
+
+**Qué cambió.**
+- DB: 3 columnas nuevas en `folio_entries` (`net_amount`, `tax_rate`,
+  `tax_amount`, `tax_category`) + tablas `property_tax_configs` y
+  `city_tax_rules`. Enum `tax_category`, `city_tax_region`.
+  `POST_CITY_TAX` añadido a `night_audit_step`.
+- API: `TaxCalculator` puro (breakdownFromGross/Net + computeCityTax).
+  `FolioService.addCharge` desglosa via TaxCalculator. Endpoints CRUD
+  para `PropertyTaxConfig` y `CityTaxRule`. Override de city tax
+  (motivo >= 10 chars). Step nuevo `PostCityTaxStep` en night audit.
+  Endpoint `/reports/fiscal` con desglose por día + tipo IVA.
+- Verifactu: `invoice-xml.ts` parametrizado por `breakdownByRate` +
+  bloque NoSujeta para city tax (ADR-033).
+- UI: folio panel con columnas desglose + toggle bruto/neto + override
+  city tax. Página admin `/properties/:id/tax-config`. Página
+  `/reports/fiscal` con cards + tabla día a día.
+- Feature flag `FOLIO_TAX_BREAKDOWN_ENABLED` (default false).
+  Activación + rollback documentados en `RUNBOOK-folio-tax.md`.
+
+**Por qué.**
+Cierra el bloque B.6/B.7 del PRD maestro. Bloqueaba Verifactu real
+(RegistroAlta exige desglose IVA), facturación con empresa/agencia
+con IVA distinto, y city tax automático para hoteles en Cataluña /
+Baleares / Comunidad Valenciana.
+
+**Tests.** 593/593 verdes (de 523 base):
+- 31 tax-calculator (todos los rates + redondeo + city tax).
+- 6 property-tax-config.service.
+- 4 city-tax-rule.service.
+- 9 post-city-tax step.
+- 8 folio.service (desglose + override).
+- 7 invoice-totals + invoice-xml extendidos.
+- 4 tax-report.service.
+
+**Observabilidad.** Eventos NATS nuevos `folio.city_tax_applied`,
+`folio.city_tax_overridden`. Campos `netAmount`/`taxAmount`/`taxRate`/
+`taxCategory` opcionales añadidos a `folio.charge_added` v1
+(backward-compatible).
+
+**Rollout.** 9 PRs encadenados (`claude/rfc-001-pr1..9-*`). Feature
+flag por env var. Backfill por código en `Property.onCreate` +
+script `scripts/backfill-property-tax-config.ts` (idempotente, soporta
+--dry-run).
+
+---
+
 ## 2026-05-31 · [DOC] · Sprint 14 W2 — RUNBOOK §3.3 verificar bootstrap con health-check
 
 **Scope:** `docs/RUNBOOK-verifactu.md` (sección §3.3 nueva).
