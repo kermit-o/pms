@@ -210,6 +210,15 @@ Estas reglas existen porque ya nos pasó. No son opcionales.
    descripción.
 6. **El estado de PRD/RFC se actualiza al mergear**, no después. Si se
    mergea código sin actualizar estados, está incompleto.
+7. **Ejecución de un RFC aprobado es autónoma.** Una vez el PO firma un
+   RFC con su "Plan de trabajo" (sección §11 del template), Claude Code
+   recorre los PRs sin pedir confirmación entre uno y otro. Sólo pausa
+   y pregunta al PO cuando:
+   - Aparece una decisión no cubierta por PRD ni RFC.
+   - Una dependencia externa bloquea (cert, credencial, alta AEAT).
+   - Un PR requiere ampliar el alcance del RFC.
+   - Tests/typecheck/lint fallan por causa que Claude no puede resolver.
+   El PO revisa el resultado final al cerrar el RFC, no PR a PR.
 
 ---
 

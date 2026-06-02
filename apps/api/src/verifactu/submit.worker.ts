@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { type Counter, type Histogram, metrics } from '@opentelemetry/api';
-import { InvoiceStatus, InvoiceSubmissionStatus } from '@pms/db';
+import { InvoiceStatus, InvoiceSubmissionStatus, Prisma } from '@pms/db';
 import type { HandlerResult } from '@pms/eventbus';
 import { PrismaService } from '../db';
 import type { Env } from '../config/env.schema';
@@ -132,6 +132,7 @@ export class SubmitWorker implements OnModuleInit {
         tipoFactura: true,
         huella: true,
         huellaAnterior: true,
+        lines: true,
         tenant: { select: { nif: true, razonSocial: true } },
       },
     });
@@ -164,6 +165,11 @@ export class SubmitWorker implements OnModuleInit {
 
     let signedXml: string;
     try {
+      // RFC-001 §3.6 — recompone desglose por tipo IVA + city tax desde
+      // invoice.lines (JSONB). Si la factura es legacy (pre-RFC-001) las
+      // líneas no llevan campos fiscales y breakdownByRate queda vacío;
+      // buildVerifactuRegistroAlta cae al bloque único legacy.
+      const { breakdownByRate, cityTaxAmount } = recomposeBreakdown(invoice.lines);
       const payloadXml = buildVerifactuRegistroAlta({
         invoiceId: invoice.id,
         emisor: { nif: invoice.tenant.nif, nombreRazon: invoice.tenant.razonSocial },
@@ -176,6 +182,8 @@ export class SubmitWorker implements OnModuleInit {
         subtotal: invoice.subtotal,
         taxAmount: invoice.taxAmount,
         totalAmount: invoice.totalAmount,
+        breakdownByRate,
+        cityTaxAmount,
         customerName: invoice.customerName,
         customerNif: invoice.customerNif,
         customerAddress: invoice.customerAddress,
@@ -438,4 +446,48 @@ function nextBackoff(): Date {
   // Cuando JetStream redelivers, el ackWait gobierna el reintento real; este
   // campo en DB es informativo para la UI ("próximo intento").
   return new Date(Date.now() + 60_000);
+}
+
+/**
+ * RFC-001 §3.6 — re-compone breakdown por tipo IVA + city tax a partir
+ * del JSONB invoice.lines. Sirve al submit-worker para generar el XML
+ * AEAT sin tener que volver al folio.
+ *
+ * Si las líneas no llevan campos fiscales (factura legacy), devuelve
+ * {breakdownByRate: [], cityTaxAmount: 0} y el invoice-xml.ts cae al
+ * bloque único al 10% como antes.
+ */
+function recomposeBreakdown(lines: Prisma.JsonValue): {
+  breakdownByRate: Array<{ taxRate: string; base: string; tax: string }>;
+  cityTaxAmount: string;
+} {
+  const empty = { breakdownByRate: [] as Array<{ taxRate: string; base: string; tax: string }>, cityTaxAmount: '0.00' };
+  if (!Array.isArray(lines)) return empty;
+  const byRate = new Map<string, { base: Prisma.Decimal; tax: Prisma.Decimal }>();
+  let cityTax = new Prisma.Decimal(0);
+  for (const raw of lines) {
+    if (!raw || typeof raw !== 'object') continue;
+    const line = raw as Record<string, unknown>;
+    if (line.taxCategory === 'CITY_TAX') {
+      cityTax = cityTax.add(new Prisma.Decimal(String(line.amount ?? '0')));
+      continue;
+    }
+    if (typeof line.taxRate === 'string' && typeof line.netAmount === 'string' && typeof line.taxAmount === 'string') {
+      const prev = byRate.get(line.taxRate) ?? { base: new Prisma.Decimal(0), tax: new Prisma.Decimal(0) };
+      byRate.set(line.taxRate, {
+        base: prev.base.add(new Prisma.Decimal(line.netAmount)),
+        tax: prev.tax.add(new Prisma.Decimal(line.taxAmount)),
+      });
+    }
+  }
+  return {
+    breakdownByRate: Array.from(byRate.entries())
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([rate, v]) => ({
+        taxRate: rate,
+        base: v.base.toFixed(2),
+        tax: v.tax.toFixed(2),
+      })),
+    cityTaxAmount: cityTax.toFixed(2),
+  };
 }
