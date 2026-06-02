@@ -1,6 +1,6 @@
 # RFC-001 — Diseño técnico: IVA por línea + City tax en folio
 
-- **Status:** `Approved` (2026-06-01, firma delegada por PO en sesión)
+- **Status:** `Shipped` (2026-06-02, 9 PRs cerrados — ver DELIVERY-LOG)
 - **Author:** Claude Code
 - **Date:** 2026-06-01
 - **PRD:** [PRD-001](../prd/001-folio-iva-y-city-tax.md)

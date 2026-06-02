@@ -7,7 +7,7 @@
 | # | Título | Status | Bloque maestro |
 |---|---|---|---|
 | 000 | [Aubergine PMS · Maestro](./000-aubergine-master.md) | Approved | — (es el maestro) |
-| 001 | [IVA por línea + City tax en folio](./001-folio-iva-y-city-tax.md) | Approved | B.6, B.7 |
+| 001 | [IVA por línea + City tax en folio](./001-folio-iva-y-city-tax.md) | Shipped | B.6, B.7 |
 
 ---
 

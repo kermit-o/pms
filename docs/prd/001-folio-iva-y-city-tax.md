@@ -1,6 +1,6 @@
 # PRD-001 — IVA por línea + City tax en el folio
 
-- **Status:** `Approved` (2026-06-01, firma delegada por PO en sesión: "firma tú y avanza")
+- **Status:** `Shipped` (2026-06-02, todos los PRs cerrados; ver DELIVERY-LOG)
 - **Author:** Claude Code (borrador) · firma PO Outman El Ouary Achi
 - **Date:** 2026-06-01
 - **Bloque maestro:** B · Folio (funciones B.6 + B.7)
