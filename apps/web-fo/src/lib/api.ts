@@ -517,6 +517,81 @@ export async function overrideCityTax(
   });
 }
 
+// ---------------------------------------------------------------------------
+// RFC-001 §3.2 — admin tax matrix por property + city tax rule.
+// ---------------------------------------------------------------------------
+
+export interface PropertyTaxConfigEntry {
+  category: TaxCategory;
+  taxRate: string;
+  effectiveFrom: string;
+}
+
+export async function getPropertyTaxConfig(
+  accessToken: string | undefined,
+  propertyId: string,
+): Promise<PropertyTaxConfigEntry[]> {
+  return apiFetch(`/properties/${propertyId}/tax-config`, { accessToken });
+}
+
+export async function updatePropertyTaxRate(
+  accessToken: string | undefined,
+  propertyId: string,
+  category: TaxCategory,
+  taxRate: number,
+): Promise<PropertyTaxConfigEntry> {
+  return apiFetch(`/properties/${propertyId}/tax-config/${category}`, {
+    method: 'PUT',
+    accessToken,
+    body: JSON.stringify({ taxRate }),
+  });
+}
+
+export type CityTaxRegion = 'NONE' | 'CATALUNYA' | 'BALEARES' | 'COMUNIDAD_VALENCIANA';
+
+export interface CityTaxRuleView {
+  propertyId: string;
+  region: CityTaxRegion;
+  amountPerNight: string;
+  appliesToAdults: boolean;
+  appliesToChildren: boolean;
+  childAgeThreshold: number;
+  maxNights: number;
+}
+
+export interface CityTaxRuleInput {
+  region: CityTaxRegion;
+  amountPerNight: number;
+  appliesToAdults: boolean;
+  appliesToChildren: boolean;
+  childAgeThreshold: number;
+  maxNights: number;
+}
+
+export async function getCityTaxRule(
+  accessToken: string | undefined,
+  propertyId: string,
+): Promise<CityTaxRuleView | null> {
+  try {
+    return await apiFetch(`/properties/${propertyId}/city-tax-rule`, { accessToken });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function upsertCityTaxRule(
+  accessToken: string | undefined,
+  propertyId: string,
+  input: CityTaxRuleInput,
+): Promise<CityTaxRuleView> {
+  return apiFetch(`/properties/${propertyId}/city-tax-rule`, {
+    method: 'PUT',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
 export async function addFolioPayment(
   accessToken: string | undefined,
   folioId: string,
