@@ -117,6 +117,12 @@ export default async function PropertySettingsPage({ params, searchParams }: Pro
           >
             Rate plans →
           </Link>
+          <Link
+            href={`/properties/${id}/tax-config`}
+            className="rounded-full bg-aubergine-50 px-3 py-1 text-aubergine-700 ring-1 ring-aubergine-100 hover:bg-aubergine-100"
+          >
+            IVA + City Tax →
+          </Link>
         </nav>
       </header>
 
