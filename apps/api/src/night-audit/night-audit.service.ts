@@ -15,6 +15,7 @@ import { CloseDayStep } from './steps/close-day';
 import { DetectAnomaliesStep } from './steps/detect-anomalies';
 import { MarkNoShowsStep } from './steps/mark-no-shows';
 import { PostPackagesStep } from './steps/post-packages';
+import { PostCityTaxStep } from './steps/post-city-tax';
 import { PostRoomChargesStep } from './steps/post-room-charges';
 import { PostTaxesStep } from './steps/post-taxes';
 import { SnapshotReportsStep } from './steps/snapshot-reports';
@@ -63,6 +64,7 @@ export class NightAuditService {
       new PostRoomChargesStep(),
       new PostTaxesStep(),
       new PostPackagesStep(),
+      new PostCityTaxStep(),
       new MarkNoShowsStep(),
       new SnapshotReportsStep(),
       new DetectAnomaliesStep(this.anomaly, this.anomalyMetrics),

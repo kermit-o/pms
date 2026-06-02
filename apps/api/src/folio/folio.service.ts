@@ -487,6 +487,105 @@ export class FolioService {
 
     return { id: folioId };
   }
+
+  /**
+   * RFC-001 §3.3 — override del city tax aplicado por el NA.
+   *
+   * Crea una FolioEntry ADJUSTMENT con taxCategory=CITY_TAX cuyo
+   * importe es (newAmount - sum(CITY_TAX entries existentes)). Si
+   * newAmount < total existente, el ADJUSTMENT es negativo (descuento).
+   *
+   * Auditado en el event folio.city_tax_overridden con el motivo
+   * (>= 10 chars, validado en el DTO).
+   */
+  async overrideCityTax(
+    user: AuthUser,
+    correlationId: string,
+    folioId: string,
+    input: { newAmount: number; reason: string },
+  ): Promise<{ entryId: string; balance: string; deltaAmount: string }> {
+    const ctx = tenantCtx(user, correlationId);
+
+    const result = await this.prisma.withTenant(ctx, async (tx) => {
+      const folio = await loadOpenFolio(tx, folioId);
+      const existing = await tx.folioEntry.findMany({
+        where: { folioId, taxCategory: TaxCategory.CITY_TAX },
+        select: { amount: true },
+      });
+      const currentTotal = existing.reduce(
+        (acc, e) => acc.plus(e.amount),
+        new Prisma.Decimal(0),
+      );
+      const newAmount = new Prisma.Decimal(input.newAmount);
+      const delta = newAmount.minus(currentTotal);
+
+      if (delta.isZero()) {
+        return {
+          entryId: null as string | null,
+          balance: folio.balance.toString(),
+          deltaAmount: '0',
+          reservationId: folio.reservationId,
+          propertyId: folio.reservation.propertyId,
+          originalAmount: currentTotal.toString(),
+          newAmount: newAmount.toString(),
+        };
+      }
+
+      const created = await tx.folioEntry.create({
+        data: {
+          tenantId: user.tenantId,
+          folioId,
+          type: 'ADJUSTMENT',
+          description: `City tax override: ${input.reason.slice(0, 200)}`,
+          amount: delta,
+          netAmount: delta,
+          taxRate: new Prisma.Decimal(0),
+          taxAmount: new Prisma.Decimal(0),
+          taxCategory: TaxCategory.CITY_TAX,
+          currency: folio.currency,
+          postedBy: user.sub,
+          attributes: {
+            override: true,
+            originalAmount: currentTotal.toString(),
+            newAmount: newAmount.toString(),
+            reason: input.reason,
+          },
+        },
+        select: { id: true },
+      });
+      const newBalance = new Prisma.Decimal(folio.balance).plus(delta);
+      await tx.folio.update({ where: { id: folioId }, data: { balance: newBalance } });
+
+      return {
+        entryId: created.id,
+        balance: newBalance.toString(),
+        deltaAmount: delta.toString(),
+        reservationId: folio.reservationId,
+        propertyId: folio.reservation.propertyId,
+        originalAmount: currentTotal.toString(),
+        newAmount: newAmount.toString(),
+      };
+    });
+
+    if (result.entryId) {
+      await this.events.publish('folio.city_tax_overridden', ctx, {
+        folioId,
+        reservationId: result.reservationId,
+        propertyId: result.propertyId,
+        entryId: result.entryId,
+        originalAmount: result.originalAmount,
+        newAmount: result.newAmount,
+        reason: input.reason,
+        actorId: user.sub,
+      });
+    }
+
+    return {
+      entryId: result.entryId ?? '',
+      balance: result.balance,
+      deltaAmount: result.deltaAmount,
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------

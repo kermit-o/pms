@@ -184,6 +184,9 @@ function buildFakes() {
       create: vi.fn().mockResolvedValue({}),
       update: vi.fn().mockResolvedValue({}),
     },
+    cityTaxRule: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     cashDrawerReconciliation: {
       findFirst: vi.fn().mockResolvedValue({
         discrepancy: new Prisma.Decimal(0),
@@ -234,12 +237,12 @@ describe('NightAuditService — full pipeline integration', () => {
     // Sprint 10 W3: cleanup step ejecuta updateMany aunque no encuentre filas.
     expect(tx.tenant.updateMany).toHaveBeenCalledOnce();
 
-    // 1 run_started + 8 step_completed (incluye DETECT_ANOMALIES y
-    // CLEANUP_ORPHAN_TENANTS) + 1 run_completed.
+    // 1 run_started + 9 step_completed (incluye POST_CITY_TAX,
+    // DETECT_ANOMALIES y CLEANUP_ORPHAN_TENANTS) + 1 run_completed.
     const types = events.publish.mock.calls.map((c) => c[0]);
     expect(types[0]).toBe('night_audit.run_started');
     expect(types.at(-1)).toBe('night_audit.run_completed');
-    expect(types.filter((t) => t === 'night_audit.step_completed')).toHaveLength(8);
+    expect(types.filter((t) => t === 'night_audit.step_completed')).toHaveLength(9);
 
     // Totals propagated from each step into NightAuditRun.totals.
     expect(summary.totals.roomChargesPosted).toBe(1);
