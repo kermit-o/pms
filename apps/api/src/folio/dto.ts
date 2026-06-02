@@ -1,4 +1,4 @@
-import { TaxCategory } from '@pms/db';
+import { CityTaxRegion, TaxCategory } from '@pms/db';
 import { z } from 'zod';
 
 /**
@@ -66,3 +66,30 @@ export const UpdatePropertyTaxConfigDto = z.object({
 });
 
 export type UpdatePropertyTaxConfigDto = z.infer<typeof UpdatePropertyTaxConfigDto>;
+
+/**
+ * RFC-001 §3.3 — admin CRUD de la regla de city tax por property.
+ * region es informativa; la lógica viene de amountPerNight + cap +
+ * exenciones.
+ */
+export const UpsertCityTaxRuleDto = z.object({
+  region: z.nativeEnum(CityTaxRegion),
+  amountPerNight: z.number().min(0).max(99.99),
+  appliesToAdults: z.boolean(),
+  appliesToChildren: z.boolean(),
+  childAgeThreshold: z.number().int().min(0).max(99),
+  maxNights: z.number().int().min(0).max(99),
+});
+
+export type UpsertCityTaxRuleDto = z.infer<typeof UpsertCityTaxRuleDto>;
+
+/**
+ * RFC-001 §3.3 — override del city tax aplicado por el NA.
+ * Exige motivo de >= 10 caracteres (decisión PO en PRD-001).
+ */
+export const CityTaxOverrideDto = z.object({
+  newAmount: z.number().min(0).max(9999.99),
+  reason: z.string().min(10).max(500),
+});
+
+export type CityTaxOverrideDto = z.infer<typeof CityTaxOverrideDto>;

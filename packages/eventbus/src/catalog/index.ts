@@ -23,6 +23,8 @@ import {
 } from './night-audit';
 import {
   folioChargeAddedV1,
+  folioCityTaxAppliedV1,
+  folioCityTaxOverriddenV1,
   folioClosedV1,
   folioPaymentReceivedV1,
   folioReopenedV1,
@@ -79,6 +81,11 @@ export const catalog = {
   },
   'folio.closed': { schema: folioClosedV1, schemaVersion: 1 },
   'folio.reopened': { schema: folioReopenedV1, schemaVersion: 1 },
+  'folio.city_tax_applied': { schema: folioCityTaxAppliedV1, schemaVersion: 1 },
+  'folio.city_tax_overridden': {
+    schema: folioCityTaxOverriddenV1,
+    schemaVersion: 1,
+  },
   'guest.created': { schema: guestCreatedV1, schemaVersion: 1 },
   'guest.updated': { schema: guestUpdatedV1, schemaVersion: 1 },
   'guest.erased': { schema: guestErasedV1, schemaVersion: 1 },

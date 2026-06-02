@@ -183,6 +183,9 @@ function buildService(opts: BuildOpts = {}) {
       create: vi.fn().mockResolvedValue({}),
       update: vi.fn().mockResolvedValue({}),
     },
+    cityTaxRule: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     cashDrawerReconciliation: {
       findFirst: vi.fn().mockResolvedValue(
         opts.cashReconciliation === undefined
@@ -264,6 +267,7 @@ describe('NightAuditService.run', () => {
       'night_audit.step_completed', // POST_ROOM_CHARGES
       'night_audit.step_completed', // POST_TAXES
       'night_audit.step_completed', // POST_PACKAGES
+      'night_audit.step_completed', // POST_CITY_TAX (RFC-001 §3.3)
       'night_audit.step_completed', // MARK_NO_SHOWS
       'night_audit.step_completed', // SNAPSHOT_REPORTS
       'night_audit.step_completed', // DETECT_ANOMALIES

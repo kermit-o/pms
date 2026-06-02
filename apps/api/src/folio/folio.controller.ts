@@ -2,7 +2,12 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req } from '@nestjs/
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser, Roles } from '../auth';
 import type { AuthUser } from '../auth';
-import { AddChargeDto, AddPaymentDto, ReopenFolioDto } from './dto';
+import {
+  AddChargeDto,
+  AddPaymentDto,
+  CityTaxOverrideDto,
+  ReopenFolioDto,
+} from './dto';
 import { FolioService } from './folio.service';
 
 const FRONT_DESK_ROLES = ['tenant_admin', 'front_desk'] as const;
@@ -66,6 +71,18 @@ export class FolioController {
   ) {
     const input = ReopenFolioDto.parse(body);
     return this.folio.reopen(user, correlationIdOf(req), id, input);
+  }
+
+  @Post(':id/city-tax-override')
+  @Roles(...FRONT_DESK_ROLES)
+  async overrideCityTax(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    const input = CityTaxOverrideDto.parse(body);
+    return this.folio.overrideCityTax(user, correlationIdOf(req), id, input);
   }
 }
 

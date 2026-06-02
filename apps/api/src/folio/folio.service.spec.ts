@@ -53,9 +53,10 @@ function buildService(opts: {
     });
   }
 
+  const entryFindMany = vi.fn().mockResolvedValue([]);
   const tx = {
     folio: { findFirst: folioFindFirst, update: folioUpdate },
-    folioEntry: { findFirst: entryFindFirst, create: entryCreate },
+    folioEntry: { findFirst: entryFindFirst, findMany: entryFindMany, create: entryCreate },
   };
   const prisma = {
     withTenant: vi.fn(async (_ctx, fn: (t: typeof tx) => unknown) => fn(tx)),
@@ -305,6 +306,74 @@ describe('FolioService.addCharge — desglose fiscal (RFC-001)', () => {
     expect(out.breakdown?.gross).toBe('121');
     // resolveRate no se llama cuando viene rate explícito en el DTO.
     expect(resolveRate).not.toHaveBeenCalled();
+  });
+});
+
+describe('FolioService.overrideCityTax (RFC-001 §3.3)', () => {
+  function openFolio(balance = '10'): FolioRow {
+    return {
+      id: FOLIO_ID,
+      status: FolioStatus.OPEN,
+      balance: new Prisma.Decimal(balance),
+      currency: 'EUR',
+      reservationId: RESERVATION_ID,
+      reservation: { propertyId: PROPERTY_ID },
+    };
+  }
+
+  it('newAmount > currentTotal → crea ADJUSTMENT positivo y emite evento', async () => {
+    const { service, tx, events } = buildService({
+      folio: openFolio('5.00'),
+      createdEntryId: 'override-1',
+    });
+    tx.folioEntry.findMany.mockResolvedValueOnce([{ amount: new Prisma.Decimal('5.00') }]);
+
+    const out = await service.overrideCityTax(user, 'corr', FOLIO_ID, {
+      newAmount: 10,
+      reason: 'evento corporativo confirmado',
+    });
+
+    expect(out.deltaAmount).toBe('5');
+    expect(out.balance).toBe('10');
+    expect(tx.folioEntry.create).toHaveBeenCalledOnce();
+    const data = tx.folioEntry.create.mock.calls[0]![0]!.data;
+    expect(data.type).toBe('ADJUSTMENT');
+    expect(data.taxCategory).toBe('CITY_TAX');
+    expect(events.publish).toHaveBeenCalledOnce();
+    expect(events.publish.mock.calls[0]![0]).toBe('folio.city_tax_overridden');
+  });
+
+  it('newAmount < currentTotal → crea ADJUSTMENT negativo', async () => {
+    const { service, tx } = buildService({
+      folio: openFolio('5.00'),
+      createdEntryId: 'override-2',
+    });
+    tx.folioEntry.findMany.mockResolvedValueOnce([
+      { amount: new Prisma.Decimal('3.00') },
+      { amount: new Prisma.Decimal('2.00') },
+    ]);
+    const out = await service.overrideCityTax(user, 'corr', FOLIO_ID, {
+      newAmount: 2,
+      reason: 'autoridad exenta confirmada',
+    });
+    expect(out.deltaAmount).toBe('-3');
+    const data = tx.folioEntry.create.mock.calls[0]![0]!.data;
+    expect(data.amount.toString()).toBe('-3');
+  });
+
+  it('newAmount = currentTotal → no crea entry y no emite evento', async () => {
+    const { service, tx, events } = buildService({
+      folio: openFolio('5.00'),
+    });
+    tx.folioEntry.findMany.mockResolvedValueOnce([{ amount: new Prisma.Decimal('5.00') }]);
+    const out = await service.overrideCityTax(user, 'corr', FOLIO_ID, {
+      newAmount: 5,
+      reason: 'sin cambio en city tax',
+    });
+    expect(out.entryId).toBe('');
+    expect(out.deltaAmount).toBe('0');
+    expect(tx.folioEntry.create).not.toHaveBeenCalled();
+    expect(events.publish).not.toHaveBeenCalled();
   });
 });
 
