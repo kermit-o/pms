@@ -83,8 +83,8 @@ Estado a 2026-06-01. Marca legend:
 | B.3 | Multi-folio por reserva (huésped/empresa/agencia) | ❌ | — | — |
 | B.4 | Master folio en grupos | ❌ | — | — |
 | B.5 | Routing rules | ❌ | — | — |
-| B.6 | IVA por línea con base imponible | ❌ | PRD-001 | — |
-| B.7 | City tax por noche × PAX | ❌ | PRD-001 | — |
+| B.6 | IVA por línea con base imponible | ❌ | PRD-001 | RFC-001 |
+| B.7 | City tax por noche × PAX | ❌ | PRD-001 | RFC-001 |
 | B.8 | Descuentos por línea | ❌ | — | — |
 | B.9 | Transfer de líneas entre folios | ❌ | — | — |
 | B.10 | Split de líneas | ❌ | — | — |

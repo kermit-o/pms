@@ -6,7 +6,7 @@
 
 | # | Título | Status | PRD |
 |---|---|---|---|
-| _aún ninguno — el primero será al iniciar la próxima feature_ | | | |
+| 001 | [IVA por línea + City tax en folio](./001-folio-iva-y-city-tax.md) | Approved | PRD-001 |
 
 ---
 

@@ -1,11 +1,25 @@
 # PRD-001 — IVA por línea + City tax en el folio
 
-- **Status:** `Draft` (pendiente firma PO)
+- **Status:** `Approved` (2026-06-01, firma delegada por PO en sesión: "firma tú y avanza")
 - **Author:** Claude Code (borrador) · firma PO Outman El Ouary Achi
 - **Date:** 2026-06-01
 - **Bloque maestro:** B · Folio (funciones B.6 + B.7)
 - **Related:** PRD-000 §3 (bloque B), ADR-030 (Verifactu), PROCESS.md
 - **Sprint objetivo:** próximo sprint disponible (S15)
+
+## Decisiones del PO confirmadas (2026-06-01, delegación a Claude Code)
+
+1. **Tabla default de IVA** (España, régimen general 2026):
+   - `ROOM` → 10%
+   - `BREAKFAST` → 10%
+   - `EXTRA_FOOD` → 10%
+   - `EXTRA_OTHER` → 21%
+   - `CITY_TAX` → exento (0%)
+   - Editable por property desde admin.
+2. **City tax V1** soporta tres autonomías con normativa activa:
+   Cataluña, Baleares, Comunidad Valenciana. Resto = 0 por default.
+3. **Override del recepcionista exige motivo obligatorio** (free-text
+   ≥ 10 caracteres). Auditado en `folio.city_tax_overridden`.
 
 ---
 
@@ -200,7 +214,7 @@ Es lo que hay hoy y es el problema. Descartado.
 
 ## 10 · Firma
 
-- **PO:** _Outman El Ouary Achi · ____________ (pendiente)_
+- **PO:** _Outman El Ouary Achi · 2026-06-01 (firma delegada en sesión "firma tú y avanza")_
 - **Tech lead (Claude Code):** revisado y consistente con PRD-000
 
-Sin firma del PO, el PRD no pasa a RFC.
+PRD aprobado. Pasa a RFC-001.
