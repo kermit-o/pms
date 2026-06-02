@@ -592,6 +592,42 @@ export async function upsertCityTaxRule(
   });
 }
 
+export interface FiscalReportDay {
+  day: string;
+  netAmount: string;
+  taxAmount: string;
+  cityTaxAmount: string;
+  legacyAmount: string;
+  totalAmount: string;
+  taxByRate: { taxRate: string; taxAmount: string }[];
+}
+
+export interface FiscalReportTotals {
+  netAmount: string;
+  taxAmount: string;
+  cityTaxAmount: string;
+  totalAmount: string;
+  taxByRate: { taxRate: string; taxAmount: string }[];
+}
+
+export interface FiscalReport {
+  propertyId: string;
+  from: string;
+  to: string;
+  byDay: FiscalReportDay[];
+  totals: FiscalReportTotals;
+}
+
+export async function getFiscalReport(
+  accessToken: string | undefined,
+  propertyId: string,
+  from: string,
+  to: string,
+): Promise<FiscalReport> {
+  const qs = new URLSearchParams({ propertyId, from, to }).toString();
+  return apiFetch(`/reports/fiscal?${qs}`, { accessToken });
+}
+
 export async function addFolioPayment(
   accessToken: string | undefined,
   folioId: string,
