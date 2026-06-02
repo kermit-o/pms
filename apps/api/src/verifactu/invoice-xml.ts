@@ -51,6 +51,23 @@ export interface VerifactuRegistroAltaInput {
   taxAmount: Prisma.Decimal | string;
   totalAmount: Prisma.Decimal | string;
 
+  /**
+   * RFC-001 §3.6 — desglose por tipo IVA. Se emite un `<DetalleDesglose>`
+   * por entrada. Si está vacío o ausente, se cae al modo legacy
+   * (un único DetalleDesglose al 10% con todo el subtotal).
+   */
+  breakdownByRate?: Array<{
+    taxRate: string;
+    base: Prisma.Decimal | string;
+    tax: Prisma.Decimal | string;
+  }>;
+
+  /**
+   * RFC-001 §3.6 + ADR-033 — city tax como bloque NoSujeta dentro de
+   * `<Desglose>`. Se omite si es 0 o ausente.
+   */
+  cityTaxAmount?: Prisma.Decimal | string;
+
   /** Cliente. NIF opcional (F2 sin NIF). */
   customerName: string;
   customerNif: string | null;
@@ -105,19 +122,47 @@ export function buildVerifactuRegistroAlta(input: VerifactuRegistroAltaInput): s
     : // F2: simplificada sin identificación.
       '';
 
-  // Desglose mínimo: una sola línea con tipo IVA al 10 % (alojamiento
-  // hotelero). Cuando se modele IVA por línea (ADR-032 §7 pregunta F),
-  // aquí se itera.
-  const desglose =
-    `<Desglose>` + // ⚠ por verificar nombre
-    `<DetalleDesglose>` + // ⚠
-    `<ClaveRegimen>01</ClaveRegimen>` + // ⚠ Régimen general
-    `<CalificacionOperacion>S1</CalificacionOperacion>` + // ⚠ Sujeta y no exenta
-    `<TipoImpositivo>10.00</TipoImpositivo>` + // alojamiento
-    `<BaseImponibleOimporteNoSujeto>${esc(toFixed2(input.subtotal))}</BaseImponibleOimporteNoSujeto>` +
-    `<CuotaRepercutida>${esc(toFixed2(input.taxAmount))}</CuotaRepercutida>` +
-    `</DetalleDesglose>` +
-    `</Desglose>`;
+  // RFC-001 §3.6 — desglose por tipo IVA. Si la factura trae
+  // breakdownByRate no vacío, emite un DetalleDesglose por cada tipo.
+  // Si está ausente (caso legacy de tenants pre-RFC-001), se emite el
+  // único bloque al 10% como antes para no romper la firma.
+  // City tax (ADR-033) va en un DetalleDesglose adicional con
+  // CalificacionOperacion=N1 (NoSujeta) — pendiente confirmación AEAT
+  // en preprod; fallback documentado: emitir como exento dentro de S1.
+  const breakdown =
+    input.breakdownByRate && input.breakdownByRate.length > 0
+      ? input.breakdownByRate
+      : [
+          {
+            taxRate: '10.00',
+            base: toFixed2(input.subtotal),
+            tax: toFixed2(input.taxAmount),
+          },
+        ];
+
+  const desgloseDetalles = breakdown
+    .map(
+      (b) =>
+        `<DetalleDesglose>` + // ⚠
+        `<ClaveRegimen>01</ClaveRegimen>` + // ⚠ Régimen general
+        `<CalificacionOperacion>S1</CalificacionOperacion>` + // ⚠ Sujeta y no exenta
+        `<TipoImpositivo>${esc(toFixed2(b.taxRate))}</TipoImpositivo>` +
+        `<BaseImponibleOimporteNoSujeto>${esc(toFixed2(b.base))}</BaseImponibleOimporteNoSujeto>` +
+        `<CuotaRepercutida>${esc(toFixed2(b.tax))}</CuotaRepercutida>` +
+        `</DetalleDesglose>`,
+    )
+    .join('');
+
+  const cityTaxBlock =
+    input.cityTaxAmount && Number(toFixed2(input.cityTaxAmount)) > 0
+      ? `<DetalleDesglose>` +
+        `<ClaveRegimen>01</ClaveRegimen>` +
+        `<CalificacionOperacion>N1</CalificacionOperacion>` + // ⚠ ADR-033: NoSujeta
+        `<BaseImponibleOimporteNoSujeto>${esc(toFixed2(input.cityTaxAmount))}</BaseImponibleOimporteNoSujeto>` +
+        `</DetalleDesglose>`
+      : '';
+
+  const desglose = `<Desglose>` + desgloseDetalles + cityTaxBlock + `</Desglose>`;
 
   const encadenamiento =
     `<Encadenamiento>` + // ✅

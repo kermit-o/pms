@@ -10,12 +10,13 @@
 | 030 | [Arquitectura Verifactu (e-invoicing AEAT)](./030-verifactu-architecture.md) | Accepted | 2026-05-29 |
 | 031 | [Librería XAdES — xadesjs](./031-verifactu-xades-library.md) | Accepted | 2026-05-29 |
 | 032 | [Payload XML Verifactu](./032-verifactu-xml-payload.md) | Accepted | 2026-05-29 |
+| 033 | [City tax como NoSujeta en Verifactu](./033-city-tax-nosujeta-verifactu.md) | Accepted | 2026-06-02 |
 
 ---
 
 ## Numeración
 
-- Próximo número libre: **033**.
+- Próximo número libre: **034**.
 - La numeración es global y correlativa, nunca se reutiliza.
 - ADR-001 a ADR-029 son históricos previos (no todos están migrados al
   formato actual; los que se necesiten se actualizan caso por caso).

@@ -116,4 +116,48 @@ describe('buildVerifactuRegistroAlta', () => {
     );
     expect(xml).toContain('<NombreRazon>Tom &quot;Cat&quot; &amp; Co.</NombreRazon>');
   });
+
+  it('emite un DetalleDesglose por tipo IVA cuando llega breakdownByRate (RFC-001)', () => {
+    const xml = buildVerifactuRegistroAlta({
+      ...baseInput,
+      breakdownByRate: [
+        { taxRate: '10.00', base: '100.00', tax: '10.00' },
+        { taxRate: '21.00', base: '50.00', tax: '10.50' },
+      ],
+    });
+    // Dos DetalleDesglose distintos.
+    const matches = xml.match(/<DetalleDesglose>/g) ?? [];
+    expect(matches.length).toBe(2);
+    expect(xml).toContain('<TipoImpositivo>10.00</TipoImpositivo>');
+    expect(xml).toContain('<TipoImpositivo>21.00</TipoImpositivo>');
+    expect(xml).toContain('<BaseImponibleOimporteNoSujeto>50.00</BaseImponibleOimporteNoSujeto>');
+    expect(xml).toContain('<CuotaRepercutida>10.50</CuotaRepercutida>');
+  });
+
+  it('cae al desglose legacy al 10% si breakdownByRate viene vacío', () => {
+    const xml = buildVerifactuRegistroAlta({
+      ...baseInput,
+      breakdownByRate: [],
+    });
+    expect(xml).toContain('<TipoImpositivo>10.00</TipoImpositivo>');
+    const matches = xml.match(/<DetalleDesglose>/g) ?? [];
+    expect(matches.length).toBe(1);
+  });
+
+  it('añade bloque NoSujeta (N1) para city tax (ADR-033)', () => {
+    const xml = buildVerifactuRegistroAlta({
+      ...baseInput,
+      breakdownByRate: [{ taxRate: '10.00', base: '100.00', tax: '10.00' }],
+      cityTaxAmount: '4.80',
+    });
+    expect(xml).toContain('<CalificacionOperacion>N1</CalificacionOperacion>');
+    expect(xml).toContain('<BaseImponibleOimporteNoSujeto>4.80</BaseImponibleOimporteNoSujeto>');
+  });
+
+  it('omite bloque NoSujeta si cityTaxAmount=0 o ausente', () => {
+    const xmlSinCity = buildVerifactuRegistroAlta(baseInput);
+    expect(xmlSinCity).not.toContain('<CalificacionOperacion>N1</CalificacionOperacion>');
+    const xmlCityZero = buildVerifactuRegistroAlta({ ...baseInput, cityTaxAmount: '0.00' });
+    expect(xmlCityZero).not.toContain('<CalificacionOperacion>N1</CalificacionOperacion>');
+  });
 });

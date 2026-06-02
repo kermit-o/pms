@@ -99,7 +99,7 @@ export class InvoiceService {
         );
       }
 
-      // 2. Load the folio and its entries.
+      // 2. Load the folio and its entries (incluyendo desglose fiscal RFC-001).
       const folio = await tx.folio.findFirst({
         where: { id: input.folioId },
         select: {
@@ -108,7 +108,15 @@ export class InvoiceService {
           currency: true,
           reservation: { select: { propertyId: true } },
           entries: {
-            select: { type: true, description: true, amount: true },
+            select: {
+              type: true,
+              description: true,
+              amount: true,
+              netAmount: true,
+              taxRate: true,
+              taxAmount: true,
+              taxCategory: true,
+            },
             orderBy: { postedAt: 'asc' },
           },
         },
@@ -144,11 +152,15 @@ export class InvoiceService {
         };
       }
 
-      // 4. Compute totals + lines.
+      // 4. Compute totals + lines (con desglose fiscal RFC-001).
       const snapshot: FolioEntrySnapshot[] = folio.entries.map((e) => ({
         type: e.type,
         description: e.description,
         amount: e.amount,
+        netAmount: e.netAmount,
+        taxRate: e.taxRate,
+        taxAmount: e.taxAmount,
+        taxCategory: e.taxCategory,
       }));
       const totals = computeInvoiceTotals(snapshot);
 
