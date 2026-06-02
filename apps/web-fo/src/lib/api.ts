@@ -429,6 +429,14 @@ export async function checkOutReservation(
 // Folio
 // ---------------------------------------------------------------------------
 
+export type TaxCategory =
+  | 'ROOM'
+  | 'BREAKFAST'
+  | 'EXTRA_FOOD'
+  | 'EXTRA_OTHER'
+  | 'CITY_TAX'
+  | 'EXEMPT';
+
 export interface FolioEntry {
   id: string;
   type: 'CHARGE' | 'PAYMENT' | 'DISCOUNT' | 'TAX' | 'ADJUSTMENT';
@@ -438,6 +446,10 @@ export interface FolioEntry {
   postedAt: string;
   postedBy: string | null;
   attributes: unknown;
+  netAmount: string | null;
+  taxRate: string | null;
+  taxAmount: string | null;
+  taxCategory: TaxCategory | null;
 }
 
 export interface FolioDetail {
@@ -459,17 +471,46 @@ export async function getFolio(
   return apiFetch(`/folios/${folioId}`, { accessToken });
 }
 
+export interface AddFolioChargeInput {
+  description: string;
+  amount?: number;
+  netAmount?: number;
+  taxRate?: number;
+  taxCategory?: TaxCategory;
+  type?: 'CHARGE' | 'TAX' | 'ADJUSTMENT';
+  idempotencyKey?: string;
+}
+
+export interface FolioChargeResult {
+  entryId: string;
+  balance: string;
+  deduplicated?: boolean;
+  breakdown?: {
+    net: string;
+    tax: string;
+    gross: string;
+    taxRate: string;
+  } | null;
+}
+
 export async function addFolioCharge(
   accessToken: string | undefined,
   folioId: string,
-  input: {
-    description: string;
-    amount: number;
-    type?: 'CHARGE' | 'TAX';
-    idempotencyKey?: string;
-  },
-): Promise<{ entryId: string; balance: string }> {
+  input: AddFolioChargeInput,
+): Promise<FolioChargeResult> {
   return apiFetch(`/folios/${folioId}/charges`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function overrideCityTax(
+  accessToken: string | undefined,
+  folioId: string,
+  input: { newAmount: number; reason: string },
+): Promise<{ entryId: string; balance: string; deltaAmount: string }> {
+  return apiFetch(`/folios/${folioId}/city-tax-override`, {
     method: 'POST',
     accessToken,
     body: JSON.stringify(input),

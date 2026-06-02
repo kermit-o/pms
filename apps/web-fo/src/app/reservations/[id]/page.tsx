@@ -15,13 +15,20 @@ import {
   issueInvoice,
   listInvoiceSubmissions,
   listRooms,
+  overrideCityTax,
   requeueInvoiceSubmission,
   updateGuarantee,
 } from '@/lib/api';
 import { FolioVoiceButton } from '@/components/FolioVoiceButton';
 import { NoShowChargeButton } from '@/components/NoShowChargeButton';
 import { StripeCaptureButton } from '@/components/StripeCaptureButton';
-import type { FolioDetail, InvoiceSubmissionView, IssuedInvoice } from '@/lib/api';
+import type {
+  FolioDetail,
+  FolioEntry,
+  InvoiceSubmissionView,
+  IssuedInvoice,
+  TaxCategory,
+} from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,15 +113,43 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
     const session = await auth();
     if (!folio) throw new Error('No folio');
     const description = formData.get('description')?.toString().trim();
-    const amount = Number(formData.get('amount') ?? '0');
+    if (!description) throw new Error('Faltan campos');
+
+    const mode = (formData.get('mode')?.toString() ?? 'gross') as 'gross' | 'net';
+    const amountRaw = Number(formData.get('amount') ?? '0');
     const type = (formData.get('type')?.toString() as 'CHARGE' | 'TAX') ?? 'CHARGE';
-    if (!description || !amount) throw new Error('Faltan campos');
+    const taxCategoryRaw = formData.get('taxCategory')?.toString();
+    const taxCategory = (taxCategoryRaw && taxCategoryRaw !== '')
+      ? (taxCategoryRaw as TaxCategory)
+      : undefined;
+    const taxRateRaw = formData.get('taxRate')?.toString();
+    const taxRate = taxRateRaw && taxRateRaw !== '' ? Number(taxRateRaw) : undefined;
+
+    if (!amountRaw) throw new Error('Importe requerido');
+
     await addFolioCharge(session?.accessToken, folio.id, {
       description,
-      amount,
+      ...(mode === 'net'
+        ? { netAmount: amountRaw, taxRate: taxRate ?? 10 }
+        : { amount: amountRaw, ...(taxRate !== undefined ? { taxRate } : {}) }),
+      ...(taxCategory ? { taxCategory } : {}),
       type,
       idempotencyKey: `ui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     });
+    revalidatePath(`/reservations/${reservationId}`);
+  }
+
+  async function overrideCityTaxAction(formData: FormData) {
+    'use server';
+    const session = await auth();
+    if (!folio) throw new Error('No folio');
+    const newAmount = Number(formData.get('newAmount') ?? '0');
+    const reason = formData.get('reason')?.toString().trim() ?? '';
+    if (reason.length < 10) {
+      throw new Error('El motivo debe tener al menos 10 caracteres');
+    }
+    if (newAmount < 0) throw new Error('Importe no puede ser negativo');
+    await overrideCityTax(session?.accessToken, folio.id, { newAmount, reason });
     revalidatePath(`/reservations/${reservationId}`);
   }
 
@@ -336,6 +371,7 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
           addCharge={addCharge}
           addPayment={addPayment}
           settleFolio={settleFolio}
+          overrideCityTax={overrideCityTaxAction}
         />
       )}
 
@@ -358,13 +394,17 @@ function FolioPanel({
   addCharge,
   addPayment,
   settleFolio,
+  overrideCityTax,
 }: {
   folio: FolioDetail;
   addCharge: (fd: FormData) => Promise<void>;
   addPayment: (fd: FormData) => Promise<void>;
   settleFolio: () => Promise<void>;
+  overrideCityTax: (fd: FormData) => Promise<void>;
 }) {
   const isOpen = folio.status === 'OPEN';
+  const summary = summarizeFolio(folio.entries);
+  const hasCityTax = summary.cityTaxTotal !== '0.00';
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-aubergine-100">
       <div className="flex items-end justify-between">
@@ -389,42 +429,101 @@ function FolioPanel({
             <tr>
               <th className="px-3 py-2">Fecha</th>
               <th className="px-3 py-2">Tipo</th>
+              <th className="px-3 py-2">Categoría</th>
               <th className="px-3 py-2">Descripción</th>
-              <th className="px-3 py-2 text-right">Importe</th>
+              <th className="px-3 py-2 text-right">Base</th>
+              <th className="px-3 py-2 text-right">% IVA</th>
+              <th className="px-3 py-2 text-right">Cuota</th>
+              <th className="px-3 py-2 text-right">Total</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-aubergine-100/70">
             {folio.entries.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-aubergine-700/60">
+                <td colSpan={8} className="px-3 py-6 text-center text-aubergine-700/60">
                   Sin movimientos.
                 </td>
               </tr>
             )}
-            {folio.entries.map((e) => (
-              <tr key={e.id}>
-                <td className="px-3 py-2 text-aubergine-700/80">
-                  {e.postedAt.slice(0, 16).replace('T', ' ')}
-                </td>
-                <td className="px-3 py-2">
-                  <span
-                    className={
-                      e.type === 'PAYMENT'
-                        ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800'
-                        : 'rounded-full bg-aubergine-100 px-2 py-0.5 text-xs font-medium text-aubergine-700'
-                    }
-                  >
-                    {e.type.toLowerCase()}
-                  </span>
-                </td>
-                <td className="px-3 py-2">{e.description}</td>
-                <td className="px-3 py-2 text-right font-medium">
-                  {e.amount} {e.currency}
-                </td>
-              </tr>
-            ))}
+            {folio.entries.map((e) => {
+              const isLegacy = e.taxAmount === null && e.type !== 'PAYMENT';
+              return (
+                <tr key={e.id}>
+                  <td className="px-3 py-2 text-aubergine-700/80">
+                    {e.postedAt.slice(0, 16).replace('T', ' ')}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={
+                        e.type === 'PAYMENT'
+                          ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800'
+                          : 'rounded-full bg-aubergine-100 px-2 py-0.5 text-xs font-medium text-aubergine-700'
+                      }
+                    >
+                      {e.type.toLowerCase()}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-aubergine-700/80">
+                    {e.taxCategory ? (
+                      e.taxCategory.toLowerCase().replace('_', ' ')
+                    ) : isLegacy ? (
+                      <span className="rounded-full bg-aubergine-50 px-2 py-0.5 text-[10px] uppercase text-aubergine-700/60">
+                        legacy
+                      </span>
+                    ) : (
+                      <span className="text-aubergine-700/40">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">{e.description}</td>
+                  <td className="px-3 py-2 text-right text-aubergine-700/80">
+                    {e.netAmount ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right text-aubergine-700/80">
+                    {e.taxRate !== null ? `${trimDecimal(e.taxRate)}%` : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right text-aubergine-700/80">
+                    {e.taxAmount ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right font-medium">
+                    {e.amount} {e.currency}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4 grid gap-3 rounded-xl bg-aubergine-50/40 p-4 text-sm md:grid-cols-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-aubergine-500">
+            Base imponible
+          </p>
+          <p className="text-base font-medium text-aubergine-900">
+            {summary.netSubtotal} {folio.currency}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-aubergine-500">
+            IVA desglosado
+          </p>
+          <ul className="space-y-0.5 text-xs text-aubergine-700/80">
+            {summary.taxByRate.length === 0 && <li>—</li>}
+            {summary.taxByRate.map((r) => (
+              <li key={r.rate}>
+                {r.rate}% → {r.tax} {folio.currency}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-aubergine-500">
+            City tax
+          </p>
+          <p className="text-base font-medium text-aubergine-900">
+            {summary.cityTaxTotal} {folio.currency}
+          </p>
+        </div>
       </div>
 
       {isOpen && (
@@ -436,10 +535,23 @@ function FolioPanel({
                 Añadir cargo
               </h3>
               <FieldText name="description" label="Concepto" required />
+              <Select name="taxCategory" label="Categoría" defaultValue="ROOM">
+                <option value="ROOM">Habitación (10%)</option>
+                <option value="BREAKFAST">Desayuno (10%)</option>
+                <option value="EXTRA_FOOD">Restauración (10%)</option>
+                <option value="EXTRA_OTHER">Otros (21%)</option>
+                <option value="EXEMPT">Exento (0%)</option>
+              </Select>
+              <Select name="mode" label="Importe" defaultValue="gross">
+                <option value="gross">Bruto (con IVA)</option>
+                <option value="net">Neto (base)</option>
+              </Select>
               <FieldNumber name="amount" label="Importe" required step="0.01" />
+              <FieldNumber name="taxRate" label="% IVA override (opcional)" step="0.01" />
               <Select name="type" label="Tipo" defaultValue="CHARGE">
                 <option value="CHARGE">Cargo</option>
                 <option value="TAX">IVA</option>
+                <option value="ADJUSTMENT">Ajuste</option>
               </Select>
               <button
                 type="submit"
@@ -470,6 +582,33 @@ function FolioPanel({
               </button>
             </form>
           </div>
+
+          {hasCityTax && (
+            <form
+              action={overrideCityTax}
+              className="space-y-3 rounded-xl bg-amber-50/60 p-4"
+            >
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                Ajustar city tax (override)
+              </h3>
+              <p className="text-xs text-amber-900/70">
+                City tax actual: {summary.cityTaxTotal} {folio.currency}. Cambia el total
+                a este importe (creará un ajuste con la diferencia).
+              </p>
+              <FieldNumber name="newAmount" label="Nuevo importe city tax" required step="0.01" />
+              <FieldText
+                name="reason"
+                label="Motivo (mínimo 10 caracteres, auditado)"
+                required
+              />
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-amber-600 py-2 text-sm font-medium text-white transition hover:bg-amber-700"
+              >
+                Aplicar ajuste
+              </button>
+            </form>
+          )}
         </div>
       )}
 
@@ -486,6 +625,52 @@ function FolioPanel({
       )}
     </section>
   );
+}
+
+interface FolioSummary {
+  netSubtotal: string;
+  taxByRate: { rate: string; tax: string; net: string }[];
+  cityTaxTotal: string;
+}
+
+function summarizeFolio(entries: FolioEntry[]): FolioSummary {
+  let net = 0;
+  const byRate = new Map<string, { tax: number; net: number }>();
+  let cityTax = 0;
+  for (const e of entries) {
+    if (e.type === 'PAYMENT') continue;
+    if (e.taxCategory === 'CITY_TAX') {
+      cityTax += Number(e.amount);
+      continue;
+    }
+    if (e.netAmount && e.taxAmount && e.taxRate !== null) {
+      net += Number(e.netAmount);
+      const key = trimDecimal(e.taxRate);
+      const prev = byRate.get(key) ?? { tax: 0, net: 0 };
+      prev.tax += Number(e.taxAmount);
+      prev.net += Number(e.netAmount);
+      byRate.set(key, prev);
+    }
+  }
+  const taxByRate = Array.from(byRate.entries())
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([rate, v]) => ({
+      rate,
+      tax: v.tax.toFixed(2),
+      net: v.net.toFixed(2),
+    }));
+  return {
+    netSubtotal: net.toFixed(2),
+    taxByRate,
+    cityTaxTotal: cityTax.toFixed(2),
+  };
+}
+
+function trimDecimal(v: string): string {
+  // "10.00" → "10", "21.00" → "21", "1.50" → "1.5"
+  const n = Number(v);
+  if (Number.isNaN(n)) return v;
+  return n.toString();
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
