@@ -1,5 +1,5 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
-import { FolioStatus, Prisma } from '@pms/db';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { FolioStatus, Prisma, TaxCategory } from '@pms/db';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../auth';
 import { FolioService } from './folio.service';
@@ -32,6 +32,8 @@ function buildService(opts: {
   existingEntry?: { id: string } | null;
   createdEntryId?: string;
   uniqueViolationOnCreate?: boolean;
+  taxRateForCategory?: Prisma.Decimal | null;
+  taxBreakdownEnabled?: boolean;
 }) {
   const folioFindFirst = vi.fn().mockResolvedValue(opts.folio ?? null);
   const folioUpdate = vi.fn().mockResolvedValue({});
@@ -60,8 +62,18 @@ function buildService(opts: {
   };
   const events = { publish: vi.fn().mockResolvedValue({ id: 'evt' }) };
 
-  const service = new FolioService(prisma as never, events as never);
-  return { service, tx, events };
+  const resolveRate = vi
+    .fn()
+    .mockResolvedValue(opts.taxRateForCategory ?? null);
+  const taxConfig = {
+    resolveRate,
+  } as unknown as ConstructorParameters<typeof FolioService>[2];
+  const config = {
+    get: () => opts.taxBreakdownEnabled ?? false,
+  } as unknown as ConstructorParameters<typeof FolioService>[3];
+
+  const service = new FolioService(prisma as never, events as never, taxConfig, config);
+  return { service, tx, events, resolveRate };
 }
 
 describe('FolioService.addCharge', () => {
@@ -178,6 +190,121 @@ describe('FolioService.addCharge', () => {
         type: 'CHARGE',
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('FolioService.addCharge — desglose fiscal (RFC-001)', () => {
+  function openFolio(): FolioRow {
+    return {
+      id: FOLIO_ID,
+      status: FolioStatus.OPEN,
+      balance: new Prisma.Decimal(0),
+      currency: 'EUR',
+      reservationId: RESERVATION_ID,
+      reservation: { propertyId: PROPERTY_ID },
+    };
+  }
+
+  it('modo bruto: 110€ ROOM con taxRate 10 resuelto desde PropertyTaxConfig → desglosa 100/10', async () => {
+    const { service, tx } = buildService({
+      folio: openFolio(),
+      createdEntryId: 'entry-tax-1',
+      taxRateForCategory: new Prisma.Decimal('10'),
+    });
+    const out = await service.addCharge(user, 'corr', FOLIO_ID, {
+      description: 'Habitación',
+      amount: 110,
+      type: 'CHARGE',
+      taxCategory: TaxCategory.ROOM,
+    });
+    expect(out.breakdown).not.toBeNull();
+    expect(out.breakdown?.net).toBe('100');
+    expect(out.breakdown?.tax).toBe('10');
+    expect(out.breakdown?.gross).toBe('110');
+    expect(out.balance).toBe('110');
+    const data = tx.folioEntry.create.mock.calls[0]![0]!.data;
+    expect(data.taxCategory).toBe(TaxCategory.ROOM);
+    expect(data.netAmount.toString()).toBe('100');
+    expect(data.taxAmount.toString()).toBe('10');
+  });
+
+  it('modo neto: net=100 + taxRate=21 explícito → bruto=121', async () => {
+    const { service } = buildService({
+      folio: openFolio(),
+      createdEntryId: 'entry-tax-2',
+    });
+    const out = await service.addCharge(user, 'corr', FOLIO_ID, {
+      description: 'Parking',
+      netAmount: 100,
+      taxRate: 21,
+      type: 'CHARGE',
+      taxCategory: TaxCategory.EXTRA_OTHER,
+    });
+    expect(out.breakdown?.gross).toBe('121');
+    expect(out.balance).toBe('121');
+  });
+
+  it('rechaza 400 si taxCategory no tiene config y no se pasa taxRate explícito', async () => {
+    const { service } = buildService({
+      folio: openFolio(),
+      taxRateForCategory: null,
+    });
+    await expect(
+      service.addCharge(user, 'corr', FOLIO_ID, {
+        description: 'Cena',
+        amount: 30,
+        type: 'CHARGE',
+        taxCategory: TaxCategory.EXTRA_FOOD,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('feature flag ON exige taxCategory — falla 400 sin él', async () => {
+    const { service } = buildService({
+      folio: openFolio(),
+      taxBreakdownEnabled: true,
+    });
+    await expect(
+      service.addCharge(user, 'corr', FOLIO_ID, {
+        description: 'Habitación',
+        amount: 100,
+        type: 'CHARGE',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('feature flag OFF permite cargo legacy sin taxCategory (backward-compat)', async () => {
+    const { service } = buildService({
+      folio: openFolio(),
+      createdEntryId: 'entry-legacy',
+      taxBreakdownEnabled: false,
+    });
+    const out = await service.addCharge(user, 'corr', FOLIO_ID, {
+      description: 'Legacy charge',
+      amount: 50,
+      type: 'CHARGE',
+    });
+    expect(out.breakdown).toBeNull();
+    expect(out.balance).toBe('50');
+  });
+
+  it('taxRate del DTO sobrescribe el de PropertyTaxConfig', async () => {
+    const { service, resolveRate } = buildService({
+      folio: openFolio(),
+      createdEntryId: 'entry-override',
+      taxRateForCategory: new Prisma.Decimal('10'),
+    });
+    const out = await service.addCharge(user, 'corr', FOLIO_ID, {
+      description: 'Habitación con tarifa especial',
+      amount: 121,
+      taxRate: 21,
+      type: 'CHARGE',
+      taxCategory: TaxCategory.ROOM,
+    });
+    expect(out.breakdown?.taxRate).toBe('21');
+    expect(out.breakdown?.gross).toBe('121');
+    // resolveRate no se llama cuando viene rate explícito en el DTO.
+    expect(resolveRate).not.toHaveBeenCalled();
   });
 });
 
@@ -331,10 +458,18 @@ describe('FolioService.findOne + findByReservationCode (read paths)', () => {
       withTenant: vi.fn(async (_ctx, fn: (t: typeof tx) => unknown) => fn(tx)),
     };
     const events = { publish: vi.fn() };
+    const taxConfig = {
+      resolveRate: vi.fn().mockResolvedValue(null),
+    } as unknown as ConstructorParameters<typeof FolioService>[2];
+    const config = {
+      get: () => false,
+    } as unknown as ConstructorParameters<typeof FolioService>[3];
     return {
       service: new FolioService(
         prisma as unknown as ConstructorParameters<typeof FolioService>[0],
         events as unknown as ConstructorParameters<typeof FolioService>[1],
+        taxConfig,
+        config,
       ),
       tx,
     };

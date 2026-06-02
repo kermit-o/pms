@@ -6,6 +6,18 @@ const baseFolio = z.object({
   propertyId: z.string().uuid(),
 });
 
+// RFC-001 §3.2 — campos fiscales opcionales (backwards compatible).
+// Los consumers viejos los ignoran. Cuando FOLIO_TAX_BREAKDOWN_ENABLED
+// está activo, viajan siempre.
+const TAX_CATEGORY = z.enum([
+  'ROOM',
+  'BREAKFAST',
+  'EXTRA_FOOD',
+  'EXTRA_OTHER',
+  'CITY_TAX',
+  'EXEMPT',
+]);
+
 export const folioChargeAddedV1 = baseFolio.extend({
   entryId: z.string().uuid(),
   description: z.string().min(1),
@@ -14,6 +26,10 @@ export const folioChargeAddedV1 = baseFolio.extend({
   type: z.enum(['CHARGE', 'TAX']),
   newBalance: z.string(),
   postedAt: z.string(),
+  netAmount: z.string().optional(),
+  taxAmount: z.string().optional(),
+  taxRate: z.string().optional(),
+  taxCategory: TAX_CATEGORY.nullable().optional(),
 });
 export type FolioChargeAddedV1Payload = z.infer<typeof folioChargeAddedV1>;
 

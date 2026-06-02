@@ -5,11 +5,15 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { FolioStatus, Prisma } from '@pms/db';
+import { ConfigService } from '@nestjs/config';
+import { FolioStatus, Prisma, TaxCategory } from '@pms/db';
 import { PrismaService } from '../db';
 import { EventbusService } from '../eventbus';
 import type { AuthUser } from '../auth';
+import type { Env } from '../config/env.schema';
 import { AddChargeDto, AddPaymentDto, ReopenFolioDto } from './dto';
+import { PropertyTaxConfigService } from './property-tax-config.service';
+import { breakdownFromGross, breakdownFromNet, type TaxBreakdown } from './tax-calculator';
 
 /**
  * Folio domain service. Sprint 2 W3.
@@ -33,7 +37,13 @@ export class FolioService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventbusService,
+    private readonly taxConfig: PropertyTaxConfigService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
+
+  private isTaxBreakdownEnabled(): boolean {
+    return this.config.get('FOLIO_TAX_BREAKDOWN_ENABLED', { infer: true });
+  }
 
   async findOne(user: AuthUser, correlationId: string, id: string): Promise<FolioDetail> {
     const ctx = tenantCtx(user, correlationId);
@@ -82,98 +92,126 @@ export class FolioService {
     correlationId: string,
     folioId: string,
     input: AddChargeDto,
-  ): Promise<{ entryId: string; balance: string; deduplicated: boolean }> {
+  ): Promise<{
+    entryId: string;
+    balance: string;
+    deduplicated: boolean;
+    breakdown: TaxBreakdownDto | null;
+  }> {
     const ctx = tenantCtx(user, correlationId);
+    const taxEnabled = this.isTaxBreakdownEnabled();
 
-    const result = await this.prisma.withTenant(ctx, async (tx) => {
-      const folio = await loadOpenFolio(tx, folioId);
-      if (input.currency && input.currency !== folio.currency) {
-        throw new BadRequestException(
-          `currency ${input.currency} does not match folio ${folio.currency}`,
-        );
-      }
+    if (taxEnabled && !input.taxCategory) {
+      throw new BadRequestException(
+        'taxCategory is required when FOLIO_TAX_BREAKDOWN_ENABLED is true',
+      );
+    }
 
-      if (input.idempotencyKey) {
-        const existing = await tx.folioEntry.findFirst({
-          where: { folioId, idempotencyKey: input.idempotencyKey },
-          select: { id: true },
-        });
-        if (existing) {
-          return {
-            entryId: existing.id,
-            balance: folio.balance.toString(),
-            deduplicated: true,
-            reservationId: folio.reservationId,
-            propertyId: folio.reservation.propertyId,
-            currency: folio.currency,
-            description: input.description,
-            amount: input.amount,
-            type: input.type,
-            postedAt: new Date(),
-          };
+    const result = await this.prisma.withTenant(
+      ctx,
+      async (tx): Promise<AddChargeTxResult> => {
+        const folio = await loadOpenFolio(tx, folioId);
+        if (input.currency && input.currency !== folio.currency) {
+          throw new BadRequestException(
+            `currency ${input.currency} does not match folio ${folio.currency}`,
+          );
         }
-      }
 
-      const amount = new Prisma.Decimal(input.amount);
-
-      let entryId: string;
-      try {
-        const created = await tx.folioEntry.create({
-          data: {
-            tenantId: user.tenantId,
-            folioId,
-            type: input.type,
-            description: input.description,
-            amount,
-            currency: folio.currency,
-            postedBy: user.sub,
-            idempotencyKey: input.idempotencyKey ?? null,
-          },
-          select: { id: true, postedAt: true },
-        });
-        entryId = created.id;
-      } catch (err) {
-        if (isUniqueViolation(err)) {
+        if (input.idempotencyKey) {
           const existing = await tx.folioEntry.findFirst({
             where: { folioId, idempotencyKey: input.idempotencyKey },
             select: { id: true },
           });
-          if (!existing) throw err;
-          return {
-            entryId: existing.id,
-            balance: folio.balance.toString(),
-            deduplicated: true,
-            reservationId: folio.reservationId,
-            propertyId: folio.reservation.propertyId,
-            currency: folio.currency,
-            description: input.description,
-            amount: input.amount,
-            type: input.type,
-            postedAt: new Date(),
-          };
+          if (existing) {
+            return {
+              entryId: existing.id,
+              balance: folio.balance.toString(),
+              deduplicated: true,
+              reservationId: folio.reservationId,
+              propertyId: folio.reservation.propertyId,
+              currency: folio.currency,
+              description: input.description,
+              amount: (input.amount ?? input.netAmount ?? 0).toString(),
+              type: input.type,
+              postedAt: new Date(),
+              breakdown: null,
+              taxCategory: input.taxCategory ?? null,
+            };
+          }
         }
-        throw err;
-      }
 
-      const newBalance = new Prisma.Decimal(folio.balance).plus(amount);
-      await tx.folio.update({
-        where: { id: folioId },
-        data: { balance: newBalance },
-      });
+        const breakdown = input.taxCategory
+          ? await this.computeBreakdown(tx, folio.reservation.propertyId, input)
+          : null;
+        const amount = breakdown ? breakdown.gross : new Prisma.Decimal(input.amount ?? 0);
 
-      return {
-        entryId,
-        balance: newBalance.toString(),
-        deduplicated: false,
-        reservationId: folio.reservationId,
-        propertyId: folio.reservation.propertyId,
-        currency: folio.currency,
-        description: input.description,
-        amount: input.amount,
-        type: input.type,
-        postedAt: new Date(),
-      };
-    });
+        let entryId: string;
+        try {
+          const created = await tx.folioEntry.create({
+            data: {
+              tenantId: user.tenantId,
+              folioId,
+              type: input.type,
+              description: input.description,
+              amount,
+              netAmount: breakdown?.net ?? null,
+              taxRate: breakdown?.taxRate ?? null,
+              taxAmount: breakdown?.tax ?? null,
+              taxCategory: input.taxCategory ?? null,
+              currency: folio.currency,
+              postedBy: user.sub,
+              idempotencyKey: input.idempotencyKey ?? null,
+            },
+            select: { id: true, postedAt: true },
+          });
+          entryId = created.id;
+        } catch (err) {
+          if (isUniqueViolation(err) && input.idempotencyKey) {
+            const existing = await tx.folioEntry.findFirst({
+              where: { folioId, idempotencyKey: input.idempotencyKey },
+              select: { id: true },
+            });
+            if (!existing) throw err;
+            return {
+              entryId: existing.id,
+              balance: folio.balance.toString(),
+              deduplicated: true,
+              reservationId: folio.reservationId,
+              propertyId: folio.reservation.propertyId,
+              currency: folio.currency,
+              description: input.description,
+              amount: amount.toString(),
+              type: input.type,
+              postedAt: new Date(),
+              breakdown: breakdown ? toBreakdownDto(breakdown) : null,
+              taxCategory: input.taxCategory ?? null,
+            };
+          }
+          throw err;
+        }
+
+        const newBalance = new Prisma.Decimal(folio.balance).plus(amount);
+        await tx.folio.update({
+          where: { id: folioId },
+          data: { balance: newBalance },
+        });
+
+        return {
+          entryId,
+          balance: newBalance.toString(),
+          deduplicated: false,
+          reservationId: folio.reservationId,
+          propertyId: folio.reservation.propertyId,
+          currency: folio.currency,
+          description: input.description,
+          amount: amount.toString(),
+          type: input.type,
+          postedAt: new Date(),
+          breakdown: breakdown ? toBreakdownDto(breakdown) : null,
+          taxCategory: input.taxCategory ?? null,
+        };
+      },
+    );
 
     if (!result.deduplicated) {
       await this.events.publish('folio.charge_added', ctx, {
@@ -182,11 +220,19 @@ export class FolioService {
         propertyId: result.propertyId,
         entryId: result.entryId,
         description: result.description,
-        amount: result.amount.toString(),
+        amount: result.amount,
         currency: result.currency,
-        type: result.type,
+        type: result.type === 'ADJUSTMENT' ? 'CHARGE' : result.type,
         newBalance: result.balance,
         postedAt: result.postedAt.toISOString(),
+        ...(result.breakdown
+          ? {
+              netAmount: result.breakdown.net,
+              taxAmount: result.breakdown.tax,
+              taxRate: result.breakdown.taxRate,
+              taxCategory: result.taxCategory,
+            }
+          : {}),
       });
     }
 
@@ -194,7 +240,34 @@ export class FolioService {
       entryId: result.entryId,
       balance: result.balance,
       deduplicated: result.deduplicated,
+      breakdown: result.breakdown,
     };
+  }
+
+  private async computeBreakdown(
+    tx: Prisma.TransactionClient,
+    propertyId: string,
+    input: AddChargeDto,
+  ): Promise<TaxBreakdown> {
+    if (!input.taxCategory) {
+      throw new BadRequestException('taxCategory required for breakdown');
+    }
+    const rate =
+      input.taxRate !== undefined
+        ? new Prisma.Decimal(input.taxRate)
+        : await this.taxConfig.resolveRate(tx, propertyId, input.taxCategory);
+    if (rate === null) {
+      throw new BadRequestException(
+        `no PropertyTaxConfig found for category ${input.taxCategory} in property ${propertyId}`,
+      );
+    }
+    if (input.netAmount !== undefined) {
+      return breakdownFromNet({ net: input.netAmount, taxRate: rate });
+    }
+    if (input.amount !== undefined) {
+      return breakdownFromGross({ gross: input.amount, taxRate: rate });
+    }
+    throw new BadRequestException('amount or netAmount required');
   }
 
   async addPayment(
@@ -420,6 +493,21 @@ export class FolioService {
 // Helpers
 // ---------------------------------------------------------------------------
 
+interface AddChargeTxResult {
+  entryId: string;
+  balance: string;
+  deduplicated: boolean;
+  reservationId: string;
+  propertyId: string;
+  currency: string;
+  description: string;
+  amount: string;
+  type: 'CHARGE' | 'TAX' | 'ADJUSTMENT';
+  postedAt: Date;
+  breakdown: TaxBreakdownDto | null;
+  taxCategory: TaxCategory | null;
+}
+
 function tenantCtx(user: AuthUser, correlationId: string) {
   return {
     tenantId: user.tenantId,
@@ -470,6 +558,10 @@ const FOLIO_DETAIL_SELECT = {
       postedAt: true,
       postedBy: true,
       attributes: true,
+      netAmount: true,
+      taxRate: true,
+      taxAmount: true,
+      taxCategory: true,
     },
     orderBy: { postedAt: 'desc' as const },
   },
@@ -486,6 +578,26 @@ export interface FolioEntryDto {
   postedAt: string;
   postedBy: string | null;
   attributes: unknown;
+  netAmount: string | null;
+  taxRate: string | null;
+  taxAmount: string | null;
+  taxCategory: TaxCategory | null;
+}
+
+export interface TaxBreakdownDto {
+  net: string;
+  tax: string;
+  gross: string;
+  taxRate: string;
+}
+
+function toBreakdownDto(b: TaxBreakdown): TaxBreakdownDto {
+  return {
+    net: b.net.toString(),
+    tax: b.tax.toString(),
+    gross: b.gross.toString(),
+    taxRate: b.taxRate.toString(),
+  };
 }
 
 export interface FolioDetail {
@@ -519,6 +631,10 @@ function toFolioDetail(row: FolioDetailRow): FolioDetail {
       postedAt: e.postedAt.toISOString(),
       postedBy: e.postedBy,
       attributes: e.attributes,
+      netAmount: e.netAmount?.toString() ?? null,
+      taxRate: e.taxRate?.toString() ?? null,
+      taxAmount: e.taxAmount?.toString() ?? null,
+      taxCategory: e.taxCategory,
     })),
   };
 }

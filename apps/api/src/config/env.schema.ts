@@ -151,6 +151,16 @@ export const envSchema = z.object({
   VERIFACTU_SISTEMA_ID: z.string().default('01'),
   VERIFACTU_SISTEMA_VERSION: z.string().default('0.1.0'),
 
+  // RFC-001 §6 — feature flag de desglose fiscal por línea + city tax.
+  // Cuando false, FolioService.addCharge acepta cargos sin taxCategory
+  // (modo legacy). Cuando true, taxCategory es obligatorio y el server
+  // desglosa via TaxCalculator + persiste netAmount/taxRate/taxAmount.
+  // Default false en tenants existentes; el deploy enable per-tenant.
+  FOLIO_TAX_BREAKDOWN_ENABLED: z
+    .union([z.literal('true'), z.literal('false')])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   // Observability (OpenTelemetry). Las leen tracing.ts antes que NestJS.
   OTEL_ENABLED: z
     .union([z.literal('true'), z.literal('false')])
