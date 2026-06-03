@@ -37,6 +37,10 @@ RUN pnpm install --frozen-lockfile --prefer-offline
 # Copia el resto del codigo y compila.
 COPY apps/api ./apps/api
 COPY packages ./packages
+# scripts/ se copia para que operaciones puntuales (backfills, rotaciones,
+# health-checks) se puedan ejecutar desde dentro del container vía
+# `flyctl ssh console`. Son utilidades CLI, no parte del runtime.
+COPY scripts ./scripts
 
 RUN pnpm --filter @pms/db generate
 # Construye los workspace packages a dist/ antes que el api. Sin esto,
