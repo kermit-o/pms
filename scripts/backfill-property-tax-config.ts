@@ -1,24 +1,25 @@
 /**
  * Backfill de PropertyTaxConfig + CityTaxRule (RFC-001 §3.1, §6 rollout).
  *
- * Para cada property existente que NO tenga aún una matriz tax config,
- * crea las 6 filas default (ROOM/BREAKFAST/EXTRA_FOOD 10%, EXTRA_OTHER
- * 21%, CITY_TAX/EXEMPT 0%). Para cada property sin CityTaxRule, crea
- * una con region=NONE y amount=0 (el admin del tenant la edita después
- * si su autonomía tiene city tax activa).
+ * Para cada property que no tenga ya su matriz tax-config, crea las 6
+ * filas default (ROOM/BREAKFAST/EXTRA_FOOD 10%, EXTRA_OTHER 21%,
+ * CITY_TAX/EXEMPT 0%). Para cada property sin CityTaxRule, crea una
+ * con region=NONE y amount=0. El admin del tenant la edita después
+ * desde la UI si su autonomía tiene city tax activa.
  *
- * Idempotente: si la config ya existe (clave única
- * property_id+category+effective_from), no la duplica.
+ * Idempotente — si la config ya existe, no la duplica.
  *
- * Uso (desde la raíz del monorepo):
+ * RLS: las tablas `properties`, `property_tax_configs` y `city_tax_rules`
+ * tienen FORCE ROW LEVEL SECURITY. Este script itera por tenant
+ * llamando `withTenant`, que setea `app.tenant_id` por tx — el patrón
+ * idéntico al que usa el API en runtime.
  *
- *   DIRECT_URL="postgres://..." pnpm tsx scripts/backfill-property-tax-config.ts [--dry-run]
+ * Uso (desde la raíz del monorepo o desde /app dentro del container Fly):
  *
- * Se ejecuta una sola vez al desplegar la feature. Después, el seed y
- * el onboarding crean estas filas en el flujo normal.
+ *   DATABASE_URL="postgres://…" pnpm tsx scripts/backfill-property-tax-config.ts [--dry-run]
  */
 
-import { PrismaClient, TaxCategory, CityTaxRegion, Prisma } from '@pms/db';
+import { PrismaClient, TaxCategory, CityTaxRegion, Prisma, withTenant } from '@pms/db';
 
 const DEFAULTS: Array<{ category: TaxCategory; rate: string }> = [
   { category: TaxCategory.ROOM, rate: '10.00' },
@@ -33,55 +34,69 @@ async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
   const prisma = new PrismaClient();
 
-  const properties = await prisma.property.findMany({
+  // 1. Lista tenants. La tabla tenants no tiene RLS (es admin-level).
+  const tenants = await prisma.tenant.findMany({
     where: { deletedAt: null },
-    select: { id: true, tenantId: true, code: true, name: true },
+    select: { id: true, slug: true },
   });
 
+  let totalProperties = 0;
   let taxCreated = 0;
   let cityCreated = 0;
   let skipped = 0;
 
-  for (const property of properties) {
-    for (const def of DEFAULTS) {
-      const exists = await prisma.propertyTaxConfig.findFirst({
-        where: { propertyId: property.id, category: def.category },
+  for (const tenant of tenants) {
+    await withTenant(prisma, { tenantId: tenant.id }, async (tx) => {
+      const properties = await tx.property.findMany({
+        where: { deletedAt: null },
+        select: { id: true, tenantId: true },
       });
-      if (exists) {
-        skipped += 1;
-        continue;
-      }
-      if (!dryRun) {
-        await prisma.propertyTaxConfig.create({
-          data: {
-            tenantId: property.tenantId,
-            propertyId: property.id,
-            category: def.category,
-            taxRate: new Prisma.Decimal(def.rate),
-          },
-        });
-      }
-      taxCreated += 1;
-    }
+      totalProperties += properties.length;
 
-    const cityExists = await prisma.cityTaxRule.findUnique({
-      where: { propertyId: property.id },
-    });
-    if (!cityExists) {
-      if (!dryRun) {
-        await prisma.cityTaxRule.create({
-          data: {
-            tenantId: property.tenantId,
-            propertyId: property.id,
-            region: CityTaxRegion.NONE,
-            amountPerNight: new Prisma.Decimal('0'),
-          },
+      for (const property of properties) {
+        for (const def of DEFAULTS) {
+          const exists = await tx.propertyTaxConfig.findFirst({
+            where: { propertyId: property.id, category: def.category },
+            select: { id: true },
+          });
+          if (exists) {
+            skipped += 1;
+            continue;
+          }
+          if (!dryRun) {
+            await tx.propertyTaxConfig.create({
+              data: {
+                tenantId: property.tenantId,
+                propertyId: property.id,
+                category: def.category,
+                taxRate: new Prisma.Decimal(def.rate),
+              },
+            });
+          }
+          taxCreated += 1;
+        }
+
+        const cityExists = await tx.cityTaxRule.findUnique({
+          where: { propertyId: property.id },
+          select: { id: true },
         });
+        if (cityExists) {
+          skipped += 1;
+        } else {
+          if (!dryRun) {
+            await tx.cityTaxRule.create({
+              data: {
+                tenantId: property.tenantId,
+                propertyId: property.id,
+                region: CityTaxRegion.NONE,
+                amountPerNight: new Prisma.Decimal('0'),
+              },
+            });
+          }
+          cityCreated += 1;
+        }
       }
-      cityCreated += 1;
-    } else {
-      skipped += 1;
-    }
+    });
   }
 
   // eslint-disable-next-line no-console
@@ -89,7 +104,8 @@ async function main(): Promise<void> {
     JSON.stringify(
       {
         dryRun,
-        propertiesScanned: properties.length,
+        tenantsScanned: tenants.length,
+        propertiesScanned: totalProperties,
         taxConfigsCreated: taxCreated,
         cityTaxRulesCreated: cityCreated,
         skippedExisting: skipped,
